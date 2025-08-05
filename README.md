@@ -26,10 +26,14 @@ cpp-twocrypto/
 ## Components
 
 ### C++ Library (`cpp/`)
-- **Purpose**: High-performance math implementation using Boost.Multiprecision
-- **Functions**: `newton_D`, `get_y`, `get_p`, `wad_exp`
-- **Interface**: Header-only for C++ projects, shared library for Python
-- **Performance**: 250x+ faster than Vyper with identical precision
+- **Math Library**: High-performance implementation using Boost.Multiprecision
+  - Functions: `newton_D`, `get_y`, `get_p`, `wad_exp`
+  - Interface: Header-only for C++ projects, shared library for Python
+  - Performance: 250x+ faster than Vyper with identical precision
+- **Pool Implementation**: Full TwoCrypto AMM pool
+  - `twocrypto.hpp/cpp`: Complete pool logic with donation support
+  - `twocrypto_harness`: Minimal executable for testing pool operations
+  - Features: Add liquidity, exchange, tweak_price, donation protection
 
 ### Python Suite (`python/`)
 - **Purpose**: Benchmarking and precision validation
@@ -51,6 +55,13 @@ cpp-twocrypto/
 cd cpp
 cmake -B build . -DCMAKE_BUILD_TYPE=Release
 cmake --build build
+```
+
+### Run Pool Harness
+```bash
+cd cpp/build
+./twocrypto_harness
+# Results exported to pool_results.json
 ```
 
 ### Run Benchmarks
