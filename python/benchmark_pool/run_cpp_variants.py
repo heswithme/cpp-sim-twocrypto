@@ -14,8 +14,8 @@ from typing import Any, Dict, List, Tuple
 # Add parent for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from cpp_pool.cpp_pool_runner_i import run_cpp_pool_with_time
-from cpp_pool.cpp_pool_runner_d import run_cpp_pool_double_with_time
+from cpp_pool.cpp_pool_runner_i import run_cpp_pool
+from cpp_pool.cpp_pool_runner_d import run_cpp_pool_double
 
 
 def _write_json(path: str, obj: Any):
@@ -49,13 +49,18 @@ def _run_one(harness: str, pools_file: str, sequences_file: str, out_path: str, 
             os.environ["SNAPSHOT_EVERY"] = str(snapshot_every)
         elif final_only:
             os.environ["SAVE_LAST_ONLY"] = "1"
-        # Tight timing window: measure only harness subprocess time
+        # Measure harness time as reported by runner metadata
         if harness == "i":
-            results, elapsed = run_cpp_pool_with_time(pools_file, sequences_file, out_path)
+            results = run_cpp_pool(pools_file, sequences_file, out_path)
         elif harness == "d":
-            results, elapsed = run_cpp_pool_double_with_time(pools_file, sequences_file, out_path)
+            results = run_cpp_pool_double(pools_file, sequences_file, out_path)
         else:
             raise ValueError(f"Unknown harness: {harness}")
+        elapsed = 0.0
+        try:
+            elapsed = float(results.get("metadata", {}).get("harness_time_s", 0.0))
+        except Exception:
+            pass
         return elapsed, results
     finally:
         if prev_threads is None:

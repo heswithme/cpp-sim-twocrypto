@@ -36,10 +36,6 @@ class CppPoolRunnerDouble:
         return self.harness_path
 
     def run_benchmark(self, pool_configs_file: str, sequences_file: str, output_file: str) -> Dict:
-        results, _ = self.run_benchmark_timed(pool_configs_file, sequences_file, output_file)
-        return results
-
-    def run_benchmark_timed(self, pool_configs_file: str, sequences_file: str, output_file: str) -> tuple[Dict, float]:
         if not os.path.exists(self.harness_path):
             self.build_harness()
         print("Running C++ double harness...")
@@ -59,7 +55,10 @@ class CppPoolRunnerDouble:
         total_tests = len(results.get("results", []))
         print(f"\n✓ Processed {total_tests} pool-sequence combinations")
         print(f"✓ Results written to {output_file}")
-        return results, harness_time
+        md = results.get("metadata", {})
+        md["harness_time_s"] = harness_time
+        results["metadata"] = md
+        return results
 
     def format_json_output(self, json_file: str):
         with open(json_file, 'r') as f:
@@ -77,15 +76,6 @@ def run_cpp_pool_double(pool_configs_file: str, sequences_file: str, output_file
     results = runner.run_benchmark(pool_configs_file, sequences_file, output_file)
     runner.format_json_output(output_file)
     return results
-
-def run_cpp_pool_double_with_time(pool_configs_file: str, sequences_file: str, output_file: str) -> tuple[Dict, float]:
-    repo_root = Path(__file__).resolve().parents[2]
-    cpp_project_path = str(repo_root / "cpp")
-    runner = CppPoolRunnerDouble(cpp_project_path)
-    runner.build_harness()
-    results, harness_time = runner.run_benchmark_timed(pool_configs_file, sequences_file, output_file)
-    runner.format_json_output(output_file)
-    return results, harness_time
 
 
 def main():

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Run full benchmark comparing C++ and Vyper implementations, with per-pool parallelism.
+Run full benchmark comparing C++ and Vyper implementations (single pass per side).
 """
 import json
 import os
@@ -9,7 +9,6 @@ import time
 import subprocess
 from datetime import datetime, timezone
 from typing import Dict, List, Any, Tuple, Optional
-from concurrent.futures import ThreadPoolExecutor
 
 # Add parent directory for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -88,14 +87,16 @@ def run_vyper_benchmark(pool_configs_file: str, sequences_file: str, output_dir:
     
     print(f"✓ Vyper benchmark completed in {vyper_time:.2f}s")
     
-    # Extract states for each test
+    # Extract states for each test (Vyper runner may not include 'sequence')
     vyper_states = {}
-    for test in results["results"]:
-        key = f"{test['pool_config']}_{test['sequence']}"
-        if test["result"]["success"]:
-            vyper_states[key] = test["result"]["states"]
+    for test in results.get("results", []):
+        key = test.get("pool_config") or test.get("pool_name")
+        if not key:
+            continue
+        if test.get("result", {}).get("success"):
+            vyper_states[key] = test["result"].get("states") or [test["result"].get("final_state")]
         else:
-            vyper_states[key] = {"error": test["result"].get("error", "Failed")}
+            vyper_states[key] = {"error": test.get("result", {}).get("error", "Failed")}
     
     return {
         "states": vyper_states,
@@ -231,15 +232,16 @@ def _write_json(path: str, obj: Any):
 
 
 def _run_uv(cmd: List[str], env: Optional[Dict[str, str]] = None) -> Tuple[int, str, str]:
+    # Deprecated helper (kept for compatibility if needed)
     proc = subprocess.run(cmd, capture_output=True, text=True, env=env)
     return proc.returncode, proc.stdout, proc.stderr
 
 
 def main():
     import argparse
-    parser = argparse.ArgumentParser(description="Run TwoCrypto full pool benchmarks with per-pool parallelism and C++ thread control")
-    parser.add_argument("--workers", type=int, default=0, help="Deprecated alias for --n-py")
-    parser.add_argument("--n-py", type=int, default=1, help="Python per-pool workers (processes) for each phase")
+    parser = argparse.ArgumentParser(description="Run TwoCrypto full pool benchmarks (single pass, set threads via --n-cpp)")
+    parser.add_argument("--workers", type=int, default=0, help="Deprecated. Ignored.")
+    parser.add_argument("--n-py", type=int, default=1, help="Deprecated. Ignored; use --n-cpp for parallelism.")
     parser.add_argument("--n-cpp", type=int, default=0, help="C++ threads per harness process (0 = auto)")
     parser.add_argument("--save-per-pool", action="store_true", help="Keep per-pool result files (cpp/<pool>.json, vyper/<pool>.json)")
     parser.add_argument("--final-only", action="store_true", help="Only save final state per test (set SAVE_LAST_ONLY=1)")
@@ -281,6 +283,9 @@ def main():
     _write_json(os.path.join(run_dir, "inputs_sequences.json"), {"sequences": [sequence]})
 
     print(f"Testing {len(pools)} pools")
+    # Explain deprecation if user set --n-py/--workers
+    if args.n_py != 1 or args.workers not in (0, 1):
+        print("Note: --n-py/--workers are ignored; harness parallelism uses --n-cpp only.")
 
     # Pre-build C++ harness once to avoid rebuild under contention
     try:
