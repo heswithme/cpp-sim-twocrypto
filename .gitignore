@@ -84,3 +84,5 @@ desktop.ini
 
 # Submodules (git handles these)
 # twocrypto-ng will be tracked as a submodule
+# Benchmark results (generated)
+python/benchmark_pool/data/results/
