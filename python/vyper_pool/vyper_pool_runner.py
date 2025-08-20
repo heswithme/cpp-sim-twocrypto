@@ -132,6 +132,11 @@ class VyperPoolRunner:
         # Get price scale
         price_scale = pool.price_scale()
         
+        # Get cached price oracle directly from storage (not calculated view)
+        # The price_oracle() view function calculates EMA on-the-fly, but we want
+        # the actual stored value for accurate state comparison
+        cached_price_oracle = pool.eval("self.cached_price_oracle")
+        
         # Calculate xp using internal helper for exact parity with contract logic
         xp = pool.internal._xp([balances[0], balances[1]], price_scale)
         
@@ -153,7 +158,7 @@ class VyperPoolRunner:
             "virtual_price": str(pool.virtual_price()),
             "xcp_profit": str(pool.xcp_profit()),
             "price_scale": str(price_scale),
-            "price_oracle": str(pool.price_oracle()),
+            "price_oracle": str(cached_price_oracle),
             "last_prices": str(pool.last_prices()),
             "totalSupply": str(pool.totalSupply()),
             "timestamp": boa.env.timestamp,
@@ -247,7 +252,7 @@ class VyperPoolRunner:
         sequence = sequences_data[0]
         
         # Optional filter via env var (shared with C++ harness)
-        only_pool = os.environ.get("TRACE_ONLY_POOL")
+        only_pool = os.environ.get("FILTER_POOL")
         if only_pool:
             pools_data = [p for p in pools_data if p.get("name") == only_pool]
         
@@ -259,6 +264,9 @@ class VyperPoolRunner:
         total_tests = len(pools_data)
         test_num = 0
         
+        # Optionally save only the final state to reduce output size
+        save_last_only = os.getenv("SAVE_LAST_ONLY") == "1"
+
         # Run each test combination
         for pool_config in pools_data:
             test_num += 1
@@ -281,13 +289,23 @@ class VyperPoolRunner:
             snapshots = self.execute_actions(pool, (token0, token1), sequence["actions"])
 
             # Store result
-            results.append({
-                "pool_config": pool_config["name"],
-                "result": {
-                    "success": all(s.get("action_success", True) for s in snapshots[1:]),
-                    "states": snapshots
-                }
-            })
+            if save_last_only:
+                final_state = snapshots[-1] if snapshots else self.take_pool_snapshot(pool)
+                results.append({
+                    "pool_config": pool_config["name"],
+                    "result": {
+                        "success": all(s.get("action_success", True) for s in snapshots[1:]) if snapshots else True,
+                        "final_state": final_state
+                    }
+                })
+            else:
+                results.append({
+                    "pool_config": pool_config["name"],
+                    "result": {
+                        "success": all(s.get("action_success", True) for s in snapshots[1:]),
+                        "states": snapshots
+                    }
+                })
         
         return {"results": results}
 

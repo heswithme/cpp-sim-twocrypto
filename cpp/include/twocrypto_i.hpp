@@ -5,7 +5,7 @@
  * @dev Mirrors the Vyper implementation for easy maintenance
  */
 
-#include "stableswap_math.hpp"
+#include "stableswap_math_i.hpp"
 #include <array>
 #include <stdexcept>
 #include <chrono>
@@ -89,7 +89,6 @@ public:
     
     // Time for testing
     uint64_t block_timestamp;
-    bool trace_enabled = false;
 
     // --------------------- Donation & Admin Fee State ----------------------
     uint256 donation_shares = 0;
@@ -381,9 +380,6 @@ public:
         block_timestamp += seconds; 
     }
 
-    void set_trace(bool enabled) {
-        trace_enabled = enabled;
-    }
 };
 
 } // namespace twocrypto

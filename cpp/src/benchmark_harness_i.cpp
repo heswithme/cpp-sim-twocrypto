@@ -1,4 +1,4 @@
-#include "twocrypto.hpp"
+#include "twocrypto_i.hpp"
 #include <iostream>
 #include <fstream>
 #include <boost/json.hpp>
@@ -7,6 +7,7 @@
 #include <mutex>
 #include <atomic>
 #include <vector>
+#include <cstdlib>
 
 using namespace twocrypto;
 namespace json = boost::json;
@@ -64,7 +65,7 @@ struct PoolStateReport {
         obj["donation_shares_unlocked"] = uint256_to_str(donation_shares_unlocked);
         obj["donation_protection_expiry_ts"] = uint256_to_str(donation_protection_expiry_ts);
         obj["last_donation_release_ts"] = uint256_to_str(last_donation_release_ts);
-        obj["timestamp"] = std::to_string(timestamp);
+        obj["timestamp"] = timestamp;  // Let boost::json handle conversion
         return obj;
     }
 };
@@ -81,25 +82,8 @@ PoolStateReport get_pool_state(TwoCryptoPool& pool) {
     report.virtual_price = pool.get_virtual_price();
     report.xcp_profit = pool.xcp_profit;
     report.price_scale = pool.cached_price_scale;
-    // Match Vyper's price_oracle() view: compute EMA lazily on read
-    {
-        uint256 price_oracle = pool.cached_price_oracle;
-        uint256 price_scale = pool.cached_price_scale;
-        uint256 last_prices = pool.last_prices;
-        uint256 last_ts = pool.last_timestamp;
-        if (last_ts < pool.block_timestamp) {
-            auto rebal = pool.packed_rebalancing_params;
-            // unpack ma_time from packed_rebalancing_params (x2)
-            uint256 mask64 = (uint256(1) << 64) - 1;
-            uint256 ma_time = rebal & mask64; // x2
-            auto neg = stableswap::int256(- (stableswap::int256(pool.block_timestamp - last_ts) * stableswap::int256(twocrypto::PRECISION()) / stableswap::int256(ma_time)));
-            uint256 alpha = stableswap::StableswapMath::wad_exp(neg);
-            uint256 capped = last_prices;
-            if (capped > 2 * price_scale) capped = 2 * price_scale;
-            price_oracle = (capped * (twocrypto::PRECISION() - alpha) + price_oracle * alpha) / twocrypto::PRECISION();
-        }
-        report.price_oracle = price_oracle;
-    }
+    // Use actual cached oracle value (not calculated view value)
+    report.price_oracle = pool.cached_price_oracle;
     report.last_prices = pool.last_prices;
     report.totalSupply = pool.totalSupply;
     report.donation_shares = pool.donation_shares;
@@ -172,18 +156,15 @@ json::object process_pool_sequence(
         // Create pool
         TwoCryptoPool pool(precisions, packed_gamma_A, packed_fee_params, 
                           packed_rebalancing_params, initial_price);
-        // Enable tracing via env var
-        const char* trace_env = std::getenv("TRACE");
-        bool trace_enabled = trace_env && std::string(trace_env) == "1";
-        if (trace_enabled) {
-            pool.set_trace(true);
-            std::cout << "TRACE enabled for "
-                      << pool_config.at("name").as_string().c_str() << " / "
-                      << sequence.at("name").as_string().c_str() << std::endl;
-        }
         
-        // Array to store states after each action
+        // Optionally save only the last state
+        bool save_last_only = false;
+        if (const char* env = std::getenv("SAVE_LAST_ONLY")) {
+            save_last_only = std::string(env) == "1";
+        }
         json::array states;
+        json::object last_state;
+        bool all_success = true;
 
         // Sync start timestamp if provided.
         // IMPORTANT: We set both the pool's block time and last_timestamp to
@@ -198,32 +179,25 @@ json::object process_pool_sequence(
         // Add initial liquidity
         uint256 lp_tokens = pool.add_liquidity(initial_amounts, 0);
         
-        // Store state after initial liquidity
-        states.push_back(get_pool_state(pool).to_json());
+        // Store state after initial liquidity (skip when saving only final)
+        if (!save_last_only) {
+            states.push_back(get_pool_state(pool).to_json());
+        }
         
+        // Snapshot interval control
+        long snapshot_every = 1;
+        if (const char* sev = std::getenv("SNAPSHOT_EVERY")) {
+            try { snapshot_every = std::stol(sev); } catch (...) {}
+        }
+        if (std::getenv("SAVE_LAST_ONLY") && std::string(std::getenv("SAVE_LAST_ONLY")) == "1") {
+            snapshot_every = 0;
+        }
+
         // Process each action
         auto actions = sequence.at("actions").as_array();
+        size_t action_idx = 0;
         for (const auto& action : actions) {
             auto act = action.as_object();
-            if (trace_enabled) {
-                std::cout << "TRACE action ts=" << pool.block_timestamp << " -> ";
-                auto type = act.at("type").as_string();
-                if (type == "exchange") {
-                    std::cout << "exchange i=" << act.at("i").as_int64()
-                              << " j=" << act.at("j").as_int64()
-                              << " dx=" << act.at("dx").as_string().c_str();
-                } else if (type == "add_liquidity") {
-                    std::cout << "add_liquidity donation="
-                              << (act.contains("donation") && act.at("donation").as_bool());
-                    if (act.contains("amounts")) {
-                        auto arr = act.at("amounts").as_array();
-                        std::cout << " amounts=[" << arr[0].as_string().c_str() << "," << arr[1].as_string().c_str() << "]";
-                    }
-                } else if (type == "time_travel") {
-                    std::cout << "time_travel to=" << act.at("timestamp").as_int64();
-                }
-                std::cout << std::endl;
-            }
             
             // Apply time delta if present (relative)
             if (act.contains("time_delta")) {
@@ -269,17 +243,44 @@ json::object process_pool_sequence(
                 error = e.what();
             }
             
-            // Store state after action
-            auto state_json = get_pool_state(pool).to_json();
-            state_json["action_success"] = success;
-            if (!success) {
-                state_json["error"] = error;
+            if (!success) all_success = false;
+            
+            // Determine if we should take a snapshot
+            bool do_snap = false;
+            if (snapshot_every == 1) {
+                // Capture every state
+                do_snap = true;
+            } else if (snapshot_every > 1 && ((action_idx + 1) % snapshot_every == 0)) {
+                // Capture every N states
+                do_snap = true;
             }
-            states.push_back(state_json);
+            // Note: if snapshot_every == 0, we don't capture intermediate states
+            
+            if (do_snap) {
+                auto state_json = get_pool_state(pool).to_json();
+                state_json["action_success"] = success;
+                if (!success) {
+                    state_json["error"] = error;
+                }
+                states.push_back(state_json);
+            }
+            action_idx++;
         }
         
-        result["states"] = states;
-        result["success"] = true;
+        // Always capture final state when snapshot_every == 0 or is the last action
+        if (snapshot_every == 0 || (snapshot_every > 1 && (action_idx % snapshot_every != 0))) {
+            auto final_state = get_pool_state(pool).to_json();
+            final_state["action_success"] = all_success;
+            states.push_back(final_state);
+        }
+        
+        if (save_last_only) {
+            // For backwards compatibility with SAVE_LAST_ONLY
+            result["final_state"] = states.empty() ? get_pool_state(pool).to_json() : states.back();
+        } else {
+            result["states"] = states;
+        }
+        result["success"] = all_success;
         
     } catch (const std::exception& e) {
         result["success"] = false;
@@ -324,8 +325,8 @@ int main(int argc, char* argv[]) {
         }
         
         // Build tasks and run with a thread pool
-        const char* only_pool = std::getenv("TRACE_ONLY_POOL");
-        const char* only_seq = std::getenv("TRACE_ONLY_SEQUENCE");
+        const char* only_pool = std::getenv("FILTER_POOL");
+        const char* only_seq = std::getenv("FILTER_SEQUENCE");
 
         struct Task { size_t pi; size_t si; };
         std::vector<Task> tasks;

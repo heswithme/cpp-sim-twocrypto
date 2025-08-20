@@ -70,14 +70,14 @@ def build_cpp_library():
     import platform
     system = platform.system()
     if system == "Darwin":  # macOS
-        lib_path = build_dir / "lib" / "libstableswap_math.dylib"
+        lib_path = build_dir / "lib" / "libstableswap_math_i.dylib"
     elif system == "Linux":
-        lib_path = build_dir / "lib" / "libstableswap_math.so"
+        lib_path = build_dir / "lib" / "libstableswap_math_i.so"
     else:
         # Fallback: try common extensions
-        lib_path = build_dir / "lib" / "libstableswap_math.dylib"
+        lib_path = build_dir / "lib" / "libstableswap_math_i.dylib"
         if not lib_path.exists():
-            lib_path = build_dir / "lib" / "libstableswap_math.so"
+            lib_path = build_dir / "lib" / "libstableswap_math_i.so"
     
     if not lib_path.exists():
         print("Library not found after build")

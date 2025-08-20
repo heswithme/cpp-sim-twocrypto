@@ -57,18 +57,24 @@ cpp-twocrypto/
 ```bash
 # Build (Release recommended)
 cmake -B cpp/build cpp -DCMAKE_BUILD_TYPE=Release
-cmake --build cpp/build --target benchmark_harness -j
+cmake --build cpp/build --target benchmark_harness_i -j  # Integer/uint256 version
+cmake --build cpp/build --target benchmark_harness_d -j  # Double-precision version
 
 # Run harness directly (JSON I/O handled by Python runners normally)
-./cpp/build/benchmark_harness <pools.json> <sequences.json> <output.json>
+./cpp/build/benchmark_harness_i <pools.json> <sequences.json> <output.json>  # Integer/uint256
+./cpp/build/benchmark_harness_d <pools.json> <sequences.json> <output.json>  # Double-precision
 
 # Control internal parallelism
-CPP_THREADS=8 ./cpp/build/benchmark_harness ...
+CPP_THREADS=8 ./cpp/build/benchmark_harness_i ...
 ```
 
 Notes:
 - The harness uses a thread pool internally (default = hardware threads). Override with env `CPP_THREADS`.
-- `twocrypto.cpp` mirrors Vyper logic and names; `_calc_token_fee` and `_fee` follow the same order and rounding.
+- Two implementations are provided:
+  - `benchmark_harness_i`: Integer/uint256 implementation with exact precision (matches Vyper exactly)
+  - `benchmark_harness_d`: Double-precision floating-point for fast approximations
+- `twocrypto_i.cpp` mirrors Vyper logic and names; `_calc_token_fee` and `_fee` follow the same order and rounding.
+- The double-precision version converts 1e18-scaled JSON inputs to doubles (1.0 == 1e18) and back for outputs
 
 ## Math Benchmarks (C++ vs Vyper)
 
@@ -116,6 +122,34 @@ Advanced:
     python/benchmark_pool/data/pools.json \
     python/benchmark_pool/data/sequences.json \
     python/benchmark_pool/data/results/vyper_only.json
+  ```
+
+## C++ Variants Benchmark (integer vs double)
+
+Compare C++ implementations side-by-side on the same dataset:
+
+```bash
+# Uses the same generated dataset under python/benchmark_pool/data/
+uv run python/benchmark_pool/run_cpp_variants.py --n-cpp 8
+
+# Options:
+#   --pools-file FILE       Path to pools.json (default: data/pools.json)
+#   --sequences-file FILE   Path to sequences.json (default: data/sequences.json)
+#   --n-cpp N               C++ threads per process (CPP_THREADS)
+#   --only-pool NAME        Filter to a single pool
+```
+
+Outputs are saved in a timestamped folder under `python/benchmark_pool/data/results/` with:
+- `cpp_i.json` (integer/uint256 results)
+- `cpp_d.json` (double-precision results)
+- `summary.json` (timing and final-state absolute diffs vs integer)
+
+- Run C++ double-precision only:
+  ```bash
+  uv run python/cpp_pool/cpp_pool_runner_d.py \
+    python/benchmark_pool/data/pools.json \
+    python/benchmark_pool/data/sequences.json \
+    python/benchmark_pool/data/results/cpp_d_only.json
   ```
 
 ## Parity & Testing Notes

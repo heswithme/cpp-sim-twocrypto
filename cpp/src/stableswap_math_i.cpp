@@ -1,4 +1,4 @@
-#include "stableswap_math.hpp"
+#include "stableswap_math_i.hpp"
 #include <cmath>
 #include <cstring>
 
@@ -78,7 +78,8 @@ uint256 StableswapMath::newton_D(
         for (const auto& x : _xp) {
             D_P = D_P * D / x;
         }
-        D_P /= boost::multiprecision::pow(uint256(N_COINS), N_COINS);
+        // N_COINS^N_COINS = 2^2 = 4 for N_COINS=2
+        D_P /= uint256(4);
         
         uint256 Dprev = D;
         
@@ -110,7 +111,8 @@ uint256 StableswapMath::get_p(
 ) {
     // dx_0 / dx_1 only
     uint256 ANN = _A_gamma[0] * N_COINS;
-    uint256 Dr = _D / boost::multiprecision::pow(uint256(N_COINS), N_COINS);
+    // N_COINS^N_COINS = 4 for N_COINS=2
+    uint256 Dr = _D / uint256(4);
     
     for (size_t i = 0; i < N_COINS; ++i) {
         Dr = Dr * _D / _xp[i];
@@ -119,7 +121,7 @@ uint256 StableswapMath::get_p(
     uint256 xp0_A = ANN * _xp[0] / A_MULTIPLIER;
     
     // Return with 10^18 precision
-    uint256 ten_18 = boost::multiprecision::pow(uint256(10), 18);
+    static const uint256 ten_18 = boost::multiprecision::pow(uint256(10), 18);
     return ten_18 * (xp0_A + Dr * _xp[0] / _xp[1]) / (xp0_A + Dr);
 }
 
@@ -144,7 +146,8 @@ uint256 StableswapMath::wad_exp(const int256& x) {
     // x is now in the range (-42, 136) * 1e18. Convert to (-42, 136) * 2^96
     // for higher intermediate precision and a binary base.
     // This base conversion is a multiplication with 1e18 / 2^96 = 5^18 / 2^78
-    int256 x_scaled = (x << 78) / boost::multiprecision::pow(int256(5), 18);
+    static const int256 five_pow_18 = boost::multiprecision::pow(int256(5), 18);
+    int256 x_scaled = (x << 78) / five_pow_18;
     
     // Reduce the range of x to (-½ ln 2, ½ ln 2) * 2^96 by factoring out powers of two
     // so that exp(x) = exp(x') * 2^k, where k is a signed integer.
@@ -213,7 +216,8 @@ uint256 StableswapMath::wad_exp(const int256& x) {
     } else {
         // For negative r, we need proper two's complement conversion
         // This shouldn't happen in normal operation but we handle it for completeness
-        r_unsigned = uint256(boost::multiprecision::pow(int256(2), 256) + r);
+        static const int256 two_pow_256 = boost::multiprecision::pow(int256(2), 256);
+        r_unsigned = uint256(two_pow_256 + r);
     }
     
     // Calculate the final result

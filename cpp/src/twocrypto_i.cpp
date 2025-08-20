@@ -1,4 +1,4 @@
-#include "twocrypto.hpp"
+#include "twocrypto_i.hpp"
 #include <iostream>
 
 namespace twocrypto {
@@ -31,12 +31,6 @@ uint256 TwoCryptoPool::add_liquidity(
     uint256 d_token = 0;
     if (old_D > 0) {
         d_token = token_supply * D_new / old_D - token_supply;
-        if (trace_enabled && donation) {
-            std::cout << "TRACE liq_donation prefee old_D=" << old_D
-                      << " D_new=" << D_new
-                      << " token_supply=" << token_supply
-                      << " d_token_raw=" << d_token << std::endl;
-        }
     } else {
         d_token = _xcp(D_new, price_scale);
     }
@@ -51,23 +45,12 @@ uint256 TwoCryptoPool::add_liquidity(
         uint256 approx_fee = _calc_token_fee(amounts_received, xp, donation, true);
         d_token_fee = approx_fee * d_token / FEE_PRECISION() + 1;
         d_token -= d_token_fee;
-        if (trace_enabled && donation) {
-            std::cout << "TRACE liq_donation fee approx_fee=" << approx_fee
-                      << " d_token_fee=" << d_token_fee
-                      << " d_token_postfee=" << d_token << std::endl;
-        }
     }
 
     // Validate constraints before committing state
     if (old_D > 0 && donation) {
         uint256 new_donation_shares = donation_shares + d_token;
         uint256 ratio = (new_donation_shares * PRECISION()) / (token_supply + d_token);
-        if (trace_enabled) {
-            std::cout << "TRACE liq_donation cap_check new_shares=" << new_donation_shares
-                      << " denom=" << (token_supply + d_token)
-                      << " ratio=" << ratio
-                      << " max_ratio=" << donation_shares_max_ratio << std::endl;
-        }
         if (ratio > donation_shares_max_ratio) {
             throw std::runtime_error("donation above cap");
         }
@@ -265,13 +248,6 @@ uint256 TwoCryptoPool::tweak_price(
         price_oracle = (capped * (PRECISION() - alpha) + price_oracle * alpha) / PRECISION();
         cached_price_oracle = price_oracle;
         last_timestamp = block_timestamp;
-        if (trace_enabled) {
-            std::cout << "TRACE tp_ema ts=" << block_timestamp
-                      << " dt=" << dt
-                      << " alpha=" << alpha
-                      << " capped_last_prices=" << capped
-                      << " price_oracle=" << price_oracle << std::endl;
-        }
     }
     // Update spot price after EMA step
     last_prices = StableswapMath::get_p(xp, _D, _A_gamma) * price_scale / PRECISION();
@@ -296,17 +272,6 @@ uint256 TwoCryptoPool::tweak_price(
         throw std::runtime_error("negative donation");
     }
 
-    if (trace_enabled) {
-        std::cout << "TRACE tp_gating ts=" << block_timestamp
-                  << " vp=" << vp
-                  << " xcp_profit=" << xcp_profit
-                  << " threshold=" << threshold_vp
-                  << " locked_supply=" << locked_supply
-                  << " vp_boosted=" << vp_boosted
-                  << " price_oracle=" << price_oracle
-                  << " price_scale=" << price_scale
-                  << std::endl;
-    }
 
     if (vp_boosted > threshold_vp + rebalancing_params[0]) {
         uint256 norm = price_oracle * PRECISION() / price_scale;
@@ -325,17 +290,6 @@ uint256 TwoCryptoPool::tweak_price(
             uint256 new_xcp = _xcp(D_new, p_new);
             uint256 new_vp = (total_supply > 0) ? (PRECISION() * new_xcp / total_supply) : PRECISION();
 
-            if (trace_enabled) {
-                std::cout << "TRACE tp_candidate ts=" << block_timestamp
-                          << " norm=" << norm
-                          << " step=" << adjustment_step
-                          << " p_new=" << p_new
-                          << " xp1_new=" << xp_new[1]
-                          << " D_new=" << D_new
-                          << " new_xcp=" << new_xcp
-                          << " new_vp_pre_burn=" << new_vp
-                          << std::endl;
-            }
 
             uint256 donation_shares_to_burn = 0;
             uint256 goal_vp = std::max(threshold_vp, vp);
@@ -352,14 +306,6 @@ uint256 TwoCryptoPool::tweak_price(
                 if (total_supply > donation_shares_to_burn) {
                     new_vp = (PRECISION() * new_xcp) / (total_supply - donation_shares_to_burn);
                 }
-                if (trace_enabled) {
-                    std::cout << "TRACE tp_burn ts=" << block_timestamp
-                              << " goal_vp=" << goal_vp
-                              << " tweaked_supply=" << tweaked_supply
-                              << " burn=" << donation_shares_to_burn
-                              << " new_vp_post_burn=" << new_vp
-                              << std::endl;
-                }
             }
 
             if (new_vp > PRECISION() && new_vp >= threshold_vp) {
@@ -370,13 +316,6 @@ uint256 TwoCryptoPool::tweak_price(
                     donation_shares -= donation_shares_to_burn;
                     totalSupply -= donation_shares_to_burn;
                     last_donation_release_ts = block_timestamp;
-                }
-                if (trace_enabled) {
-                    std::cout << "TRACE tp_commit ts=" << block_timestamp
-                              << " new_price_scale=" << p_new
-                              << " donation_burnt=" << donation_shares_to_burn
-                              << " new_vp=" << new_vp
-                              << std::endl;
                 }
                 return p_new;
             }

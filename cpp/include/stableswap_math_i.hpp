@@ -1,5 +1,5 @@
-#ifndef STABLESWAP_MATH_HPP
-#define STABLESWAP_MATH_HPP
+#ifndef STABLESWAP_MATH_I_HPP
+#define STABLESWAP_MATH_I_HPP
 
 #include <boost/multiprecision/cpp_int.hpp>
 #include <array>
@@ -47,4 +47,4 @@ public:
 
 } // namespace stableswap
 
-#endif // STABLESWAP_MATH_HPP
+#endif // STABLESWAP_MATH_I_HPP

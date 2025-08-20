@@ -17,7 +17,7 @@ class CppPoolRunner:
         """Initialize with path to C++ project."""
         self.cpp_project_path = cpp_project_path
         self.build_dir = os.path.join(cpp_project_path, "build")
-        self.harness_path = os.path.join(self.build_dir, "benchmark_harness")
+        self.harness_path = os.path.join(self.build_dir, "benchmark_harness_i")
         
     def configure_build(self):
         """Configure CMake build."""
@@ -42,7 +42,7 @@ class CppPoolRunner:
         
         print("Building benchmark harness...")
         result = subprocess.run(
-            ["cmake", "--build", ".", "--target", "benchmark_harness"],
+            ["cmake", "--build", ".", "--target", "benchmark_harness_i"],
             cwd=self.build_dir,
             capture_output=True,
             text=True
@@ -152,7 +152,7 @@ def run_cpp_pool(pool_configs_file: str, sequences_file: str, output_file: str) 
 def main():
     """Command-line interface."""
     if len(sys.argv) != 4:
-        print("Usage: python cpp_pool_runner.py <pool_configs.json> <sequences.json> <output.json>")
+        print("Usage: python cpp_pool_runner_i.py <pool_configs.json> <sequences.json> <output.json>")
         return 1
     
     pool_configs = sys.argv[1]

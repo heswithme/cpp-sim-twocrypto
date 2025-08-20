@@ -2,26 +2,26 @@
   "test_cases": 104,
   "results": {
     "newton_D": {
-      "vyper_time": 0.09316428378369893,
-      "cpp_time": 0.0003535415933583865,
+      "vyper_time": 0.09336142018728424,
+      "cpp_time": 0.0003529418114339933,
       "matches": 104,
       "total": 104
     },
     "get_y": {
-      "vyper_time": 0.10982052080507856,
-      "cpp_time": 0.00033380409877281636,
+      "vyper_time": 0.10956826699257372,
+      "cpp_time": 0.0003340624010888861,
       "matches": 104,
       "total": 104
     },
     "get_p": {
-      "vyper_time": 0.028250613302225242,
-      "cpp_time": 0.0002333749027457088,
+      "vyper_time": 0.028131753994966858,
+      "cpp_time": 0.00023282928741537027,
       "matches": 104,
       "total": 104
     }
   },
   "summary": {
-    "avg_speedup": 251.14613399292531,
+    "avg_speedup": 251.19920201899197,
     "precision_match": true
   }
 }
