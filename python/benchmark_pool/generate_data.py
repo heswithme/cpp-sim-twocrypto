@@ -15,13 +15,13 @@ def generate_pool_configs(num_pools: int = 3) -> List[Dict[str, Any]]:
     for i in range(num_pools):
         # Generate pool parameters with realistic ranges
         # Generate fees ensuring out_fee >= mid_fee to satisfy factory checks
-        mid_fee_val = random.randint(1_000_000, 50_000_000)
-        out_fee_rand = random.randint(30_000_000, 60_000_000)
+        mid_fee_val = random.randint(1, (10**10)//2)
+        out_fee_rand = random.randint(1, (10**10)//2)
         out_fee_val = max(out_fee_rand, mid_fee_val)
 
         pool = {
             "name": f"pool_{i:02d}",
-            "A": str(random.randint(100000, 100000000)),
+            "A": str(random.randint(2, 10_000) * 10_000),
             "gamma": str(random.randint(10**11, 10**16)),
             "mid_fee": str(mid_fee_val),
             "out_fee": str(out_fee_val),
@@ -29,7 +29,7 @@ def generate_pool_configs(num_pools: int = 3) -> List[Dict[str, Any]]:
             "allowed_extra_profit": str(random.randint(10**10, 10**13)),
             "adjustment_step": str(random.randint(10**10, 10**14)),
             "ma_time": str(random.randint(60, 3600)),
-            "initial_price": "1000000000000000000",  # 1.0
+            "initial_price": str(10**18),  # 1.0
             "initial_liquidity": [
                 str(random.randint(1000, 10000) * 10**18),
                 str(random.randint(1000, 10000) * 10**18)
