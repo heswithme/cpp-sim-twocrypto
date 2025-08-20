@@ -50,7 +50,12 @@ inline uint256 MAX_A() {
 }
 
 inline uint256 NOISE_FEE() {
-    static uint256 v("100000000000"); // 10**11
+    static uint256 v("100000"); // 10**5 (matches Vyper)
+    return v;
+}
+
+inline uint256 FEE_PRECISION() {
+    static uint256 v("10000000000"); // 10**10
     return v;
 }
 
@@ -84,6 +89,19 @@ public:
     
     // Time for testing
     uint64_t block_timestamp;
+    bool trace_enabled = false;
+
+    // --------------------- Donation & Admin Fee State ----------------------
+    uint256 donation_shares = 0;
+    uint256 donation_shares_max_ratio = PRECISION() * 10 / 100; // 10%
+    uint256 donation_duration = uint256(7 * 86400);
+    uint256 last_donation_release_ts = 0;
+    uint256 donation_protection_expiry_ts = 0;
+    uint256 donation_protection_period = uint256(10 * 60); // 10 minutes
+    uint256 donation_protection_lp_threshold = PRECISION() * 20 / 100; // 20%
+
+    uint256 admin_fee = uint256("5000000000"); // 5e9 (50% of 1e10)
+    uint256 last_admin_fee_claim_timestamp = 0;
 
 private:
     // ----------------------- Internal Functions -----------------------------
@@ -97,22 +115,29 @@ private:
     }
     
     /**
-     * @notice Unpack 3 values from uint256
+     * @notice Unpack 3 values from uint256 using [x0<<128 | x1<<64 | x2]
+     * Matches Vyper's _pack_3 in Twocrypto.
      */
     std::array<uint256, 3> _unpack_3(const uint256& packed) const {
-        uint256 mask = (uint256(1) << 85) - 1;
+        uint256 mask64 = (uint256(1) << 64) - 1;
         return {
-            packed & mask,
-            (packed >> 85) & mask,
-            packed >> 170
+            (packed >> 128) & mask64, // x0
+            (packed >> 64) & mask64,  // x1
+            packed & mask64           // x2
         };
     }
     
     /**
-     * @notice Get A and gamma parameters
+     * @notice Get A and gamma parameters in normalized order [A, gamma]
+     * Mirrors Vyper's _A_gamma(), which unpacks packed_gamma_A (gamma low, A high)
+     * and returns [A, gamma].
      */
     std::array<uint256, 2> _A_gamma() const {
-        return _unpack_2(A_gamma);
+        // packed layout: [ high: A | low: gamma ]
+        uint256 mask = (uint256(1) << 128) - 1;
+        uint256 gamma = A_gamma & mask;
+        uint256 A = A_gamma >> 128;
+        return {A, gamma};
     }
     
     /**
@@ -141,16 +166,17 @@ private:
             return mid_fee;
         }
         
-        uint256 sum_xp = xp[0] + xp[1];
-        
-        // g = x[0] * x[1] * N_COINS^2 / sum_xp^2
-        uint256 g = PRECISION() * N_COINS * N_COINS * xp[0] / sum_xp * xp[1] / sum_xp;
-        
-        // g = fee_gamma * g^2 / (g + (1 - g) * fee_gamma)
-        g = fee_gamma * g / (fee_gamma * g / PRECISION() + PRECISION() - g);
-        
-        // fee = mid_fee * g + out_fee * (1 - g)
-        return (mid_fee * g + out_fee * (PRECISION() - g)) / PRECISION();
+        uint256 B = xp[0] + xp[1];
+        // Balance indicator that goes from 1e18 (perfect balance) to 0 (very imbalanced)
+        // B = PRECISION * N^N * xp[0] / (sum^2) * xp[1]
+        B = PRECISION() * N_COINS * N_COINS * xp[0] / B * xp[1] / B;
+
+        // Regulate slope using fee_gamma
+        // fee_gamma * B / (fee_gamma * B + 1 - B)
+        B = fee_gamma * B / (fee_gamma * B / PRECISION() + PRECISION() - B);
+
+        // fee = mid_fee * B + out_fee * (1 - B)
+        return (mid_fee * B + out_fee * (PRECISION() - B)) / PRECISION();
     }
     
     /**
@@ -166,6 +192,68 @@ private:
      */
     uint256 _calc_profit(const uint256& new_xcp, const uint256& old_xcp) const {
         return new_xcp * PRECISION() / old_xcp;
+    }
+
+    /**
+     * @notice Compute unlocked donation shares, optionally with protection damping
+     */
+    uint256 _donation_shares(bool donation_protection = true) const {
+        if (donation_shares == 0) return 0;
+        uint256 elapsed = uint256(block_timestamp) - last_donation_release_ts;
+        uint256 unlocked_shares = donation_shares * elapsed / donation_duration;
+        if (unlocked_shares > donation_shares) unlocked_shares = donation_shares;
+        if (!donation_protection) return unlocked_shares;
+        uint256 protection_factor = 0;
+        if (donation_protection_expiry_ts > uint256(block_timestamp)) {
+            protection_factor = (donation_protection_expiry_ts - uint256(block_timestamp)) * PRECISION() / donation_protection_period;
+            if (protection_factor > PRECISION()) protection_factor = PRECISION();
+        }
+        return unlocked_shares * (PRECISION() - protection_factor) / PRECISION();
+    }
+
+    /**
+     * @notice Calculate liquidity action fee approximation (for add/remove)
+     * Mirrors Vyper _calc_token_fee for N_COINS=2
+     */
+    uint256 _calc_token_fee(
+        const std::array<uint256, 2>& amounts,
+        const std::array<uint256, 2>& xp,
+        bool donation,
+        bool deposit
+    ) const {
+        if (donation) {
+            // Donation fees are 0, but NOISE_FEE is required for numerical stability
+            return NOISE_FEE();
+        }
+
+        // balances ratio before liquidity op (scaled by precisions)
+        uint256 denom = (balances[1] - amounts[1]) * precisions[1];
+        uint256 balances_ratio = 0;
+        if (denom > 0) {
+            balances_ratio = (balances[0] - amounts[0]) * precisions[0] * PRECISION() / denom;
+        }
+        // amounts scaled using balances_ratio instead of price_scale
+        std::array<uint256, 2> amounts_scaled = {
+            amounts[0] * precisions[0],
+            amounts[1] * precisions[1] * balances_ratio / PRECISION()
+        };
+
+        // fee' = _fee(xp) * N / (4 * (N-1)) = _fee/2 for N=2
+        uint256 fee_prime = _fee(xp) * N_COINS / (4 * (N_COINS - 1));
+
+        uint256 S = amounts_scaled[0] + amounts_scaled[1];
+        uint256 avg = S / N_COINS;
+        uint256 Sdiff = (amounts_scaled[0] > avg ? amounts_scaled[0] - avg : avg - amounts_scaled[0]) +
+                        (amounts_scaled[1] > avg ? amounts_scaled[1] - avg : avg - amounts_scaled[1]);
+
+        uint256 lp_spam_penalty_fee = 0;
+        if (deposit && donation_protection_expiry_ts > block_timestamp) {
+            uint256 protection_factor = (donation_protection_expiry_ts - block_timestamp) * PRECISION() / donation_protection_period;
+            if (protection_factor > PRECISION()) protection_factor = PRECISION();
+            lp_spam_penalty_fee = protection_factor * fee_prime / PRECISION();
+        }
+
+        return fee_prime * Sdiff / S + NOISE_FEE() + lp_spam_penalty_fee;
     }
 
 public:
@@ -214,6 +302,29 @@ public:
     // ----------------------- External Functions -----------------------------
     
     /**
+     * @notice Add liquidity to the pool
+     * @param amounts Amounts of each coin to add
+     * @param min_mint_amount Minimum LP tokens to mint
+     * @return Amount of LP tokens minted
+     */
+    uint256 add_liquidity(
+        const std::array<uint256, 2>& amounts,
+        uint256 min_mint_amount,
+        bool donation = false
+    );
+    
+    /**
+     * @notice Remove liquidity from the pool (balanced)
+     * @param amount Amount of LP tokens to burn
+     * @param min_amounts Minimum amounts of each coin to receive
+     * @return Amounts of each coin withdrawn
+     */
+    std::array<uint256, 2> remove_liquidity(
+        uint256 amount,
+        const std::array<uint256, 2>& min_amounts
+    );
+    
+    /**
      * @notice Exchange coins
      * @param i Index of input coin
      * @param j Index of output coin  
@@ -226,28 +337,6 @@ public:
         uint256 j,
         uint256 dx,
         uint256 min_dy
-    );
-    
-    /**
-     * @notice Add liquidity to the pool
-     * @param amounts Amounts of each coin to add
-     * @param min_mint_amount Minimum LP tokens to mint
-     * @return Amount of LP tokens minted
-     */
-    uint256 add_liquidity(
-        const std::array<uint256, 2>& amounts,
-        uint256 min_mint_amount
-    );
-    
-    /**
-     * @notice Remove liquidity from the pool (balanced)
-     * @param amount Amount of LP tokens to burn
-     * @param min_amounts Minimum amounts of each coin to receive
-     * @return Amounts of each coin withdrawn
-     */
-    std::array<uint256, 2> remove_liquidity(
-        uint256 amount,
-        const std::array<uint256, 2>& min_amounts
     );
     
     /**
@@ -269,10 +358,7 @@ public:
      * @notice Get current virtual price
      */
     uint256 get_virtual_price() const {
-        if (totalSupply == 0) return PRECISION();
-        
-        uint256 xcp = _xcp(D, cached_price_scale);
-        return xcp * PRECISION() / totalSupply;
+        return virtual_price == 0 ? PRECISION() : virtual_price;
     }
     
     /**
@@ -293,6 +379,10 @@ public:
     
     void advance_time(uint64_t seconds) { 
         block_timestamp += seconds; 
+    }
+
+    void set_trace(bool enabled) {
+        trace_enabled = enabled;
     }
 };
 

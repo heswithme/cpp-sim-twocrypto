@@ -3,6 +3,103 @@
 
 namespace twocrypto {
 
+// ---------------------------- add_liquidity ----------------------------------
+
+uint256 TwoCryptoPool::add_liquidity(
+    const std::array<uint256, 2>& amounts,
+    uint256 min_mint_amount,
+    bool donation
+) {
+    if (amounts[0] + amounts[1] == 0) {
+        throw std::invalid_argument("no coins to add");
+    }
+
+    auto A_gamma_current = _A_gamma();
+    uint256 price_scale = cached_price_scale;
+
+    auto old_balances = balances;
+    std::array<uint256,2> amounts_received = amounts;
+    std::array<uint256,2> new_balances = {balances[0] + amounts_received[0], balances[1] + amounts_received[1]};
+
+    auto xp = _xp(new_balances, price_scale);
+    auto old_xp = _xp(old_balances, price_scale);
+
+    uint256 old_D = D; // not ramping in this harness
+    uint256 D_new = StableswapMath::newton_D(A_gamma_current[0], A_gamma_current[1], xp, 0);
+
+    uint256 token_supply = totalSupply;
+    uint256 d_token = 0;
+    if (old_D > 0) {
+        d_token = token_supply * D_new / old_D - token_supply;
+    } else {
+        d_token = _xcp(D_new, price_scale);
+    }
+    if (d_token == 0) {
+        throw std::runtime_error("nothing minted");
+    }
+
+    uint256 d_token_fee = 0;
+    if (old_D > 0) {
+        uint256 approx_fee = _calc_token_fee(amounts_received, xp, donation, true);
+        d_token_fee = approx_fee * d_token / FEE_PRECISION() + 1;
+        d_token -= d_token_fee;
+    }
+
+    // Update balances and state, handling donation or regular LP mint
+    balances = new_balances;
+    if (old_D > 0) {
+        D = D_new;
+        if (donation) {
+            // Donation path
+            // token_supply already cached above
+            uint256 new_donation_shares = donation_shares + d_token;
+            // Cap: new_donation_shares * PRECISION / (token_supply + d_token) <= donation_shares_max_ratio
+            if ((new_donation_shares * PRECISION()) / (token_supply + d_token) > donation_shares_max_ratio) {
+                throw std::runtime_error("donation above cap");
+            }
+            // Preserve currently unlocked donations proportionally
+            uint256 unlocked = _donation_shares(false);
+            uint256 new_elapsed = 0;
+            if (new_donation_shares > 0) {
+                new_elapsed = (unlocked * donation_duration) / new_donation_shares;
+            }
+            last_donation_release_ts = uint256(block_timestamp) - new_elapsed;
+
+            donation_shares = new_donation_shares;
+            totalSupply += d_token; // credit donation shares to supply
+        } else {
+            // Extend donation protection if any donations exist
+            uint256 relative_lp_add = d_token * PRECISION() / (token_supply + d_token);
+            if (relative_lp_add > 0 && donation_shares > 0) {
+                uint256 protection_period = donation_protection_period;
+                uint256 extension_seconds = (relative_lp_add * protection_period) / donation_protection_lp_threshold;
+                if (extension_seconds > protection_period) extension_seconds = protection_period;
+                uint256 current_expiry = donation_protection_expiry_ts > block_timestamp ? donation_protection_expiry_ts : block_timestamp;
+                uint256 new_expiry = current_expiry + extension_seconds;
+                uint256 max_expiry = block_timestamp + protection_period;
+                if (new_expiry > max_expiry) new_expiry = max_expiry;
+                donation_protection_expiry_ts = new_expiry;
+            }
+            totalSupply += d_token; // mint LP
+        }
+        // Tweak price for both donation and regular adds
+        cached_price_scale = tweak_price(A_gamma_current, xp, D_new);
+    } else {
+        // Instantiate empty pool
+        D = D_new;
+        virtual_price = PRECISION();
+        xcp_profit = PRECISION();
+        xcp_profit_a = PRECISION();
+        totalSupply += d_token; // mint initial LP
+    }
+
+    if (d_token < min_mint_amount) {
+        throw std::runtime_error("slippage");
+    }
+
+    return d_token;
+}
+
 // ----------------------------- exchange -------------------------------------
 
 std::array<uint256, 3> TwoCryptoPool::exchange(
@@ -14,167 +111,66 @@ std::array<uint256, 3> TwoCryptoPool::exchange(
     // Convert uint256 indices to size_t
     size_t idx_i = static_cast<size_t>(i.convert_to<unsigned>());
     size_t idx_j = static_cast<size_t>(j.convert_to<unsigned>());
-    
+
     // Validate inputs
-    if (idx_i == idx_j) {
-        throw std::invalid_argument("coin index out of range");
-    }
-    if (idx_i >= N_COINS || idx_j >= N_COINS) {
+    if (idx_i == idx_j || idx_i >= N_COINS || idx_j >= N_COINS) {
         throw std::invalid_argument("coin index out of range");
     }
     if (dx == 0) {
-        throw std::invalid_argument("dx cannot be 0");
+        throw std::invalid_argument("zero dx");
     }
-    
-    // Current state
+
     auto A_gamma_current = _A_gamma();
     uint256 price_scale = cached_price_scale;
-    auto xp = _xp(balances, price_scale);
-    
-    // Add dx to balance
-    xp[idx_i] += dx * precisions[idx_i];
-    
-    // Calculate dy using newton_y
-    auto [dy, K0] = StableswapMath::get_y(
-        A_gamma_current[0],  // A
-        A_gamma_current[1],  // gamma
+
+    // Simulate transfer in
+    auto balances_local = balances;
+    balances_local[idx_i] += dx;
+
+    // Compute xp from updated balances
+    auto xp = _xp(balances_local, price_scale);
+
+    // Calculate dy using get_y
+    auto y_out = StableswapMath::get_y(
+        A_gamma_current[0],
+        A_gamma_current[1],
         xp,
         D,
         idx_j
     );
-    
-    // Subtract dy from xp
-    dy = xp[idx_j] - dy - 1;  // -1 for rounding
-    xp[idx_j] -= dy;
-    
-    // Convert dy to token amount
+
+    uint256 dy_xp = xp[idx_j] - y_out.value;
+    xp[idx_j] -= dy_xp;
+    uint256 dy_tokens = dy_xp - 1; // rounding
+
     if (idx_j > 0) {
-        dy = dy * PRECISION() / price_scale;
+        dy_tokens = dy_tokens * PRECISION() / price_scale;
     }
-    dy = dy / precisions[idx_j];
-    
-    // Check slippage
-    if (dy < min_dy) {
+    dy_tokens = dy_tokens / precisions[idx_j];
+
+    // Fee
+    uint256 fee = _fee(xp) * dy_tokens / FEE_PRECISION();
+    uint256 dy_after_fee = dy_tokens - fee;
+    if (dy_after_fee < min_dy) {
         throw std::runtime_error("slippage");
     }
-    
-    // Calculate fee
-    uint256 fee = _fee(xp) * dy / PRECISION();
-    dy -= fee;
-    
-    // Update balances
+
+    // Update storage balances
     balances[idx_i] += dx;
-    balances[idx_j] -= dy;
-    
-    // Calculate new D
+    balances[idx_j] -= dy_after_fee;
+
+    // Update D and price
     auto xp_new = _xp(balances, price_scale);
     uint256 D_new = StableswapMath::newton_D(
         A_gamma_current[0],
         A_gamma_current[1],
-        xp_new
+        xp_new,
+        y_out.unused
     );
-    
-    // Update state
     D = D_new;
-    
-    // Update price (similar to Vyper's tweak_price logic)
     uint256 new_price_scale = tweak_price(A_gamma_current, xp_new, D_new);
-    
-    return {dy, fee, new_price_scale};
-}
 
-// ---------------------------- add_liquidity ----------------------------------
-
-uint256 TwoCryptoPool::add_liquidity(
-    const std::array<uint256, 2>& amounts,
-    uint256 min_mint_amount
-) {
-    // Check if any tokens are being added
-    if (amounts[0] + amounts[1] == 0) {
-        throw std::invalid_argument("no coins to add");
-    }
-    
-    auto A_gamma_current = _A_gamma();
-    uint256 price_scale = cached_price_scale;
-    
-    // Store old state
-    auto old_balances = balances;
-    uint256 old_D = D;
-    
-    // Update balances
-    for (size_t i = 0; i < N_COINS; ++i) {
-        balances[i] += amounts[i];
-    }
-    
-    // Calculate new D
-    auto xp = _xp(balances, price_scale);
-    uint256 D_new = StableswapMath::newton_D(
-        A_gamma_current[0],
-        A_gamma_current[1],
-        xp
-    );
-    
-    // Calculate tokens to mint
-    uint256 d_token = 0;
-    
-    if (old_D == 0) {
-        // Initial deposit
-        d_token = _xcp(D_new, price_scale);
-        
-        // Initialize xcp_profit_a for tracking
-        xcp_profit_a = PRECISION();
-    } else {
-        // Subsequent deposits
-        d_token = totalSupply * D_new / old_D - totalSupply;
-    }
-    
-    // Check slippage
-    if (d_token < min_mint_amount) {
-        throw std::runtime_error("slippage");
-    }
-    
-    // Update state
-    D = D_new;
-    totalSupply += d_token;
-    
-    // Check if we need to update prices (imbalanced add)
-    bool update_prices = false;
-    if (old_D > 0) {
-        auto old_xp = _xp(old_balances, price_scale);
-        
-        // Check if the add is imbalanced
-        // Simple heuristic: if ratio of amounts differs from ratio of balances
-        if (old_balances[0] > 0 && old_balances[1] > 0) {
-            uint256 ratio_amounts = amounts[0] * PRECISION() / amounts[1];
-            uint256 ratio_balances = old_balances[0] * PRECISION() / old_balances[1];
-            
-            // If ratios differ by more than 1%, update prices
-            uint256 diff = ratio_amounts > ratio_balances ? 
-                ratio_amounts - ratio_balances : ratio_balances - ratio_amounts;
-            if (diff > PRECISION() / 100) {
-                update_prices = true;
-            }
-        }
-    }
-    
-    if (update_prices) {
-        tweak_price(A_gamma_current, xp, D_new);
-    }
-    
-    // Update virtual price
-    if (totalSupply > 0) {
-        uint256 xcp = _xcp(D_new, cached_price_scale);
-        virtual_price = xcp * PRECISION() / totalSupply;
-        
-        // Update profit tracking
-        if (old_D > 0) {
-            uint256 old_xcp = _xcp(old_D, cached_price_scale);
-            uint256 profit_ratio = xcp * PRECISION() / old_xcp;
-            xcp_profit = xcp_profit * profit_ratio / PRECISION();
-        }
-    }
-    
-    return d_token;
+    return {dy_after_fee, fee, new_price_scale};
 }
 
 // -------------------------- remove_liquidity ---------------------------------
@@ -208,16 +204,14 @@ std::array<uint256, 2> TwoCryptoPool::remove_liquidity(
     totalSupply -= amount;
     
     // Update D proportionally (no fees on balanced withdrawal)
-    if (totalSupply > 0) {
-        D = D * (totalSupply + amount) / totalSupply;
-    } else {
-        D = 0;
-    }
-    
-    // Update virtual price
-    if (totalSupply > 0) {
-        uint256 xcp = _xcp(D, cached_price_scale);
-        virtual_price = xcp * PRECISION() / totalSupply;
+    {
+        uint256 old_total_supply = totalSupply + amount; // supply before burn
+        if (old_total_supply > 0) {
+            D = D - (D * amount / old_total_supply);
+        } else {
+            D = 0;
+        }
+        // Note: Vyper remove_liquidity does not update virtual_price here.
     }
     
     return withdrawn;
@@ -230,96 +224,148 @@ uint256 TwoCryptoPool::tweak_price(
     const std::array<uint256, 2>& xp,
     uint256 _D
 ) {
-    /**
-     * @notice Updates price_oracle, last_price and conditionally adjusts
-     *         price_scale. This is called whenever there is an unbalanced
-     *         liquidity operation: exchange, add_liquidity, or
-     *         remove_liquidity_one_coin.
-     */
-    
+    // Read storage
+    uint256 price_oracle = cached_price_oracle;
     uint256 price_scale = cached_price_scale;
-    uint256 last_prices_timestamp = last_timestamp;
-    uint256 current_timestamp = block_timestamp;
-    
-    // Update last_prices (price measured by the AMM)
-    last_prices = StableswapMath::get_p(xp, _D, _A_gamma);
-    
-    // Skip price oracle update if not enough time has passed
-    if (current_timestamp <= last_prices_timestamp) {
-        return price_scale;
-    }
-    
-    // Calculate alpha for EMA (exponential moving average)
-    auto rebalancing_params = _unpack_3(packed_rebalancing_params);
-    uint256 ma_time = rebalancing_params[2];
-    
-    uint256 dt = current_timestamp - last_prices_timestamp;
-    last_timestamp = current_timestamp;
-    
-    // EMA of price oracle
-    if (dt > 0) {
-        // alpha = exp(-dt/ma_time)
-        // For simplicity, use linear approximation for small dt
-        // price_oracle = price_oracle * alpha + last_prices * (1 - alpha)
-        
-        if (dt < ma_time) {
-            // Linear approximation: alpha ≈ 1 - dt/ma_time
-            uint256 alpha = PRECISION() - (PRECISION() * dt / ma_time);
-            cached_price_oracle = (cached_price_oracle * alpha + 
-                                  last_prices * (PRECISION() - alpha)) / PRECISION();
-        } else {
-            // If dt is large, just use last price
-            cached_price_oracle = last_prices;
+    auto rebalancing_params = _unpack_3(packed_rebalancing_params); // [allowed_extra_profit, adjustment_step, ma_time]
+
+    // Update price oracle if time advanced
+    uint256 last_ts = last_timestamp;
+    if (last_ts < block_timestamp) {
+        // alpha = exp(- (block_timestamp - last_ts)/ma_time) in wad
+        uint256 dt = block_timestamp - last_ts;
+        uint256 ma_time = rebalancing_params[2];
+        auto neg = stableswap::int256(- (stableswap::int256(dt) * stableswap::int256(PRECISION()) / stableswap::int256(ma_time)));
+        uint256 alpha = StableswapMath::wad_exp(neg);
+
+        // Use stored last_prices for EMA update, capped at 2 * price_scale
+        uint256 capped = last_prices;
+        if (capped > 2 * price_scale) capped = 2 * price_scale;
+        price_oracle = (capped * (PRECISION() - alpha) + price_oracle * alpha) / PRECISION();
+        cached_price_oracle = price_oracle;
+        last_timestamp = block_timestamp;
+        if (trace_enabled) {
+            std::cout << "TRACE tp_ema ts=" << block_timestamp
+                      << " dt=" << dt
+                      << " alpha=" << alpha
+                      << " capped_last_prices=" << capped
+                      << " price_oracle=" << price_oracle << std::endl;
         }
     }
-    
-    // Decide whether to adjust price_scale
-    uint256 allowed_extra_profit = rebalancing_params[0];
-    uint256 adjustment_step = rebalancing_params[1];
-    
-    // Calculate current profit
-    uint256 old_xcp = _xcp(_D, price_scale);
-    
-    // Calculate profit at oracle price
-    uint256 new_price_scale = cached_price_oracle;
-    auto xp_new = _xp(balances, new_price_scale);
-    uint256 D_at_oracle = StableswapMath::newton_D(_A_gamma[0], _A_gamma[1], xp_new);
-    uint256 xcp_at_oracle = _xcp(D_at_oracle, new_price_scale);
-    
-    // Check if adjusting price would increase profit
-    if (xcp_at_oracle > old_xcp) {
-        // Calculate profit ratio
-        uint256 profit_ratio = xcp_at_oracle * PRECISION() / old_xcp;
-        
-        // Only adjust if profit is significant
-        if (profit_ratio > PRECISION() + allowed_extra_profit) {
-            // Adjust price_scale towards oracle price
-            // new_price = old_price * (1 - adjustment_step) + oracle_price * adjustment_step
-            
-            uint256 new_scale = (price_scale * (PRECISION() - adjustment_step) + 
-                                cached_price_oracle * adjustment_step) / PRECISION();
-            
-            // Validate the adjustment doesn't break invariants
-            auto xp_test = _xp(balances, new_scale);
-            try {
-                uint256 D_test = StableswapMath::newton_D(_A_gamma[0], _A_gamma[1], xp_test);
-                
-                // Only update if newton converged and D didn't decrease too much
-                if (D_test > _D * 999 / 1000) {  // Allow max 0.1% decrease
-                    cached_price_scale = new_scale;
-                    D = D_test;
-                    
-                    // Update profit tracking
-                    uint256 new_xcp = _xcp(D_test, new_scale);
-                    xcp_profit = xcp_profit * new_xcp / old_xcp;
+    // Update spot price after EMA step
+    last_prices = StableswapMath::get_p(xp, _D, _A_gamma) * price_scale / PRECISION();
+
+    // Donation shares (0 in this harness) and supply
+    uint256 total_supply = totalSupply;
+    uint256 donation_unlocked = _donation_shares();
+    uint256 locked_supply = total_supply - donation_unlocked;
+
+    // Update virtual price without price adjustment first
+    uint256 old_virtual_price = virtual_price;
+    uint256 xcp = _xcp(_D, price_scale);
+    uint256 vp = (total_supply > 0) ? (PRECISION() * xcp / total_supply) : PRECISION();
+    // No ramping modeled; enforce non-decrease only matters during ramping in vyper
+    // Update xcp_profit following change in virtual price
+    xcp_profit = xcp_profit + vp - old_virtual_price;
+
+    // Rebalancing condition
+    uint256 threshold_vp = std::max(PRECISION(), (xcp_profit + PRECISION()) / 2);
+    uint256 vp_boosted = (locked_supply > 0) ? (PRECISION() * xcp / locked_supply) : vp;
+    if (vp_boosted < vp) {
+        throw std::runtime_error("negative donation");
+    }
+
+    if (trace_enabled) {
+        std::cout << "TRACE tp_gating ts=" << block_timestamp
+                  << " vp=" << vp
+                  << " xcp_profit=" << xcp_profit
+                  << " threshold=" << threshold_vp
+                  << " locked_supply=" << locked_supply
+                  << " vp_boosted=" << vp_boosted
+                  << " price_oracle=" << price_oracle
+                  << " price_scale=" << price_scale
+                  << std::endl;
+    }
+
+    if (vp_boosted > threshold_vp + rebalancing_params[0]) {
+        uint256 norm = price_oracle * PRECISION() / price_scale;
+        if (norm > PRECISION()) norm = norm - PRECISION(); else norm = PRECISION() - norm;
+        uint256 adjustment_step = std::max(rebalancing_params[1], norm / 5);
+
+        if (norm > adjustment_step) {
+            uint256 p_new = (price_scale * (norm - adjustment_step) + adjustment_step * price_oracle) / norm;
+
+            // Update xp with p_new
+            auto xp_new = xp;
+            // xp[1] scales with price
+            xp_new[1] = xp[1] * p_new / price_scale;
+
+            uint256 D_new = StableswapMath::newton_D(_A_gamma[0], _A_gamma[1], xp_new, 0);
+            uint256 new_xcp = _xcp(D_new, p_new);
+            uint256 new_vp = (total_supply > 0) ? (PRECISION() * new_xcp / total_supply) : PRECISION();
+
+            if (trace_enabled) {
+                std::cout << "TRACE tp_candidate ts=" << block_timestamp
+                          << " norm=" << norm
+                          << " step=" << adjustment_step
+                          << " p_new=" << p_new
+                          << " xp1_new=" << xp_new[1]
+                          << " D_new=" << D_new
+                          << " new_xcp=" << new_xcp
+                          << " new_vp_pre_burn=" << new_vp
+                          << std::endl;
+            }
+
+            uint256 donation_shares_to_burn = 0;
+            uint256 goal_vp = std::max(threshold_vp, vp);
+            if (new_vp < goal_vp) {
+                // what would be total supply with goal_vp and new_xcp
+                uint256 tweaked_supply = (PRECISION() * new_xcp) / goal_vp;
+                if (!(tweaked_supply < total_supply)) {
+                    throw std::runtime_error("tweaked supply must shrink");
                 }
-            } catch (...) {
-                // If newton fails, keep old price_scale
+                uint256 diff = total_supply - tweaked_supply;
+                // Only unlocked donation shares can be burned (matches Vyper local var semantics)
+                uint256 donation_unlocked = _donation_shares();
+                donation_shares_to_burn = diff < donation_unlocked ? diff : donation_unlocked;
+                if (total_supply > donation_shares_to_burn) {
+                    new_vp = (PRECISION() * new_xcp) / (total_supply - donation_shares_to_burn);
+                }
+                if (trace_enabled) {
+                    std::cout << "TRACE tp_burn ts=" << block_timestamp
+                              << " goal_vp=" << goal_vp
+                              << " tweaked_supply=" << tweaked_supply
+                              << " burn=" << donation_shares_to_burn
+                              << " new_vp_post_burn=" << new_vp
+                              << std::endl;
+                }
+            }
+
+            if (new_vp > PRECISION() && new_vp >= threshold_vp) {
+                D = D_new;
+                virtual_price = new_vp;
+                cached_price_scale = p_new;
+                if (donation_shares_to_burn > 0) {
+                    donation_shares -= donation_shares_to_burn;
+                    totalSupply -= donation_shares_to_burn;
+                    last_donation_release_ts = block_timestamp;
+                }
+                if (trace_enabled) {
+                    std::cout << "TRACE tp_commit ts=" << block_timestamp
+                              << " new_price_scale=" << p_new
+                              << " donation_burnt=" << donation_shares_to_burn
+                              << " new_vp=" << new_vp
+                              << std::endl;
+                }
+                return p_new;
             }
         }
     }
-    
-    return cached_price_scale;
+
+    // No price_scale adjustment
+    D = _D;
+    virtual_price = vp;
+    return price_scale;
 }
 
 } // namespace twocrypto

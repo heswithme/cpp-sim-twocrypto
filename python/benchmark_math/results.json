@@ -1,0 +1,27 @@
+{
+  "test_cases": 104,
+  "results": {
+    "newton_D": {
+      "vyper_time": 0.09316428378369893,
+      "cpp_time": 0.0003535415933583865,
+      "matches": 104,
+      "total": 104
+    },
+    "get_y": {
+      "vyper_time": 0.10982052080507856,
+      "cpp_time": 0.00033380409877281636,
+      "matches": 104,
+      "total": 104
+    },
+    "get_p": {
+      "vyper_time": 0.028250613302225242,
+      "cpp_time": 0.0002333749027457088,
+      "matches": 104,
+      "total": 104
+    }
+  },
+  "summary": {
+    "avg_speedup": 251.14613399292531,
+    "precision_match": true
+  }
+}

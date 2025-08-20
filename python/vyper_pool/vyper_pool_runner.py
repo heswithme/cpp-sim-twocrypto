@@ -132,8 +132,19 @@ class VyperPoolRunner:
         # Get price scale
         price_scale = pool.price_scale()
         
-        # Calculate xp - simplified version
-        xp = [balances[0], balances[1] * price_scale // 10**18]
+        # Calculate xp using internal helper for exact parity with contract logic
+        xp = pool.internal._xp([balances[0], balances[1]], price_scale)
+        
+        # Donation shares
+        donation_shares = pool.donation_shares()
+        donation_duration = pool.donation_duration()
+        last_donation_release_ts = pool.last_donation_release_ts()
+        donation_protection_expiry_ts = pool.donation_protection_expiry_ts()
+        donation_protection_period = pool.donation_protection_period()
+        
+        # Compute unlocked donation shares directly via internal function
+        # This mirrors _donation_shares(True) exactly
+        donation_shares_unlocked = pool.internal._donation_shares()
         
         return {
             "balances": [str(b) for b in balances],
@@ -145,7 +156,11 @@ class VyperPoolRunner:
             "price_oracle": str(pool.price_oracle()),
             "last_prices": str(pool.last_prices()),
             "totalSupply": str(pool.totalSupply()),
-            "timestamp": boa.env.timestamp
+            "timestamp": boa.env.timestamp,
+            "donation_shares": str(donation_shares),
+            "donation_shares_unlocked": str(donation_shares_unlocked),
+            "donation_protection_expiry_ts": str(donation_protection_expiry_ts),
+            "last_donation_release_ts": str(last_donation_release_ts)
         }
     
     def execute_actions(self, pool: Any, tokens: Tuple[Any, Any], 
@@ -181,6 +196,24 @@ class VyperPoolRunner:
                     # Execute exchange
                     with boa.env.prank(user):
                         pool.exchange(action["i"], action["j"], int(action["dx"]), 0)
+                elif action["type"] == "add_liquidity":
+                    amts = action["amounts"]
+                    donation = bool(action.get("donation", False))
+                    # Mint and approve for user
+                    token0.mint(user, int(amts[0]))
+                    token1.mint(user, int(amts[1]))
+                    with boa.env.prank(user):
+                        token0.approve(pool.address, 2**256 - 1)
+                        token1.approve(pool.address, 2**256 - 1)
+                        if donation:
+                            # receiver must be empty for donations
+                            zero = "0x0000000000000000000000000000000000000000"
+                            pool.add_liquidity([int(amts[0]), int(amts[1])], 0, zero, True)
+                        else:
+                            pool.add_liquidity([int(amts[0]), int(amts[1])], 0, user, False)
+                elif action["type"] == "time_travel":
+                    # Absolute timestamp jump
+                    boa.env.timestamp = int(action["timestamp"])
                         
             except Exception as e:
                 success = False
@@ -222,6 +255,10 @@ class VyperPoolRunner:
                 # Deploy mock tokens (reuse existing infrastructure)
                 token0, token1 = self.deploy_mock_tokens()
                 
+                # Set start timestamp if provided BEFORE pool deploy (important for init state)
+                start_ts = int(sequence.get("start_timestamp", boa.env.timestamp))
+                boa.env.timestamp = start_ts
+
                 # Deploy pool with config (uses existing infrastructure)
                 pool = self.deploy_pool(pool_config, token0, token1)
                 
@@ -246,8 +283,9 @@ class VyperPoolRunner:
 
 def run_vyper_pool(pool_configs_file: str, sequences_file: str, output_file: str) -> Dict:
     """Main entry point for running Vyper pool benchmark."""
-    # Path to Vyper contracts
-    contracts_path = "/Users/michael/Documents/projects/cpp-twocrypto/twocrypto-ng"
+    # Path to Vyper contracts (repo-relative)
+    from pathlib import Path
+    contracts_path = str(Path(__file__).resolve().parents[2] / "twocrypto-ng")
     
     # Create runner and execute benchmark
     runner = VyperPoolRunner(contracts_path)

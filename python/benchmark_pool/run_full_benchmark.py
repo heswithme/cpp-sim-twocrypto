@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 """
-Run full benchmark comparing C++ and Vyper implementations
+Run full benchmark comparing C++ and Vyper implementations, with per-pool parallelism.
 """
 import json
 import os
 import sys
 import time
-from typing import Dict
+import subprocess
+from datetime import datetime, timezone
+from typing import Dict, List, Any, Tuple, Optional
+from concurrent.futures import ThreadPoolExecutor
 
 # Add parent directory for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -149,53 +152,182 @@ def print_summary(comparison: Dict):
                 print(f"    {mm['test']}.{mm['metric']}")
 
 
+def _ensure_built_harness():
+    """Build C++ harness once to avoid parallel rebuild races."""
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    build_dir = os.path.join(repo_root, "../cpp/build")
+    build_dir = os.path.abspath(build_dir)
+    os.makedirs(build_dir, exist_ok=True)
+    # Configure if needed
+    if not os.path.exists(os.path.join(build_dir, "CMakeCache.txt")):
+        subprocess.run(["cmake", ".."], cwd=build_dir, check=True)
+    # Build harness
+    subprocess.run(["cmake", "--build", ".", "--target", "benchmark_harness"], cwd=build_dir, check=True)
+
+
+def _write_json(path: str, obj: Any):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w") as f:
+        json.dump(obj, f, indent=2)
+
+
+def _run_uv(cmd: List[str], env: Optional[Dict[str, str]] = None) -> Tuple[int, str, str]:
+    proc = subprocess.run(cmd, capture_output=True, text=True, env=env)
+    return proc.returncode, proc.stdout, proc.stderr
+
+
 def main():
+    import argparse
+    parser = argparse.ArgumentParser(description="Run TwoCrypto full pool benchmarks with per-pool parallelism and C++ thread control")
+    parser.add_argument("--workers", type=int, default=0, help="Deprecated alias for --n-py")
+    parser.add_argument("--n-py", type=int, default=1, help="Python per-pool workers (processes) for each phase")
+    parser.add_argument("--n-cpp", type=int, default=0, help="C++ threads per harness process (0 = auto)")
+    args = parser.parse_args()
+
     # Paths
     data_dir = os.path.join(os.path.dirname(__file__), "data")
-    output_dir = os.path.join(data_dir, "results")
-    os.makedirs(output_dir, exist_ok=True)
-    
-    pool_configs = os.path.join(data_dir, "benchmark_pools.json")
-    sequences = os.path.join(data_dir, "benchmark_sequences.json")
-    
-    # Check files exist
-    if not os.path.exists(pool_configs):
-        print(f"❌ Pool configs not found: {pool_configs}")
-        print("Run: python datagen/generate_benchmark_data.py")
+    base_results_dir = os.path.join(data_dir, "results")
+    os.makedirs(base_results_dir, exist_ok=True)
+
+    # Timestamped run dir
+    run_stamp = datetime.now(timezone.utc).strftime("run_%Y%m%dT%H%M%SZ")
+    run_dir = os.path.join(base_results_dir, run_stamp)
+    os.makedirs(run_dir, exist_ok=True)
+
+    pool_configs_path = os.path.join(data_dir, "benchmark_pools.json")
+    sequences_path = os.path.join(data_dir, "benchmark_sequences.json")
+
+    if not os.path.exists(pool_configs_path) or not os.path.exists(sequences_path):
+        print("❌ Input not found. Generate data with: uv run benchmark_pool/generate_data.py")
         return 1
-        
-    if not os.path.exists(sequences):
-        print(f"❌ Sequences not found: {sequences}")
-        print("Run: python datagen/generate_benchmark_data.py")
-        return 1
-    
-    # Load configurations for summary
-    with open(pool_configs, 'r') as f:
+
+    with open(pool_configs_path, "r") as f:
         pools = json.load(f)["pools"]
-    with open(sequences, 'r') as f:
-        seqs = json.load(f)["sequences"]
-    
-    print(f"Testing {len(pools)} pools × {len(seqs)} sequences = {len(pools)*len(seqs)} combinations")
-    
-    # Run C++ benchmark
-    cpp_results = run_cpp_benchmark(pool_configs, sequences, output_dir)
-    
-    # Run Vyper benchmark
-    vyper_results = run_vyper_benchmark(pool_configs, sequences, output_dir)
-    
-    # Compare results
-    comparison = compare_results(cpp_results, vyper_results)
-    
-    # Print summary
+    with open(sequences_path, "r") as f:
+        sequences = json.load(f)["sequences"]
+
+    # Save a copy of inputs in the run dir
+    _write_json(os.path.join(run_dir, "inputs_pools.json"), {"pools": pools})
+    _write_json(os.path.join(run_dir, "inputs_sequences.json"), {"sequences": sequences})
+
+    print(f"Testing {len(pools)} pools × {len(sequences)} sequences = {len(pools)*len(sequences)} combinations")
+
+    # Pre-build C++ harness once to avoid rebuild under contention
+    try:
+        _ensure_built_harness()
+    except Exception as e:
+        print(f"⚠ Failed to prebuild harness: {e}. Proceeding anyway.")
+
+    # Prepare per-pool tasks
+    cpp_dir = os.path.join(run_dir, "cpp")
+    vy_dir = os.path.join(run_dir, "vyper")
+    os.makedirs(cpp_dir, exist_ok=True)
+    os.makedirs(vy_dir, exist_ok=True)
+
+    # Resolve worker and thread counts
+    py_workers = args.n_py if args.workers == 0 else (args.workers or args.n_py)
+    if py_workers <= 0:
+        py_workers = len(pools)
+    cpp_threads = args.n_cpp  # 0 means let harness auto-detect
+
+    # Informative logs
+    print(f"\n=== Running C++ phase ===")
+    print(f"  Python workers: {py_workers}")
+    print(f"  C++ threads per process: {'auto' if cpp_threads == 0 else cpp_threads}")
+
+    # Phase 1: C++ per-pool parallel runs
+    start_cpp = time.time()
+    with ThreadPoolExecutor(max_workers=py_workers) as ex:
+        futures_cpp = []
+        for pool in pools:
+            name = pool["name"]
+            pool_in = os.path.join(run_dir, f"pool_{name}.json")
+            seq_in = os.path.join(run_dir, "sequences.json")
+            _write_json(pool_in, {"pools": [pool]})
+            if not os.path.exists(seq_in):
+                _write_json(seq_in, {"sequences": sequences})
+            cpp_out = os.path.join(cpp_dir, f"{name}.json")
+            # Prepare env with optional CPP_THREADS
+            env = os.environ.copy()
+            if cpp_threads > 0:
+                env["CPP_THREADS"] = str(cpp_threads)
+            futures_cpp.append((name, ex.submit(_run_uv, [
+                "uv", "run", "python/cpp_pool/cpp_pool_runner.py", pool_in, seq_in, cpp_out
+            ], env)))
+        done = 0
+        total = len(futures_cpp)
+        for name, fut in futures_cpp:
+            rc, out, err = fut.result()
+            done += 1
+            print(f"  [C++] {done}/{total} finished: {name} ({'OK' if rc == 0 else 'FAIL'})")
+            if rc != 0:
+                print(f"    stderr: {err.strip()}")
+    cpp_time = time.time() - start_cpp
+
+    # Phase 2: Vyper per-pool parallel runs
+    print(f"\n=== Running Vyper phase ===")
+    print(f"  Python workers: {py_workers}")
+    start_vy = time.time()
+    with ThreadPoolExecutor(max_workers=py_workers) as ex:
+        futures_vy = []
+        for pool in pools:
+            name = pool["name"]
+            pool_in = os.path.join(run_dir, f"pool_{name}.json")
+            seq_in = os.path.join(run_dir, "sequences.json")
+            vy_out = os.path.join(vy_dir, f"{name}.json")
+            futures_vy.append((name, ex.submit(_run_uv, [
+                "uv", "run", "python/vyper_pool/vyper_pool_runner.py", pool_in, seq_in, vy_out
+            ])))
+        done = 0
+        total = len(futures_vy)
+        for name, fut in futures_vy:
+            rc, out, err = fut.result()
+            done += 1
+            print(f"  [VY]  {done}/{total} finished: {name} ({'OK' if rc == 0 else 'FAIL'})")
+            if rc != 0:
+                print(f"    stderr: {err.strip()}")
+    vy_time = time.time() - start_vy
+
+    # Aggregate per-pool outputs into combined structures
+    def load_side(side_dir: str) -> Dict[str, Any]:
+        combined = []
+        for pool in pools:
+            path = os.path.join(side_dir, f"{pool['name']}.json")
+            if not os.path.exists(path):
+                continue
+            data = json.loads(open(path).read())
+            # data["results"] is an array of one entry (single pool × N sequences)
+            combined.extend(data.get("results", []))
+        return {"results": combined}
+
+    cpp_combined = load_side(cpp_dir)
+    vy_combined = load_side(vy_dir)
+
+    # Extract states for comparison
+    def extract_states(results: Dict[str, Any]) -> Dict[str, Any]:
+        states = {}
+        for test in results.get("results", []):
+            key = f"{test['pool_config']}_{test['sequence']}"
+            if test["result"]["success"]:
+                states[key] = test["result"].get("states", [])
+            else:
+                states[key] = {"error": test["result"].get("error", "Failed")}
+        return states
+
+    cpp_states = extract_states(cpp_combined)
+    vy_states = extract_states(vy_combined)
+
+    # Compare
+    comparison = compare_results({"states": cpp_states, "time": cpp_time}, {"states": vy_states, "time": vy_time})
+
     print_summary(comparison)
-    
-    # Save comparison
-    comparison_file = os.path.join(output_dir, "benchmark_comparison.json")
-    with open(comparison_file, 'w') as f:
-        json.dump(comparison, f, indent=2, default=str)
-    
-    print(f"\n✓ Results saved to {output_dir}")
-    
+
+    # Save combined outputs under run dir
+    _write_json(os.path.join(run_dir, "cpp_combined.json"), cpp_combined)
+    _write_json(os.path.join(run_dir, "vyper_combined.json"), vy_combined)
+    _write_json(os.path.join(run_dir, "benchmark_comparison.json"), comparison)
+
+    print(f"\n✓ Results saved to {run_dir}")
     return 0
 
 

@@ -21,6 +21,9 @@ uv sync
 # Run math benchmarks
 uv run benchmark_math/main.py
 
+# Or run the cleaner v2 math benchmark
+uv run benchmark_math/v2.py
+
 # Generate pool test data
 uv run benchmark_pool/generate_data.py
 
@@ -34,6 +37,7 @@ uv run benchmark_pool/run_full_benchmark.py
 - Tests individual mathematical functions (newton_D, get_y, etc.)
 - Compares C++ implementations against Vyper reference
 - Validates precision across different input ranges
+- v2 script: `benchmark_math/v2.py` (modular, typed, CLI flags)
 
 ### Pool Benchmarks (`benchmark_pool/`)
 - Complete pool simulation with trading sequences

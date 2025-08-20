@@ -7,6 +7,7 @@ import os
 import subprocess
 import sys
 from typing import Dict
+from pathlib import Path
 
 
 class CppPoolRunner:
@@ -129,8 +130,9 @@ class CppPoolRunner:
 
 def run_cpp_pool(pool_configs_file: str, sequences_file: str, output_file: str) -> Dict:
     """Main entry point for running C++ pool benchmark."""
-    # Path to C++ project
-    cpp_project_path = "/Users/michael/Documents/projects/cpp-twocrypto/cpp"
+    # Path to C++ project (repo-relative)
+    repo_root = Path(__file__).resolve().parents[2]
+    cpp_project_path = str(repo_root / "cpp")
     
     # Create runner and execute benchmark
     runner = CppPoolRunner(cpp_project_path)
