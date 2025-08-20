@@ -215,18 +215,20 @@ json::object process_pool_sequence(
                 } else if (type == "add_liquidity") {
                     std::cout << "add_liquidity donation="
                               << (act.contains("donation") && act.at("donation").as_bool());
+                    if (act.contains("amounts")) {
+                        auto arr = act.at("amounts").as_array();
+                        std::cout << " amounts=[" << arr[0].as_string().c_str() << "," << arr[1].as_string().c_str() << "]";
+                    }
                 } else if (type == "time_travel") {
                     std::cout << "time_travel to=" << act.at("timestamp").as_int64();
                 }
                 std::cout << std::endl;
             }
             
-            // Apply time delta if present
+            // Apply time delta if present (relative)
             if (act.contains("time_delta")) {
                 uint64_t time_delta = act.at("time_delta").as_int64();
-                if (time_delta > 0) {
-                    pool.advance_time(time_delta);
-                }
+                if (time_delta > 0) pool.advance_time(time_delta);
             }
             
             bool success = true;
@@ -252,13 +254,15 @@ json::object process_pool_sequence(
                     }
                     (void)pool.add_liquidity(amts, 0, donation);
                 } else if (type == "time_travel") {
-                    // Absolute timestamp jump.
-                    // IMPORTANT: Do NOT update last_timestamp here. The EMA
-                    // logic in the pool should decide when to use the time
-                    // delta, just like Vyper's last_timestamp is only moved
-                    // inside tweak_price.
-                    uint64_t ts = static_cast<uint64_t>(act.at("timestamp").as_int64());
-                    pool.set_block_timestamp(ts);
+                    // Relative time travel preferred; fallback to absolute if provided
+                    if (act.if_contains("seconds")) {
+                        uint64_t secs = static_cast<uint64_t>(act.at("seconds").as_int64());
+                        if (secs > 0) pool.advance_time(secs);
+                    } else if (act.if_contains("timestamp")) {
+                        // legacy absolute timestamp
+                        uint64_t ts = static_cast<uint64_t>(act.at("timestamp").as_int64());
+                        pool.set_block_timestamp(ts);
+                    }
                 }
             } catch (const std::exception& e) {
                 success = false;
@@ -315,6 +319,9 @@ int main(int argc, char* argv[]) {
                                         std::istreambuf_iterator<char>());
         json::value action_sequences_data = json::parse(action_sequences_str);
         json::array sequences = action_sequences_data.as_object().at("sequences").as_array();
+        if (sequences.empty()) {
+            throw std::runtime_error("No sequences found in sequences.json");
+        }
         
         // Build tasks and run with a thread pool
         const char* only_pool = std::getenv("TRACE_ONLY_POOL");
@@ -326,11 +333,8 @@ int main(int argc, char* argv[]) {
         for (size_t pi = 0; pi < pools.size(); ++pi) {
             std::string pool_name = pools[pi].as_object().at("name").as_string().c_str();
             if (only_pool && pool_name != std::string(only_pool)) continue;
-            for (size_t si = 0; si < sequences.size(); ++si) {
-                std::string seq_name = sequences[si].as_object().at("name").as_string().c_str();
-                if (only_seq && seq_name != std::string(only_seq)) continue;
-                tasks.push_back({pi, si});
-            }
+            // single sequence only; use si=0
+            tasks.push_back({pi, 0});
         }
 
         size_t threads = std::thread::hardware_concurrency();
@@ -350,7 +354,7 @@ int main(int argc, char* argv[]) {
                 if (idx >= tasks.size()) break;
                 auto [pi, si] = tasks[idx];
                 auto pool_obj = pools[pi].as_object();
-                auto seq_obj = sequences[si].as_object();
+                auto seq_obj = sequences[0].as_object();
                 std::string pool_name = pool_obj.at("name").as_string().c_str();
                 std::string seq_name = seq_obj.at("name").as_string().c_str();
                 {
@@ -381,8 +385,8 @@ int main(int argc, char* argv[]) {
             {"pool_configs_file", pool_configs_file},
             {"action_sequences_file", action_sequences_file},
             {"num_pools", pools.size()},
-            {"num_sequences", sequences.size()},
-            {"total_tests", pools.size() * sequences.size()}
+            {"num_sequences", 1},
+            {"total_tests", pools.size()}
         };
         
         // Write output

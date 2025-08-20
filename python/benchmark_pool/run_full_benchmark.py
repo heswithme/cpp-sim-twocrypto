@@ -88,37 +88,34 @@ def compare_results(cpp_results: Dict, vyper_results: Dict = None) -> Dict:
     if vyper_results:
         comparison["vyper_time"] = vyper_results["time"]
         comparison["speedup"] = vyper_results["time"] / cpp_results["time"] if cpp_results["time"] > 0 else 0
-        
-        # Compare individual states
+
+        def norm(v):
+            if isinstance(v, list):
+                return [str(x) for x in v]
+            if isinstance(v, (int, float)):
+                return str(v)
+            return v
+
         matches = 0
         mismatches = []
-        
-        for key in cpp_results["states"]:
-            if key in vyper_results["states"]:
-                cpp_state = cpp_results["states"][key]
-                vyper_state = vyper_results["states"][key]
-                
-                if "error" not in cpp_state and "error" not in vyper_state:
-                    # Compare final states
-                    cpp_final = cpp_state[-1] if isinstance(cpp_state, list) else cpp_state
-                    vyper_final = vyper_state[-1] if isinstance(vyper_state, list) else vyper_state
-                    
-                    # Check key metrics
-                    metrics_match = True
-                    for metric in ["balances", "D", "virtual_price", "totalSupply"]:
-                        if metric in cpp_final and metric in vyper_final:
-                            if cpp_final[metric] != vyper_final[metric]:
-                                metrics_match = False
-                                mismatches.append({
-                                    "test": key,
-                                    "metric": metric,
-                                    "cpp": cpp_final[metric],
-                                    "vyper": vyper_final[metric]
-                                })
-                    
-                    if metrics_match:
-                        matches += 1
-        
+        for key, c_states in cpp_results["states"].items():
+            v_states = vyper_results["states"].get(key)
+            if v_states is None:
+                mismatches.append({"test": key, "metric": "missing", "cpp": "present", "vyper": "absent"})
+                continue
+            # Compare final snapshot
+            c_final = c_states[-1] if isinstance(c_states, list) else c_states
+            v_final = v_states[-1] if isinstance(v_states, list) else v_states
+            metric_list = ["balances", "D", "virtual_price", "totalSupply", "price_scale"]
+            any_diff = False
+            for m in metric_list:
+                if m in c_final and m in v_final:
+                    if norm(c_final[m]) != norm(v_final[m]):
+                        any_diff = True
+                        mismatches.append({"test": key, "metric": m, "cpp": c_final[m], "vyper": v_final[m]})
+            if not any_diff:
+                matches += 1
+
         comparison["matches"] = matches
         comparison["mismatches"] = mismatches
     
@@ -182,6 +179,7 @@ def main():
     parser.add_argument("--workers", type=int, default=0, help="Deprecated alias for --n-py")
     parser.add_argument("--n-py", type=int, default=1, help="Python per-pool workers (processes) for each phase")
     parser.add_argument("--n-cpp", type=int, default=0, help="C++ threads per harness process (0 = auto)")
+    parser.add_argument("--save-per-pool", action="store_true", help="Keep per-pool result files (cpp/<pool>.json, vyper/<pool>.json)")
     args = parser.parse_args()
 
     # Paths
@@ -194,8 +192,8 @@ def main():
     run_dir = os.path.join(base_results_dir, run_stamp)
     os.makedirs(run_dir, exist_ok=True)
 
-    pool_configs_path = os.path.join(data_dir, "benchmark_pools.json")
-    sequences_path = os.path.join(data_dir, "benchmark_sequences.json")
+    pool_configs_path = os.path.join(data_dir, "pools.json")
+    sequences_path = os.path.join(data_dir, "sequences.json")
 
     if not os.path.exists(pool_configs_path) or not os.path.exists(sequences_path):
         print("❌ Input not found. Generate data with: uv run benchmark_pool/generate_data.py")
@@ -205,12 +203,16 @@ def main():
         pools = json.load(f)["pools"]
     with open(sequences_path, "r") as f:
         sequences = json.load(f)["sequences"]
+    if not sequences:
+        print("❌ No sequences found")
+        return 1
+    sequence = sequences[0]
 
     # Save a copy of inputs in the run dir
     _write_json(os.path.join(run_dir, "inputs_pools.json"), {"pools": pools})
-    _write_json(os.path.join(run_dir, "inputs_sequences.json"), {"sequences": sequences})
+    _write_json(os.path.join(run_dir, "inputs_sequences.json"), {"sequences": [sequence]})
 
-    print(f"Testing {len(pools)} pools × {len(sequences)} sequences = {len(pools)*len(sequences)} combinations")
+    print(f"Testing {len(pools)} pools")
 
     # Pre-build C++ harness once to avoid rebuild under contention
     try:
@@ -241,18 +243,14 @@ def main():
         futures_cpp = []
         for pool in pools:
             name = pool["name"]
-            pool_in = os.path.join(run_dir, f"pool_{name}.json")
-            seq_in = os.path.join(run_dir, "sequences.json")
-            _write_json(pool_in, {"pools": [pool]})
-            if not os.path.exists(seq_in):
-                _write_json(seq_in, {"sequences": sequences})
             cpp_out = os.path.join(cpp_dir, f"{name}.json")
             # Prepare env with optional CPP_THREADS
             env = os.environ.copy()
             if cpp_threads > 0:
                 env["CPP_THREADS"] = str(cpp_threads)
+            env["TRACE_ONLY_POOL"] = name  # filter inside harness
             futures_cpp.append((name, ex.submit(_run_uv, [
-                "uv", "run", "python/cpp_pool/cpp_pool_runner.py", pool_in, seq_in, cpp_out
+                "uv", "run", "python/cpp_pool/cpp_pool_runner.py", pool_configs_path, sequences_path, cpp_out
             ], env)))
         done = 0
         total = len(futures_cpp)
@@ -272,12 +270,12 @@ def main():
         futures_vy = []
         for pool in pools:
             name = pool["name"]
-            pool_in = os.path.join(run_dir, f"pool_{name}.json")
-            seq_in = os.path.join(run_dir, "sequences.json")
             vy_out = os.path.join(vy_dir, f"{name}.json")
+            env = os.environ.copy()
+            env["TRACE_ONLY_POOL"] = name  # filter inside vyper runner
             futures_vy.append((name, ex.submit(_run_uv, [
-                "uv", "run", "python/vyper_pool/vyper_pool_runner.py", pool_in, seq_in, vy_out
-            ])))
+                "uv", "run", "python/vyper_pool/vyper_pool_runner.py", pool_configs_path, sequences_path, vy_out
+            ], env)))
         done = 0
         total = len(futures_vy)
         for name, fut in futures_vy:
@@ -303,15 +301,33 @@ def main():
     cpp_combined = load_side(cpp_dir)
     vy_combined = load_side(vy_dir)
 
+    # Optionally remove per-pool files after aggregation
+    if not args.save_per_pool:
+        removed = 0
+        for pool in pools:
+            for side_dir in (cpp_dir, vy_dir):
+                path = os.path.join(side_dir, f"{pool['name']}.json")
+                if os.path.exists(path):
+                    try:
+                        os.remove(path)
+                        removed += 1
+                    except Exception:
+                        pass
+        # Remove empty side directories if they are empty
+        for side_dir in (cpp_dir, vy_dir):
+            try:
+                if os.path.isdir(side_dir) and not os.listdir(side_dir):
+                    os.rmdir(side_dir)
+            except Exception:
+                pass
+        print(f"  Cleaned {removed} per-pool result files")
+
     # Extract states for comparison
     def extract_states(results: Dict[str, Any]) -> Dict[str, Any]:
         states = {}
         for test in results.get("results", []):
-            key = f"{test['pool_config']}_{test['sequence']}"
-            if test["result"]["success"]:
-                states[key] = test["result"].get("states", [])
-            else:
-                states[key] = {"error": test["result"].get("error", "Failed")}
+            key = test['pool_config']
+            states[key] = test.get("result", {}).get("states", [])
         return states
 
     cpp_states = extract_states(cpp_combined)

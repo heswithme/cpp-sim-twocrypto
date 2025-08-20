@@ -31,11 +31,19 @@ uint256 TwoCryptoPool::add_liquidity(
     uint256 d_token = 0;
     if (old_D > 0) {
         d_token = token_supply * D_new / old_D - token_supply;
+        if (trace_enabled && donation) {
+            std::cout << "TRACE liq_donation prefee old_D=" << old_D
+                      << " D_new=" << D_new
+                      << " token_supply=" << token_supply
+                      << " d_token_raw=" << d_token << std::endl;
+        }
     } else {
         d_token = _xcp(D_new, price_scale);
     }
     if (d_token == 0) {
-        throw std::runtime_error("nothing minted");
+        if (!donation) {
+            throw std::runtime_error("nothing minted");
+        }
     }
 
     uint256 d_token_fee = 0;
@@ -43,20 +51,37 @@ uint256 TwoCryptoPool::add_liquidity(
         uint256 approx_fee = _calc_token_fee(amounts_received, xp, donation, true);
         d_token_fee = approx_fee * d_token / FEE_PRECISION() + 1;
         d_token -= d_token_fee;
+        if (trace_enabled && donation) {
+            std::cout << "TRACE liq_donation fee approx_fee=" << approx_fee
+                      << " d_token_fee=" << d_token_fee
+                      << " d_token_postfee=" << d_token << std::endl;
+        }
     }
 
-    // Update balances and state, handling donation or regular LP mint
+    // Validate constraints before committing state
+    if (old_D > 0 && donation) {
+        uint256 new_donation_shares = donation_shares + d_token;
+        uint256 ratio = (new_donation_shares * PRECISION()) / (token_supply + d_token);
+        if (trace_enabled) {
+            std::cout << "TRACE liq_donation cap_check new_shares=" << new_donation_shares
+                      << " denom=" << (token_supply + d_token)
+                      << " ratio=" << ratio
+                      << " max_ratio=" << donation_shares_max_ratio << std::endl;
+        }
+        if (ratio > donation_shares_max_ratio) {
+            throw std::runtime_error("donation above cap");
+        }
+    }
+    if (d_token < min_mint_amount) {
+        throw std::runtime_error("slippage");
+    }
+
+    // Commit: update balances and state, handling donation or regular LP mint
     balances = new_balances;
     if (old_D > 0) {
         D = D_new;
         if (donation) {
-            // Donation path
-            // token_supply already cached above
             uint256 new_donation_shares = donation_shares + d_token;
-            // Cap: new_donation_shares * PRECISION / (token_supply + d_token) <= donation_shares_max_ratio
-            if ((new_donation_shares * PRECISION()) / (token_supply + d_token) > donation_shares_max_ratio) {
-                throw std::runtime_error("donation above cap");
-            }
             // Preserve currently unlocked donations proportionally
             uint256 unlocked = _donation_shares(false);
             uint256 new_elapsed = 0;
@@ -91,10 +116,6 @@ uint256 TwoCryptoPool::add_liquidity(
         xcp_profit = PRECISION();
         xcp_profit_a = PRECISION();
         totalSupply += d_token; // mint initial LP
-    }
-
-    if (d_token < min_mint_amount) {
-        throw std::runtime_error("slippage");
     }
 
     return d_token;

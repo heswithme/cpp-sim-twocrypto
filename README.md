@@ -85,10 +85,9 @@ uv run benchmark_math/v2.py
 
 ## Pool Benchmarks (C++ vs Vyper)
 
-Generate datasets (defaults: 3 pools × 4 sequences × 20 trades):
+Generate datasets (single sequence). Aggregated files are written to `python/benchmark_pool/data/pools.json` and `python/benchmark_pool/data/sequences.json`:
 ```bash
-uv run python/benchmark_pool/generate_data.py \
-  --pools 3 --sequences 4 --trades 20
+uv run python/benchmark_pool/generate_data.py --pools 3 --trades 20 --seed 42
 ```
 
 Run full benchmark (C++ first, then Vyper):
@@ -99,22 +98,23 @@ uv run python/benchmark_pool/run_full_benchmark.py --n-py 1 --n-cpp 8
 
 What this does:
 - C++ phase: processes pools with internal threads (`--n-cpp` → env `CPP_THREADS`).
-- Vyper phase: validation runs; sequential by default (`--n-py 1`).
+- Vyper phase: validation runs; sequential by default (`--n-py 1` recommended).
 - Logs progress per pool and writes results to a timestamped folder under `python/benchmark_pool/data/results/`.
+- By default, per-pool result files are deleted after aggregation. Keep them with `--save-per-pool`.
 
 Advanced:
 - Run C++ only for a dataset:
   ```bash
   uv run python/cpp_pool/cpp_pool_runner.py \
-    python/benchmark_pool/data/benchmark_pools.json \
-    python/benchmark_pool/data/benchmark_sequences.json \
+    python/benchmark_pool/data/pools.json \
+    python/benchmark_pool/data/sequences.json \
     python/benchmark_pool/data/results/cpp_only.json
   ```
 - Run Vyper only:
   ```bash
   uv run python/vyper_pool/vyper_pool_runner.py \
-    python/benchmark_pool/data/benchmark_pools.json \
-    python/benchmark_pool/data/benchmark_sequences.json \
+    python/benchmark_pool/data/pools.json \
+    python/benchmark_pool/data/sequences.json \
     python/benchmark_pool/data/results/vyper_only.json
   ```
 
@@ -123,7 +123,10 @@ Advanced:
 - Donation logic: only unlocked donation shares are burnable; protection window damping and cap enforced identically.
 - Oracle EMA: moving average via `wad_exp`; state `last_prices` is capped to `2 * price_scale` when updating EMA.
 - Time-travel: absolute timestamp jumps affect `block_timestamp` only; `last_timestamp` is updated in EMA path (tweak_price) for parity.
-- Debug trace: set `TRACE=1` to get concise internal logs from the C++ tweak_price path; filter with `TRACE_ONLY_POOL` and `TRACE_ONLY_SEQUENCE`.
+- Debug trace: set `TRACE=1` to get concise internal logs from the C++ donation/tweak_price paths; filter with `TRACE_ONLY_POOL=<pool_name>`.
+- Inspect runs (debug helpers):
+  - Diff summary: `uv run python/benchmark_pool/debug/parse_and_diff.py [run_dir]`
+  - Context around first divergence: `uv run python/benchmark_pool/debug/inspect_context.py <run_dir>`
 
 ## Outputs & Cleanup
 

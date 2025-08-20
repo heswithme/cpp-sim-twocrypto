@@ -212,8 +212,12 @@ class VyperPoolRunner:
                         else:
                             pool.add_liquidity([int(amts[0]), int(amts[1])], 0, user, False)
                 elif action["type"] == "time_travel":
-                    # Absolute timestamp jump
-                    boa.env.timestamp = int(action["timestamp"])
+                    # Relative preferred; fallback to absolute if provided
+                    secs = int(action.get("seconds", 0))
+                    if secs > 0:
+                        boa.env.timestamp = boa.env.timestamp + secs
+                    elif "timestamp" in action:
+                        boa.env.timestamp = int(action["timestamp"])
                         
             except Exception as e:
                 success = False
@@ -237,46 +241,53 @@ class VyperPoolRunner:
         
         with open(sequences_file, 'r') as f:
             sequences_data = json.load(f)["sequences"]
+        # Expect exactly one sequence; use the first
+        if not sequences_data:
+            raise RuntimeError("No sequences found in sequences.json")
+        sequence = sequences_data[0]
+        
+        # Optional filter via env var (shared with C++ harness)
+        only_pool = os.environ.get("TRACE_ONLY_POOL")
+        if only_pool:
+            pools_data = [p for p in pools_data if p.get("name") == only_pool]
         
         # Deploy infrastructure once
         self.deploy_infrastructure()
         
         # Results storage
         results = []
-        total_tests = len(pools_data) * len(sequences_data)
+        total_tests = len(pools_data)
         test_num = 0
         
         # Run each test combination
         for pool_config in pools_data:
-            for sequence in sequences_data:
-                test_num += 1
-                print(f"\n[{test_num}/{total_tests}] Testing {pool_config['name']} with {sequence['name']}")
-                
-                # Deploy mock tokens (reuse existing infrastructure)
-                token0, token1 = self.deploy_mock_tokens()
-                
-                # Set start timestamp if provided BEFORE pool deploy (important for init state)
-                start_ts = int(sequence.get("start_timestamp", boa.env.timestamp))
-                boa.env.timestamp = start_ts
+            test_num += 1
+            print(f"\n[{test_num}/{total_tests}] Testing {pool_config['name']}")
 
-                # Deploy pool with config (uses existing infrastructure)
-                pool = self.deploy_pool(pool_config, token0, token1)
-                
-                # Add initial liquidity
-                self.add_initial_liquidity(pool, (token0, token1), pool_config["initial_liquidity"])
-                
-                # Execute actions and collect snapshots
-                snapshots = self.execute_actions(pool, (token0, token1), sequence["actions"])
-                
-                # Store result
-                results.append({
-                    "pool_config": pool_config["name"],
-                    "sequence": sequence["name"],
-                    "result": {
-                        "success": all(s.get("action_success", True) for s in snapshots[1:]),
-                        "states": snapshots
-                    }
-                })
+            # Deploy mock tokens (reuse existing infrastructure)
+            token0, token1 = self.deploy_mock_tokens()
+
+            # Set start timestamp if provided BEFORE pool deploy (important for init state)
+            start_ts = int(sequence.get("start_timestamp", boa.env.timestamp))
+            boa.env.timestamp = start_ts
+
+            # Deploy pool with config (uses existing infrastructure)
+            pool = self.deploy_pool(pool_config, token0, token1)
+
+            # Add initial liquidity
+            self.add_initial_liquidity(pool, (token0, token1), pool_config["initial_liquidity"])
+
+            # Execute actions and collect snapshots
+            snapshots = self.execute_actions(pool, (token0, token1), sequence["actions"])
+
+            # Store result
+            results.append({
+                "pool_config": pool_config["name"],
+                "result": {
+                    "success": all(s.get("action_success", True) for s in snapshots[1:]),
+                    "states": snapshots
+                }
+            })
         
         return {"results": results}
 

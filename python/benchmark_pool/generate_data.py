@@ -6,7 +6,7 @@ import json
 import os
 import random
 from typing import List, Dict, Any
-
+import math
 
 def generate_pool_configs(num_pools: int = 3) -> List[Dict[str, Any]]:
     """Generate diverse pool configurations."""
@@ -28,7 +28,7 @@ def generate_pool_configs(num_pools: int = 3) -> List[Dict[str, Any]]:
             "fee_gamma": str(random.randint(10**10, 10**18)),
             "allowed_extra_profit": str(random.randint(10**10, 10**13)),
             "adjustment_step": str(random.randint(10**10, 10**14)),
-            "ma_time": str(random.randint(60, 3600)),
+            "ma_time": str(1+int(random.randint(60, 3600)/math.log(2))),
             "initial_price": str(10**18),  # 1.0
             "initial_liquidity": [
                 str(random.randint(1000, 10000) * 10**18),
@@ -40,72 +40,32 @@ def generate_pool_configs(num_pools: int = 3) -> List[Dict[str, Any]]:
     return pools
 
 
-def generate_action_sequences(num_sequences: int = 4, trades_per_sequence: int = 20) -> List[Dict[str, Any]]:
-    """Generate diverse trading sequences with majority donations and time travel actions."""
-    sequences: List[Dict[str, Any]] = []
+def generate_action_sequences(trades_per_sequence: int = 20) -> List[Dict[str, Any]]:
+    """Generate a single random trading sequence within safe boundaries.
+    Time travel actions are relative (seconds added to current block time)."""
     START_TS = 1_700_000_000
+    actions: List[Dict[str, Any]] = []
 
-    # Build a list of patterns with majority donations
-    base_patterns = ["donations"] * max(1, num_sequences * 2 // 3)  # ~2/3 donations
-    other_patterns_pool = ["balanced", "trending_up", "trending_down", "volatile", "accumulation"]
-    while len(base_patterns) < num_sequences:
-        base_patterns.append(other_patterns_pool[len(base_patterns) % len(other_patterns_pool)])
+    for j in range(trades_per_sequence):
+        # Periodic absolute time travel to exercise EMA + donations unlocking
+        if j % 3 == 0:
+            # relative time travel: add 5 min to 1 hour
+            actions.append({"type": "time_travel", "seconds": random.randint(300, 3600)})
 
-    for i, pattern in enumerate(base_patterns[:num_sequences]):
-        actions: List[Dict[str, Any]] = []
-        current_ts = START_TS
-
-        for j in range(trades_per_sequence):
-            # Periodically insert absolute time travel actions to exercise
-            # donation unlocking and EMA dynamics in a deterministic manner.
-            if j % 3 == 0:
-                # jump forward 5 to 60 minutes
-                current_ts += random.randint(300, 3600)
-                actions.append({
-                    "type": "time_travel",
-                    "timestamp": current_ts
-                })
-
-            if pattern == "donations":
-                # Alternate donation adds and small exchanges
-                if j % 2 == 0:
-                    amt0 = int(random.uniform(0.5, 5) * 10**18)
-                    amt1 = int(random.uniform(0.5, 5) * 10**18)
-                    actions.append({
-                        "type": "add_liquidity",
-                        "amounts": [str(amt0), str(amt1)],
-                        "donation": True
-                    })
-                    continue
-                direction = random.randint(0, 1)
-                trade_size = int(random.uniform(0.1, 2) * 10**18)
-                actions.append({
-                    "type": "exchange",
-                    "i": direction,
-                    "j": 1 - direction,
-                    "dx": str(trade_size)
-                })
-                continue
-
-            # Non-donation patterns
-            if pattern == "balanced":
-                direction = j % 2
-            elif pattern == "trending_up":
-                direction = 0 if random.random() < 0.7 else 1
-            elif pattern == "trending_down":
-                direction = 1 if random.random() < 0.7 else 0
-            elif pattern == "volatile":
-                direction = random.randint(0, 1)
-            else:  # accumulation
-                direction = 0 if random.random() < 0.6 else 1
-
-            if pattern == "volatile":
-                trade_size = int(random.uniform(1, 100) * 10**18)
-            elif pattern == "accumulation":
-                trade_size = int(random.uniform(0.1, 5) * 10**18)
-            else:
-                trade_size = int(random.uniform(1, 20) * 10**18)
-
+        # Randomly choose between donation add and exchange
+        if random.random() < 0.5:
+            # donation add
+            amt0 = int(random.uniform(0.5, 5) * 10**18)
+            amt1 = int(random.uniform(0.5, 5) * 10**18)
+            actions.append({
+                "type": "add_liquidity",
+                "amounts": [str(amt0), str(amt1)],
+                "donation": True
+            })
+        else:
+            # exchange
+            direction = random.randint(0, 1)
+            trade_size = int(random.uniform(0.1, 5) * 10**18)
             actions.append({
                 "type": "exchange",
                 "i": direction,
@@ -113,14 +73,7 @@ def generate_action_sequences(num_sequences: int = 4, trades_per_sequence: int =
                 "dx": str(trade_size)
             })
 
-        sequence = {
-            "name": f"{pattern}_sequence_{i:02d}",
-            "start_timestamp": START_TS,
-            "actions": actions,
-        }
-        sequences.append(sequence)
-
-    return sequences
+    return [{"name": "default", "start_timestamp": START_TS, "actions": actions}]
 
 
 def format_json_file(filepath: str):
@@ -135,38 +88,42 @@ def format_json_file(filepath: str):
 def main():
     """Generate benchmark data files."""
     import argparse
-    parser = argparse.ArgumentParser(description="Generate TwoCrypto benchmark data")
+    parser = argparse.ArgumentParser(description="Generate TwoCrypto benchmark data (single sequence)")
     parser.add_argument("--pools", type=int, default=3, help="Number of pools to generate")
-    parser.add_argument("--sequences", type=int, default=4, help="Number of sequences to generate")
     parser.add_argument("--trades", type=int, default=20, help="Trades per sequence")
+    parser.add_argument("--seed", type=int, default=None, help="Random seed for reproducibility")
     args = parser.parse_args()
+    # Seed RNG for reproducibility if provided
+    if args.seed is not None:
+        random.seed(args.seed)
+
     # Create data directory
     data_dir = os.path.join(os.path.dirname(__file__), "data")
     os.makedirs(data_dir, exist_ok=True)
     
-    # Generate pool configurations
+    # Generate pool configurations (aggregate into pools.json)
     print("Generating pool configurations...")
     pools = generate_pool_configs(num_pools=args.pools)
-    pools_file = os.path.join(data_dir, "benchmark_pools.json")
+    pools_file = os.path.join(data_dir, "pools.json")
     
     with open(pools_file, 'w') as f:
         json.dump({"pools": pools}, f, indent=2)
     
     print(f"✓ Generated {len(pools)} pool configurations")
     
-    # Generate action sequences
+    # Generate action sequences (aggregate into sequences.json)
     print("Generating action sequences...")
-    sequences = generate_action_sequences(num_sequences=args.sequences, trades_per_sequence=args.trades)
-    sequences_file = os.path.join(data_dir, "benchmark_sequences.json")
+    sequences = generate_action_sequences(trades_per_sequence=args.trades)
+    sequences_file = os.path.join(data_dir, "sequences.json")
     
     with open(sequences_file, 'w') as f:
         json.dump({"sequences": sequences}, f, indent=2)
     
-    print(f"✓ Generated {len(sequences)} sequences with {len(sequences[0]['actions'])} trades each")
+    print(f"✓ Generated 1 sequence with {len(sequences[0]['actions'])} trades")
     
     # Summary
-    total_tests = len(pools) * len(sequences)
-    print(f"\n✓ Total test combinations: {total_tests}")
+    total_tests = len(pools)
+    print(f"\n✓ Total tests: {total_tests}")
     print(f"✓ Data saved to {data_dir}")
     
     return 0
