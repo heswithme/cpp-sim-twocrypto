@@ -213,9 +213,9 @@ int main(int argc, char* argv[]) {
         json::array sequences = action_sequences_data.as_object().at("sequences").as_array();
         if (sequences.empty()) throw std::runtime_error("No sequences found in sequences.json");
 
-        const char* only_pool = std::getenv("FILTER_POOL");
+        // Build tasks without pool isolation
         struct Task { size_t pi; size_t si; };
-        std::vector<Task> tasks; for (size_t pi = 0; pi < pools.size(); ++pi) { std::string pool_name = pools[pi].as_object().at("name").as_string().c_str(); if (only_pool && pool_name != std::string(only_pool)) continue; tasks.push_back({pi, 0}); }
+        std::vector<Task> tasks; for (size_t pi = 0; pi < pools.size(); ++pi) { tasks.push_back({pi, 0}); }
         size_t threads = std::thread::hardware_concurrency(); if (threads == 0) threads = 4; if (const char* thr = std::getenv("CPP_THREADS")) { try { threads = std::max<size_t>(1, std::stoul(thr)); } catch (...) {} }
         std::cout << "Running DOUBLE harness with " << threads << " worker threads (" << tasks.size() << " tasks)" << std::endl;
 

@@ -288,148 +288,36 @@ def main():
     except Exception as e:
         print(f"⚠ Failed to prebuild harness: {e}. Proceeding anyway.")
 
-    # Prepare per-pool tasks
-    cpp_dir = os.path.join(run_dir, "cpp")
-    cppf_dir = os.path.join(run_dir, "cpp_d")
-    vy_dir = os.path.join(run_dir, "vyper")
-    os.makedirs(cpp_dir, exist_ok=True)
-    os.makedirs(cppf_dir, exist_ok=True)
-    os.makedirs(vy_dir, exist_ok=True)
-
-    # Resolve worker and thread counts
-    py_workers = args.n_py if args.workers == 0 else (args.workers or args.n_py)
-    if py_workers <= 0:
-        py_workers = len(pools)
+    # Configure CPP_THREADS for single-run harnesses
     cpp_threads = args.n_cpp  # 0 means let harness auto-detect
+    prev_cpp_threads = os.environ.get("CPP_THREADS")
+    try:
+        if cpp_threads > 0:
+            os.environ["CPP_THREADS"] = str(cpp_threads)
+        if args.snapshot_every is not None:
+            os.environ["SNAPSHOT_EVERY"] = str(args.snapshot_every)
+        elif args.final_only:
+            os.environ["SAVE_LAST_ONLY"] = "1"
 
-    # Informative logs
-    print("\n=== Running C++ phase ===")
-    print(f"  Python workers: {py_workers}")
-    print(f"  C++ threads per process: {'auto' if cpp_threads == 0 else cpp_threads}")
+        # Run each side once over all pools
+        cpp_info = run_cpp_benchmark(pool_configs_path, sequences_path, run_dir)
+        cpp_time = cpp_info["time"]
 
-    # Phase 1: C++ per-pool parallel runs
-    start_cpp = time.time()
-    with ThreadPoolExecutor(max_workers=py_workers) as ex:
-        futures_cpp = []
-        for pool in pools:
-            name = pool["name"]
-            cpp_out = os.path.join(cpp_dir, f"{name}.json")
-            # Prepare env with optional CPP_THREADS
-            env = os.environ.copy()
-            if cpp_threads > 0:
-                env["CPP_THREADS"] = str(cpp_threads)
-            env["FILTER_POOL"] = name  # filter inside harness
-            if args.snapshot_every is not None:
-                env["SNAPSHOT_EVERY"] = str(args.snapshot_every)
-            elif args.final_only:
-                env["SAVE_LAST_ONLY"] = "1"
-            futures_cpp.append((name, ex.submit(_run_uv, [
-                "uv", "run", os.path.join(python_dir, "cpp_pool", "cpp_pool_runner_i.py"), pool_configs_path, sequences_path, cpp_out
-            ], env)))
-        done = 0
-        total = len(futures_cpp)
-        for name, fut in futures_cpp:
-            rc, out, err = fut.result()
-            done += 1
-            print(f"  [C++] {done}/{total} finished: {name} ({'OK' if rc == 0 else 'FAIL'})")
-            if rc != 0:
-                print(f"    stderr: {err.strip()}")
-    cpp_time = time.time() - start_cpp
+        cppf_info = run_cpp_double_benchmark(pool_configs_path, sequences_path, run_dir)
+        cppf_time = cppf_info["time"]
 
-    # Phase 2: C++ double per-pool parallel runs
-    print("\n=== Running C++ double phase ===")
-    print(f"  Python workers: {py_workers}")
-    start_cppf = time.time()
-    with ThreadPoolExecutor(max_workers=py_workers) as ex:
-        futures_cppf = []
-        for pool in pools:
-            name = pool["name"]
-            out = os.path.join(cppf_dir, f"{name}.json")
-            env = os.environ.copy()
-            if cpp_threads > 0:
-                env["CPP_THREADS"] = str(cpp_threads)
-            env["FILTER_POOL"] = name
-            if args.snapshot_every is not None:
-                env["SNAPSHOT_EVERY"] = str(args.snapshot_every)
-            elif args.final_only:
-                env["SAVE_LAST_ONLY"] = "1"
-            futures_cppf.append((name, ex.submit(_run_uv, [
-                "uv", "run", os.path.join(python_dir, "cpp_pool", "cpp_pool_runner_d.py"), pool_configs_path, sequences_path, out
-            ], env)))
-        done = 0
-        total = len(futures_cppf)
-        for name, fut in futures_cppf:
-            rc, out, err = fut.result()
-            done += 1
-            print(f"  [C++d] {done}/{total} finished: {name} ({'OK' if rc == 0 else 'FAIL'})")
-            if rc != 0:
-                print(f"    stderr: {err.strip()}")
-    cppf_time = time.time() - start_cppf
-
-    # Phase 3: Vyper per-pool parallel runs
-    print("\n=== Running Vyper phase ===")
-    print(f"  Python workers: {py_workers}")
-    start_vy = time.time()
-    with ThreadPoolExecutor(max_workers=py_workers) as ex:
-        futures_vy = []
-        for pool in pools:
-            name = pool["name"]
-            vy_out = os.path.join(vy_dir, f"{name}.json")
-            env = os.environ.copy()
-            env["FILTER_POOL"] = name  # filter inside vyper runner
-            if args.snapshot_every is not None:
-                env["SNAPSHOT_EVERY"] = str(args.snapshot_every)
-            elif args.final_only:
-                env["SAVE_LAST_ONLY"] = "1"
-            futures_vy.append((name, ex.submit(_run_uv, [
-                "uv", "run", os.path.join(python_dir, "vyper_pool", "vyper_pool_runner.py"), pool_configs_path, sequences_path, vy_out
-            ], env)))
-        done = 0
-        total = len(futures_vy)
-        for name, fut in futures_vy:
-            rc, out, err = fut.result()
-            done += 1
-            print(f"  [VY]  {done}/{total} finished: {name} ({'OK' if rc == 0 else 'FAIL'})")
-            if rc != 0:
-                print(f"    stderr: {err.strip()}")
-    vy_time = time.time() - start_vy
-
-    # Aggregate per-pool outputs into combined structures
-    def load_side(side_dir: str) -> Dict[str, Any]:
-        combined = []
-        for pool in pools:
-            path = os.path.join(side_dir, f"{pool['name']}.json")
-            if not os.path.exists(path):
-                continue
-            data = json.loads(open(path).read())
-            # data["results"] is an array of one entry (single pool × N sequences)
-            combined.extend(data.get("results", []))
-        return {"results": combined}
-
-    cpp_combined = load_side(cpp_dir)
-    cppf_combined = load_side(cppf_dir)
-    vy_combined = load_side(vy_dir)
-
-    # Optionally remove per-pool files after aggregation
-    if not args.save_per_pool:
-        removed = 0
-        for pool in pools:
-            for side_dir in (cpp_dir, cppf_dir, vy_dir):
-                path = os.path.join(side_dir, f"{pool['name']}.json")
-                if os.path.exists(path):
-                    try:
-                        os.remove(path)
-                        removed += 1
-                    except Exception:
-                        pass
-        # Remove empty side directories if they are empty
-        for side_dir in (cpp_dir, cppf_dir, vy_dir):
-            try:
-                if os.path.isdir(side_dir) and not os.listdir(side_dir):
-                    os.rmdir(side_dir)
-            except Exception:
-                pass
-        print(f"  Cleaned {removed} per-pool result files")
+        vy_info = run_vyper_benchmark(pool_configs_path, sequences_path, run_dir)
+        vy_time = vy_info["time"]
+    finally:
+        # Restore env
+        if prev_cpp_threads is None:
+            os.environ.pop("CPP_THREADS", None)
+        else:
+            os.environ["CPP_THREADS"] = prev_cpp_threads
+        if args.snapshot_every is not None:
+            os.environ.pop("SNAPSHOT_EVERY", None)
+        if args.final_only:
+            os.environ.pop("SAVE_LAST_ONLY", None)
 
     # Extract states for comparison
     def extract_states(results: Dict[str, Any]) -> Dict[str, Any]:
@@ -443,6 +331,14 @@ def main():
                 s = [final] if final is not None else []
             states[key] = s
         return states
+
+    # Load combined outputs from files written by the runners
+    with open(os.path.join(run_dir, "cpp_benchmark_results.json"), "r") as f:
+        cpp_combined = json.load(f)
+    with open(os.path.join(run_dir, "cpp_double_benchmark_results.json"), "r") as f:
+        cppf_combined = json.load(f)
+    with open(os.path.join(run_dir, "vyper_benchmark_results.json"), "r") as f:
+        vy_combined = json.load(f)
 
     cpp_states = extract_states(cpp_combined)
     cppf_states = extract_states(cppf_combined)
@@ -459,6 +355,7 @@ def main():
     print_summary(comparison_cppf)
 
     # Save combined outputs under run dir
+    # Also save combined under legacy-friendly names
     _write_json(os.path.join(run_dir, "cpp_i_combined.json"), cpp_combined)
     _write_json(os.path.join(run_dir, "cpp_d_combined.json"), cppf_combined)
     _write_json(os.path.join(run_dir, "vyper_combined.json"), vy_combined)

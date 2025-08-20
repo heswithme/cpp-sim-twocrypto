@@ -35,7 +35,7 @@ cpp-twocrypto/
     ├── benchmark_math/              # Math-only benchmarks (C++ vs Vyper)
     ├── benchmark_pool/              # Pool benchmark orchestration
     │   ├── generate_data.py         # Create pools + sequences (deterministic options)
-    │   ├── run_full_benchmark.py    # Run C++ then Vyper (per-pool parallelism)
+    │   ├── run_full_benchmark.py    # Run C++ then Vyper (single pass)
     │   └── data/                    # Generated configs + per-run results
     ├── cpp_pool/cpp_pool_runner.py  # Build + run C++ harness for a dataset
     └── vyper_pool/vyper_pool_runner.py # Deploy and run Vyper via titanoboa
@@ -98,15 +98,14 @@ uv run python/benchmark_pool/generate_data.py --pools 3 --trades 20 --seed 42
 
 Run full benchmark (C++ first, then Vyper):
 ```bash
-# Python workers per phase (per-pool), C++ threads per process
-uv run python/benchmark_pool/run_full_benchmark.py --n-py 1 --n-cpp 8
+# C++ threads per process
+uv run python/benchmark_pool/run_full_benchmark.py --n-cpp 8
 ```
 
 What this does:
-- C++ phase: processes pools with internal threads (`--n-cpp` → env `CPP_THREADS`).
-- Vyper phase: validation runs; sequential by default (`--n-py 1` recommended).
-- Logs progress per pool and writes results to a timestamped folder under `python/benchmark_pool/data/results/`.
-- By default, per-pool result files are deleted after aggregation. Keep them with `--save-per-pool`.
+- C++ phase: processes all pools with internal threads (`--n-cpp` → env `CPP_THREADS`).
+- Vyper phase: validation runs across all pools in a single process.
+- Writes results to a timestamped folder under `python/benchmark_pool/data/results/`.
 
 Advanced:
 - Run C++ only for a dataset:
@@ -136,7 +135,6 @@ uv run python/benchmark_pool/run_cpp_variants.py --n-cpp 8
 #   --pools-file FILE       Path to pools.json (default: data/pools.json)
 #   --sequences-file FILE   Path to sequences.json (default: data/sequences.json)
 #   --n-cpp N               C++ threads per process (CPP_THREADS)
-#   --only-pool NAME        Filter to a single pool
 ```
 
 Outputs are saved in a timestamped folder under `python/benchmark_pool/data/results/` with:
@@ -157,7 +155,7 @@ Outputs are saved in a timestamped folder under `python/benchmark_pool/data/resu
 - Donation logic: only unlocked donation shares are burnable; protection window damping and cap enforced identically.
 - Oracle EMA: moving average via `wad_exp`; state `last_prices` is capped to `2 * price_scale` when updating EMA.
 - Time-travel: absolute timestamp jumps affect `block_timestamp` only; `last_timestamp` is updated in EMA path (tweak_price) for parity.
-- Debug trace: set `TRACE=1` to get concise internal logs from the C++ donation/tweak_price paths; filter with `TRACE_ONLY_POOL=<pool_name>`.
+- Debug helpers: see `python/benchmark_pool/debug/` for optional diff/inspect utilities.
 - Inspect runs (debug helpers):
   - Diff summary: `uv run python/benchmark_pool/debug/parse_and_diff.py [run_dir]`
   - Context around first divergence: `uv run python/benchmark_pool/debug/inspect_context.py <run_dir>`

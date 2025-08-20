@@ -324,16 +324,11 @@ int main(int argc, char* argv[]) {
             throw std::runtime_error("No sequences found in sequences.json");
         }
         
-        // Build tasks and run with a thread pool
-        const char* only_pool = std::getenv("FILTER_POOL");
-        const char* only_seq = std::getenv("FILTER_SEQUENCE");
-
+        // Build tasks and run with a thread pool (no pool isolation)
         struct Task { size_t pi; size_t si; };
         std::vector<Task> tasks;
-        tasks.reserve(pools.size() * sequences.size());
+        tasks.reserve(pools.size());
         for (size_t pi = 0; pi < pools.size(); ++pi) {
-            std::string pool_name = pools[pi].as_object().at("name").as_string().c_str();
-            if (only_pool && pool_name != std::string(only_pool)) continue;
             // single sequence only; use si=0
             tasks.push_back({pi, 0});
         }

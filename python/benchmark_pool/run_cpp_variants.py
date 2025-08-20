@@ -14,8 +14,8 @@ from typing import Any, Dict, List, Tuple
 # Add parent for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from cpp_pool.cpp_pool_runner_i import run_cpp_pool
-from cpp_pool.cpp_pool_runner_d import run_cpp_pool_double
+from cpp_pool.cpp_pool_runner_i import run_cpp_pool_with_time
+from cpp_pool.cpp_pool_runner_d import run_cpp_pool_double_with_time
 
 
 def _write_json(path: str, obj: Any):
@@ -49,14 +49,13 @@ def _run_one(harness: str, pools_file: str, sequences_file: str, out_path: str, 
             os.environ["SNAPSHOT_EVERY"] = str(snapshot_every)
         elif final_only:
             os.environ["SAVE_LAST_ONLY"] = "1"
-        start = time.time()
+        # Tight timing window: measure only harness subprocess time
         if harness == "i":
-            results = run_cpp_pool(pools_file, sequences_file, out_path)
+            results, elapsed = run_cpp_pool_with_time(pools_file, sequences_file, out_path)
         elif harness == "d":
-            results = run_cpp_pool_double(pools_file, sequences_file, out_path)
+            results, elapsed = run_cpp_pool_double_with_time(pools_file, sequences_file, out_path)
         else:
             raise ValueError(f"Unknown harness: {harness}")
-        elapsed = time.time() - start
         return elapsed, results
     finally:
         if prev_threads is None:
@@ -148,7 +147,6 @@ def main():
     ap.add_argument("--pools-file", default=str(Path(__file__).with_name("data") / "pools.json"))
     ap.add_argument("--sequences-file", default=str(Path(__file__).with_name("data") / "sequences.json"))
     ap.add_argument("--n-cpp", type=int, default=0, help="CPP_THREADS per process (0 = auto)")
-    ap.add_argument("--only-pool", type=str, default=None, help="Run a single named pool (FILTER_POOL env var)")
     ap.add_argument("--final-only", action="store_true", help="Only save final state per test (set SAVE_LAST_ONLY=1)")
     ap.add_argument("--snapshot-every", type=int, default=None, help="Snapshot every N actions (0=final only, 1=every, N=interval). Overrides --final-only")
     ap.add_argument("--show-absolute", action="store_true", help="Show absolute differences instead of relative")
@@ -168,11 +166,7 @@ def main():
     run_dir.mkdir(parents=True, exist_ok=True)
 
     # Optional pool filter via env (honored by harnesses)
-    prev_only = os.environ.get("FILTER_POOL")
     try:
-        if args.only_pool:
-            os.environ["FILTER_POOL"] = args.only_pool
-
         timing: Dict[str, float] = {}
         outputs: Dict[str, Dict[str, Any]] = {}
 
@@ -250,10 +244,7 @@ def main():
         print(f"\n✓ Results saved to {run_dir}")
         return 0
     finally:
-        if prev_only is None:
-            os.environ.pop("FILTER_POOL", None)
-        else:
-            os.environ["FILTER_POOL"] = prev_only
+        pass
 
 
 if __name__ == "__main__":

@@ -251,10 +251,7 @@ class VyperPoolRunner:
             raise RuntimeError("No sequences found in sequences.json")
         sequence = sequences_data[0]
         
-        # Optional filter via env var (shared with C++ harness)
-        only_pool = os.environ.get("FILTER_POOL")
-        if only_pool:
-            pools_data = [p for p in pools_data if p.get("name") == only_pool]
+        # Pool isolation not supported; run all pools
         
         # Deploy infrastructure once
         self.deploy_infrastructure()

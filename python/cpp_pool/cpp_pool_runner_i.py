@@ -58,41 +58,48 @@ class CppPoolRunner:
         return self.harness_path
     
     def run_benchmark(self, pool_configs_file: str, sequences_file: str, output_file: str) -> Dict:
-        """Run C++ benchmark with given configurations."""
+        """Run C++ benchmark with given configurations (returns results only)."""
+        results, _ = self.run_benchmark_timed(pool_configs_file, sequences_file, output_file)
+        return results
+
+    def run_benchmark_timed(self, pool_configs_file: str, sequences_file: str, output_file: str) -> tuple[Dict, float]:
+        """Run C++ benchmark and return (results, harness_time_s).
+        Measures only the harness subprocess wall time (excludes build/JSON IO).
+        """
         # Ensure harness is built
         if not os.path.exists(self.harness_path):
             self.build_harness()
-        
+
         print("Running C++ harness...")
-        
-        # Run the harness
+
+        # Execute harness with tight timing window
+        import time as _time
+        t0 = _time.perf_counter()
         result = subprocess.run(
             [self.harness_path, pool_configs_file, sequences_file, output_file],
             capture_output=True,
             text=True
         )
-        
+        t1 = _time.perf_counter()
+        harness_time = t1 - t0
+
         if result.returncode != 0:
             raise RuntimeError(f"Harness execution failed: {result.stderr}")
-        
+
         # Print harness output
         if result.stdout:
             for line in result.stdout.strip().split('\n'):
                 if line:
                     print(f"  {line}")
-        
-        # Load and return results
+
+        # Load results
         with open(output_file, 'r') as f:
             results = json.load(f)
-        
-        # Count successful tests
-        total_tests = len(results["results"])
-        
+
+        total_tests = len(results.get("results", []))
         print(f"\n✓ Processed {total_tests} pool-sequence combinations")
-        
         print(f"✓ Results written to {output_file}")
-        
-        return results
+        return results, harness_time
     
     def process_results(self, results: Dict) -> Dict:
         """Process raw C++ results into structured format."""
@@ -144,6 +151,17 @@ def run_cpp_pool(pool_configs_file: str, sequences_file: str, output_file: str) 
     runner.format_json_output(output_file)
     
     return results
+
+def run_cpp_pool_with_time(pool_configs_file: str, sequences_file: str, output_file: str) -> tuple[Dict, float]:
+    """Run C++ pool benchmark, returning (results, harness_time_s)."""
+    repo_root = Path(__file__).resolve().parents[2]
+    cpp_project_path = str(repo_root / "cpp")
+    runner = CppPoolRunner(cpp_project_path)
+    # Build if needed
+    runner.build_harness()
+    results, harness_time = runner.run_benchmark_timed(pool_configs_file, sequences_file, output_file)
+    runner.format_json_output(output_file)
+    return results, harness_time
 
 
 def main():
