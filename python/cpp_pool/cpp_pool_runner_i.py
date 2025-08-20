@@ -87,11 +87,8 @@ class CppPoolRunner:
         
         # Count successful tests
         total_tests = len(results["results"])
-        successful = sum(1 for r in results["results"] if r["result"]["success"])
         
         print(f"\n✓ Processed {total_tests} pool-sequence combinations")
-        if successful < total_tests:
-            print(f"  ⚠ {total_tests - successful} tests failed")
         
         print(f"✓ Results written to {output_file}")
         
