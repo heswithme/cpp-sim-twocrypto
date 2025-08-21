@@ -28,10 +28,30 @@ def find_latest_run_dir(results_dir: Path) -> Path:
 
 
 def load_combined(run_dir: Path) -> Tuple[Dict[str, Any], Dict[str, Any]]:
-    cpp_path = run_dir / "cpp_combined.json"
-    vy_path = run_dir / "vyper_combined.json"
-    if not cpp_path.exists() or not vy_path.exists():
-        raise SystemExit(f"Missing combined outputs in {run_dir}. Expected cpp_combined.json and vyper_combined.json")
+    """Load combined outputs, supporting both legacy and unified filenames.
+
+    C++: prefer cpp_combined.json, fallback to cpp_i_combined.json, cpp_benchmark_results.json
+    Vyper: prefer vyper_combined.json, fallback to vyper_benchmark_results.json
+    """
+    candidates_cpp = [
+        run_dir / "cpp_combined.json",
+        run_dir / "cpp_i_combined.json",
+        run_dir / "cpp_benchmark_results.json",
+    ]
+    candidates_vy = [
+        run_dir / "vyper_combined.json",
+        run_dir / "vyper_benchmark_results.json",
+    ]
+
+    cpp_path = next((p for p in candidates_cpp if p.exists()), None)
+    vy_path = next((p for p in candidates_vy if p.exists()), None)
+    if not cpp_path or not vy_path:
+        raise SystemExit(
+            f"Missing combined outputs in {run_dir}. "
+            f"Tried C++: {[p.name for p in candidates_cpp]} | "
+            f"Vyper: {[p.name for p in candidates_vy]}"
+        )
+
     cpp = json.loads(cpp_path.read_text())
     vy = json.loads(vy_path.read_text())
     return cpp, vy
@@ -140,4 +160,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

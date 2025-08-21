@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-C++ pool benchmark runner (double-precision harness)
+Unified C++ pool benchmark runner (mode: i | d).
+Builds the templated harness once (Release) and runs with the selected mode.
 """
 import json
 import os
@@ -10,38 +11,46 @@ from typing import Dict
 from pathlib import Path
 
 
-class CppPoolRunnerDouble:
+class CppPoolRunner:
     def __init__(self, cpp_project_path: str):
         self.cpp_project_path = cpp_project_path
         self.build_dir = os.path.join(cpp_project_path, "build")
-        self.harness_path = os.path.join(self.build_dir, "benchmark_harness_d")
+        self.harness_path = os.path.join(self.build_dir, "benchmark_harness")
 
     def configure_build(self):
         os.makedirs(self.build_dir, exist_ok=True)
-        print("Configuring C++ (double) build...")
-        result = subprocess.run(["cmake", ".."], cwd=self.build_dir, capture_output=True, text=True)
+        print("Configuring C++ build (Release)...")
+        result = subprocess.run([
+            "cmake", "..", "-DCMAKE_BUILD_TYPE=Release"
+        ], cwd=self.build_dir, capture_output=True, text=True)
         if result.returncode != 0:
             raise RuntimeError(f"CMake configuration failed: {result.stderr}")
 
     def build_harness(self):
-        if not os.path.exists(os.path.join(self.build_dir, "CMakeCache.txt")):
-            self.configure_build()
-        print("Building double benchmark harness...")
-        result = subprocess.run(["cmake", "--build", ".", "--target", "benchmark_harness_d"], cwd=self.build_dir, capture_output=True, text=True)
+        # Always reconfigure to pick up target/name changes cleanly
+        self.configure_build()
+        print("Building unified benchmark harness...")
+        result = subprocess.run([
+            "cmake", "--build", ".", "--target", "benchmark_harness"
+        ], cwd=self.build_dir, capture_output=True, text=True)
         if result.returncode != 0:
             raise RuntimeError(f"Build failed: {result.stderr}")
         if not os.path.exists(self.harness_path):
             raise RuntimeError(f"Harness not found at {self.harness_path}")
-        print(f"✓ Built double C++ harness at {self.harness_path}")
+        print(f"✓ Built C++ harness at {self.harness_path}")
         return self.harness_path
 
-    def run_benchmark(self, pool_configs_file: str, sequences_file: str, output_file: str) -> Dict:
+    def run_benchmark(self, mode: str, pool_configs_file: str, sequences_file: str, output_file: str) -> Dict:
+        if mode not in ("i", "d"):
+            raise ValueError("mode must be 'i' or 'd'")
         if not os.path.exists(self.harness_path):
             self.build_harness()
-        print("Running C++ double harness...")
+        print(f"Running C++ harness (mode={mode})...")
         import time as _time
         t0 = _time.perf_counter()
-        result = subprocess.run([self.harness_path, pool_configs_file, sequences_file, output_file], capture_output=True, text=True)
+        result = subprocess.run([
+            self.harness_path, mode, pool_configs_file, sequences_file, output_file
+        ], capture_output=True, text=True)
         t1 = _time.perf_counter()
         harness_time = t1 - t0
         if result.returncode != 0:
@@ -68,23 +77,24 @@ class CppPoolRunnerDouble:
         print("✓ Formatted output JSON")
 
 
-def run_cpp_pool_double(pool_configs_file: str, sequences_file: str, output_file: str) -> Dict:
+def run_cpp_pool(mode: str, pool_configs_file: str, sequences_file: str, output_file: str) -> Dict:
     repo_root = Path(__file__).resolve().parents[2]
     cpp_project_path = str(repo_root / "cpp")
-    runner = CppPoolRunnerDouble(cpp_project_path)
+    runner = CppPoolRunner(cpp_project_path)
     runner.build_harness()
-    results = runner.run_benchmark(pool_configs_file, sequences_file, output_file)
+    results = runner.run_benchmark(mode, pool_configs_file, sequences_file, output_file)
     runner.format_json_output(output_file)
     return results
 
 
 def main():
-    if len(sys.argv) != 4:
-        print("Usage: python cpp_pool_runner_d.py <pool_configs.json> <sequences.json> <output.json>")
+    if len(sys.argv) != 5 or sys.argv[1] not in ("i", "d"):
+        print("Usage: python cpp_pool_runner.py <i|d> <pool_configs.json> <sequences.json> <output.json>")
         return 1
-    pool_configs = sys.argv[1]
-    sequences = sys.argv[2]
-    output = sys.argv[3]
+    mode = sys.argv[1]
+    pool_configs = sys.argv[2]
+    sequences = sys.argv[3]
+    output = sys.argv[4]
     if not os.path.exists(pool_configs):
         print(f"❌ Pool configs not found: {pool_configs}")
         return 1
@@ -92,7 +102,7 @@ def main():
         print(f"❌ Sequences not found: {sequences}")
         return 1
     try:
-        run_cpp_pool_double(pool_configs, sequences, output)
+        run_cpp_pool(mode, pool_configs, sequences, output)
         return 0
     except Exception as e:
         print(f"❌ Error: {e}")

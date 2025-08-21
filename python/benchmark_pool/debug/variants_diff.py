@@ -122,10 +122,13 @@ def main() -> int:
     results_root = repo_root / "python" / "benchmark_pool" / "data" / "results"
     run_dir = Path(args.run_dir).resolve() if args.run_dir else _find_latest_variants_run(results_root)
 
-    i_path = run_dir / "cpp_i_combined.json"
-    d_path = run_dir / "cpp_d_combined.json"
-    if not i_path.exists() or not d_path.exists():
-        print(f"Missing cpp_i_combined.json or cpp_d_combined.json in {run_dir}")
+    # Support both naming schemes (combined vs short)
+    candidates_i = [run_dir / "cpp_i_combined.json", run_dir / "cpp_i.json"]
+    candidates_d = [run_dir / "cpp_d_combined.json", run_dir / "cpp_d.json"]
+    i_path = next((p for p in candidates_i if p.exists()), None)
+    d_path = next((p for p in candidates_d if p.exists()), None)
+    if not i_path or not d_path:
+        print(f"Missing variant outputs in {run_dir}. Tried i: {[p.name for p in candidates_i]} d: {[p.name for p in candidates_d]}")
         return 1
 
     I = _load(i_path)

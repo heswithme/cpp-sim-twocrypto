@@ -13,8 +13,7 @@ from typing import Dict, List, Any, Tuple, Optional
 # Add parent directory for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from cpp_pool.cpp_pool_runner_i import run_cpp_pool
-from cpp_pool.cpp_pool_runner_d import run_cpp_pool_double
+from cpp_pool.cpp_pool_runner import run_cpp_pool as run_cpp_pool_mode
 from vyper_pool.vyper_pool_runner import run_vyper_pool
 
 
@@ -26,7 +25,7 @@ def run_cpp_benchmark(pool_configs_file: str, sequences_file: str, output_dir: s
     cpp_output = os.path.join(output_dir, "cpp_benchmark_results.json")
     
     start_time = time.time()
-    results = run_cpp_pool(pool_configs_file, sequences_file, cpp_output)
+    results = run_cpp_pool_mode("i", pool_configs_file, sequences_file, cpp_output)
     cpp_time = time.time() - start_time
     
     print(f"✓ C++ benchmark completed in {cpp_time:.2f}s")
@@ -36,7 +35,8 @@ def run_cpp_benchmark(pool_configs_file: str, sequences_file: str, output_dir: s
     for test in results["results"]:
         key = f"{test['pool_config']}_{test['sequence']}"
         if test["result"]["success"]:
-            cpp_states[key] = test["result"]["states"]
+            st = test["result"].get("states")
+            cpp_states[key] = st if st is not None else [test["result"].get("final_state")]
         else:
             cpp_states[key] = {"error": test["result"].get("error", "Failed")}
     
@@ -53,7 +53,7 @@ def run_cpp_double_benchmark(pool_configs_file: str, sequences_file: str, output
 
     cpp_output = os.path.join(output_dir, "cpp_double_benchmark_results.json")
     start_time = time.time()
-    results = run_cpp_pool_double(pool_configs_file, sequences_file, cpp_output)
+    results = run_cpp_pool_mode("d", pool_configs_file, sequences_file, cpp_output)
     cpp_time = time.time() - start_time
     print(f"✓ C++ double benchmark completed in {cpp_time:.2f}s")
 
@@ -184,15 +184,14 @@ def compare_results(cpp_results: Dict, vyper_results: Dict = None) -> Dict:
 
         comparison["matches"] = matches
         comparison["mismatches"] = mismatches
+        total = comparison.get("tests_run", 0)
+        comparison["exact_parity"] = (matches == total and total > 0)
     
     return comparison
 
 
 def compare_final_precision(baseline: Dict, approx: Dict) -> Dict:
-    """Compare final snapshot metrics between baseline (e.g., Vyper) and approx (e.g., float)."""
-    def norm_list(v):
-        return [int(x) for x in v] if isinstance(v, list) else v
-
+    """Per-pool absolute diffs (final state) for basic metrics. Kept for compatibility."""
     diffs = {}
     for key, b_states in baseline["states"].items():
         a_states = approx["states"].get(key)
@@ -207,9 +206,12 @@ def compare_final_precision(baseline: Dict, approx: Dict) -> Dict:
                 b = b_final[m]
                 a = a_final[m]
                 if isinstance(b, list):
-                    b = [int(x) for x in b]
-                    a = [int(x) for x in a]
-                    diff = [abs(ai - bi) for ai, bi in zip(a, b)]
+                    try:
+                        b_list = [int(x) for x in b]
+                        a_list = [int(x) for x in a]
+                        diff = [abs(ai - bi) for ai, bi in zip(a_list, b_list)]
+                    except Exception:
+                        diff = None
                     diffs[key][m] = diff
                 else:
                     try:
@@ -221,45 +223,135 @@ def compare_final_precision(baseline: Dict, approx: Dict) -> Dict:
     return diffs
 
 
-def print_summary(comparison: Dict):
-    """Print benchmark summary."""
-    print("\n" + "="*60)
-    print("BENCHMARK SUMMARY")
-    print("="*60)
-    
-    print(f"\nC++ Performance:")
-    print(f"  Tests run: {comparison['tests_run']}")
-    print(f"  Succeeded: {comparison['tests_succeeded']}")
-    print(f"  Failed: {comparison['tests_failed']}")
-    print(f"  Time: {comparison['cpp_time']:.2f}s")
-    
-    if "vyper_time" in comparison:
-        print(f"\nVyper Performance:")
-        print(f"  Time: {comparison['vyper_time']:.2f}s")
-        print(f"  Speedup: {comparison['speedup']:.1f}x")
-        
-        print(f"\nAccuracy:")
-        print(f"  Matches: {comparison['matches']}")
-        print(f"  Mismatches: {len(comparison['mismatches'])}")
-        
-        if comparison['mismatches']:
-            print("\n  Sample mismatches:")
-            for mm in comparison['mismatches'][:5]:
-                print(f"    {mm['test']}.{mm['metric']}")
+def compute_precision_stats(baseline_states: Dict[str, Any], approx_states: Dict[str, Any]) -> Dict[str, Any]:
+    """Aggregate precision loss metrics across pools for final-state values.
+
+    Returns per-metric stats: count, max_abs, mean_abs, max_rel_pct, mean_rel_pct.
+    For list metrics (e.g., balances), computes stats across all elements.
+    """
+    metrics = ["balances", "D", "virtual_price", "totalSupply", "price_scale"]
+    stats: Dict[str, Dict[str, float]] = {m: {
+        "count": 0,
+        "max_abs": 0,
+        "sum_abs": 0,
+        "max_rel_pct": 0.0,
+        "sum_rel_pct": 0.0,
+    } for m in metrics}
+
+    def to_int(x: Any) -> int:
+        try:
+            return int(x)
+        except Exception:
+            try:
+                return int(float(x))
+            except Exception:
+                return 0
+
+    for key, b_states in baseline_states.items():
+        a_states = approx_states.get(key)
+        if not a_states:
+            continue
+        b_final = b_states[-1] if isinstance(b_states, list) else b_states
+        a_final = a_states[-1] if isinstance(a_states, list) else a_states
+        for m in metrics:
+            if m not in b_final or m not in a_final:
+                continue
+            b = b_final[m]; a = a_final[m]
+            if isinstance(b, list) and isinstance(a, list):
+                b_list = [to_int(x) for x in b]
+                a_list = [to_int(x) for x in a]
+                for bi, ai in zip(b_list, a_list):
+                    abs_err = abs(ai - bi)
+                    rel_pct = (abs_err * 100.0 / abs(bi)) if bi != 0 else (0.0 if ai == 0 else float('inf'))
+                    st = stats[m]
+                    st["count"] += 1
+                    st["sum_abs"] += abs_err
+                    if abs_err > st["max_abs"]:
+                        st["max_abs"] = abs_err
+                    if rel_pct > st["max_rel_pct"]:
+                        st["max_rel_pct"] = rel_pct
+                    if rel_pct != float('inf'):
+                        st["sum_rel_pct"] += rel_pct
+            else:
+                bi = to_int(b); ai = to_int(a)
+                abs_err = abs(ai - bi)
+                rel_pct = (abs_err * 100.0 / abs(bi)) if bi != 0 else (0.0 if ai == 0 else float('inf'))
+                st = stats[m]
+                st["count"] += 1
+                st["sum_abs"] += abs_err
+                if abs_err > st["max_abs"]:
+                    st["max_abs"] = abs_err
+                if rel_pct > st["max_rel_pct"]:
+                    st["max_rel_pct"] = rel_pct
+                if rel_pct != float('inf'):
+                    st["sum_rel_pct"] += rel_pct
+
+    # Finalize means
+    for m in metrics:
+        st = stats[m]
+        cnt = max(int(st["count"]), 1)
+        st["mean_abs"] = st["sum_abs"] / cnt
+        st["mean_rel_pct"] = st["sum_rel_pct"] / cnt
+        # Drop sums from output
+        st.pop("sum_abs", None)
+        st.pop("sum_rel_pct", None)
+    return stats
+
+
+def print_precision_stats(title: str, stats: Dict[str, Any]):
+    print(f"\n{title}")
+    for m in ("virtual_price", "price_scale", "D", "totalSupply", "balances"):
+        if m not in stats:
+            continue
+        st = stats[m]
+        # Show relative in ppm and absolute in wei for a quick read
+        mean_ppm = st["mean_rel_pct"] * 1e4  # 1% = 10,000 ppm
+        max_ppm = st["max_rel_pct"] * 1e4
+        print(
+            f"  {m}: max={st['max_abs']} wei ({max_ppm:.2f} ppm), "
+            f"mean={st['mean_abs']:.1f} wei ({mean_ppm:.2f} ppm)"
+        )
+
+
+def print_summary(parity_cpp_vs_vy: Dict, times: Dict[str, float], d_vs_vy_stats: Dict[str, Any], d_vs_i_stats: Dict[str, Any]):
+    """Print improved, concise full summary."""
+    print("\n" + "="*64)
+    print("FULL BENCHMARK SUMMARY")
+    print("="*64)
+
+    # Performance
+    print("\nPerformance:")
+    print(f"  cpp-uint: {times['cpp_i']:.2f}s  | vyper: {times['vyper']:.2f}s  | cpp-double: {times['cpp_d']:.2f}s")
+    if times['cpp_i'] > 0:
+        print(f"  Speedups: vyper/cpp-uint = {times['vyper']/times['cpp_i']:.2f}x, cpp-double/cpp-uint = {times['cpp_d']/times['cpp_i']:.2f}x")
+
+    # Parity
+    total = parity_cpp_vs_vy.get('tests_run', 0)
+    matches = parity_cpp_vs_vy.get('matches', 0)
+    exact = parity_cpp_vs_vy.get('exact_parity', False)
+    print("\nParity (cpp-uint vs vyper):")
+    print(f"  Exact parity: {'YES' if exact else 'NO'}  ({matches}/{total} pools)")
+    if not exact and parity_cpp_vs_vy.get('mismatches'):
+        print("  First mismatches:")
+        for mm in parity_cpp_vs_vy['mismatches'][:5]:
+            print(f"    {mm['test']}.{mm['metric']}")
+
+    # Precision loss
+    print_precision_stats("Precision loss (cpp-double vs vyper):", d_vs_vy_stats)
+    print_precision_stats("Precision loss (cpp-double vs cpp-uint):", d_vs_i_stats)
 
 
 def _ensure_built_harness():
-    """Build C++ harnesses once to avoid parallel rebuild races."""
+    """Build unified C++ harness once to avoid parallel rebuild races."""
     repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     build_dir = os.path.join(repo_root, "../cpp/build")
     build_dir = os.path.abspath(build_dir)
     os.makedirs(build_dir, exist_ok=True)
-    # Configure if needed
+    # Configure if needed (Release)
     if not os.path.exists(os.path.join(build_dir, "CMakeCache.txt")):
-        subprocess.run(["cmake", ".."], cwd=build_dir, check=True)
-    # Build both harnesses
-    subprocess.run(["cmake", "--build", ".", "--target", "benchmark_harness_i"], cwd=build_dir, check=True)
-    subprocess.run(["cmake", "--build", ".", "--target", "benchmark_harness_d"], cwd=build_dir, check=True)
+        subprocess.run(["cmake", "..", "-DCMAKE_BUILD_TYPE=Release"], cwd=build_dir, check=True)
+    # Build unified harness
+    subprocess.run(["cmake", "--build", ".", "--target", "benchmark_harness"], cwd=build_dir, check=True)
 
 
 def _write_json(path: str, obj: Any):
@@ -388,12 +480,18 @@ def main():
     # Compare
     comparison_cpp = compare_results({"states": cpp_states, "time": cpp_time}, {"states": vy_states, "time": vy_time})
     comparison_cppf = compare_results({"states": cppf_states, "time": cppf_time}, {"states": vy_states, "time": vy_time})
-    precision_loss = compare_final_precision({"states": vy_states}, {"states": cppf_states})
+    precision_loss = compare_final_precision({"states": vy_states}, {"states": cppf_states})  # legacy detailed diffs (per-pool)
 
-    print("\n--- integer (uint256) vs vyper ---")
-    print_summary(comparison_cpp)
-    print("\n--- double vs vyper ---")
-    print_summary(comparison_cppf)
+    # Aggregate precision stats for concise reporting
+    d_vs_vy_stats = compute_precision_stats(vy_states, cppf_states)
+    d_vs_i_stats = compute_precision_stats(cpp_states, cppf_states)
+
+    print_summary(
+        parity_cpp_vs_vy=comparison_cpp,
+        times={"cpp_i": cpp_time, "cpp_d": cppf_time, "vyper": vy_time},
+        d_vs_vy_stats=d_vs_vy_stats,
+        d_vs_i_stats=d_vs_i_stats,
+    )
 
     # Save combined outputs under run dir
     # Also save combined under legacy-friendly names
@@ -403,6 +501,8 @@ def main():
     _write_json(os.path.join(run_dir, "benchmark_comparison_i_vs_vyper.json"), comparison_cpp)
     _write_json(os.path.join(run_dir, "benchmark_comparison_d_vs_vyper.json"), comparison_cppf)
     _write_json(os.path.join(run_dir, "d_precision_loss.json"), precision_loss)
+    _write_json(os.path.join(run_dir, "d_vs_vyper_precision_stats.json"), d_vs_vy_stats)
+    _write_json(os.path.join(run_dir, "d_vs_cpp_i_precision_stats.json"), d_vs_i_stats)
 
     print(f"\n✓ Results saved to {run_dir}")
     return 0

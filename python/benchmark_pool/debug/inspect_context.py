@@ -45,13 +45,18 @@ def main() -> int:
         print("Usage: inspect_context.py <run_dir>")
         return 1
     run_dir = Path(sys.argv[1]).resolve()
-    cpp_path = run_dir / "cpp_combined.json"
-    vy_path = run_dir / "vyper_combined.json"
+    # Support both unified and legacy naming
+    cpp_candidates = [run_dir / "cpp_combined.json", run_dir / "cpp_i_combined.json", run_dir / "cpp_benchmark_results.json"]
+    vy_candidates = [run_dir / "vyper_combined.json", run_dir / "vyper_benchmark_results.json"]
+    cpp_path = next((p for p in cpp_candidates if p.exists()), None)
+    vy_path = next((p for p in vy_candidates if p.exists()), None)
     # sequences.json lives under data/, which is two levels up from run_dir
     seqs_path = run_dir.parents[1] / "sequences.json"
 
-    if not cpp_path.exists() or not vy_path.exists():
-        print(f"Missing combined outputs in {run_dir}")
+    if not cpp_path or not vy_path:
+        tried_cpp = ", ".join(p.name for p in cpp_candidates)
+        tried_vy = ", ".join(p.name for p in vy_candidates)
+        print(f"Missing combined outputs in {run_dir}. Tried C++: [{tried_cpp}] Vyper: [{tried_vy}]")
         return 1
 
     cpp = json.loads(cpp_path.read_text())
@@ -108,4 +113,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
