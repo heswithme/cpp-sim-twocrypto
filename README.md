@@ -6,39 +6,43 @@ High-performance C++ implementation of Curve’s TwoCrypto AMM with exact parity
 
 This repository contains:
 - Vyper reference contracts (submodule) used for validation.
-- A clean, parity-accurate C++ implementation of the TwoCrypto pool and math.
+- A clean, parity-accurate C++ implementation of the TwoCrypto pool and math (uint256 variant).
+- A fast double-precision variant for performance exploration.
 - Harnesses and Python tooling to benchmark and compare C++ vs Vyper.
 
 Parity goals met:
-- Functionality mirrors `Twocrypto.vy` (function order, rounding, fees).
+- Integer/uint256 variant mirrors `Twocrypto.vy` (function order, rounding, fees) with exact parity.
 - Donation logic: burns only unlocked shares; protection window; cap respected.
 - Oracle EMA matches Vyper (moving average with 2× price_scale cap).
-- Time semantics for testing: absolute `time_travel`, synchronized start timestamp.
+- Time semantics for testing: relative time travel supported; synchronized start timestamp.
+
+Performance note:
+- Double-precision (`_d`) harness runs about 2× faster but loses roughly ~1% accuracy over 1,000,000 trades. Use `_i` for parity validation and `_d` for speed.
 
 ## Repository Layout
 
 ```
 cpp-twocrypto/
-├── twocrypto-ng/                    # Vyper reference (submodule)
-│   └── contracts/main/*.vy          # Twocrypto, Math, Views, Factory
+├── twocrypto-ng/                        # Vyper reference (submodule)
+│   └── contracts/main/*.vy              # Twocrypto, Math, Views, Factory
 │
-├── cpp/                             # C++ implementation + harness
+├── cpp/                                 # C++ implementation + harness (templated)
 │   ├── include/
-│   │   └── twocrypto.hpp            # Pool class (reads like Vyper)
+│   │   ├── stableswap_math.hpp          # Templated math (uint256 and double specializations)
+│   │   └── twocrypto.hpp                # Templated pool (TwoCryptoPoolT<T>)
 │   ├── src/
-│   │   ├── stableswap_math.cpp      # Math: newton_D / get_y / get_p / wad_exp
-│   │   ├── twocrypto.cpp            # Pool logic: add/exchange/remove/tweak_price
-│   │   └── benchmark_harness.cpp    # JSON harness (internally parallel)
-│   └── CMakeLists.txt
+│   │   └── benchmark_harness.cpp        # Unified JSON harness (mode i|d)
+│   └── CMakeLists.txt                   # Builds benchmark_harness
 │
-└── python/                          # Benchmarks and runners
-    ├── benchmark_math/              # Math-only benchmarks (C++ vs Vyper)
-    ├── benchmark_pool/              # Pool benchmark orchestration
-    │   ├── generate_data.py         # Create pools + sequences (deterministic options)
-    │   ├── run_full_benchmark.py    # Run C++ then Vyper (single pass)
-    │   └── data/                    # Generated configs + per-run results
-    ├── cpp_pool/cpp_pool_runner.py  # Build + run C++ harness for a dataset
-    └── vyper_pool/vyper_pool_runner.py # Deploy and run Vyper via titanoboa
+└── python/                              # Benchmarks and runners
+    ├── benchmark_math/                  # Math-only benchmarks (C++ vs Vyper)
+    ├── benchmark_pool/                  # Pool benchmark orchestration
+    │   ├── generate_data.py             # Create pools + sequences (deterministic options)
+    │   ├── run_full_benchmark.py        # Run both C++ variants and Vyper
+    │   └── data/                        # Generated configs + per-run results
+    ├── cpp_pool/
+    │   └── cpp_pool_runner.py           # Build + run unified C++ harness (mode i|d)
+    └── vyper_pool/vyper_pool_runner.py  # Deploy and run Vyper via titanoboa
 ```
 
 ## Requirements
@@ -57,24 +61,22 @@ cpp-twocrypto/
 ```bash
 # Build (Release recommended)
 cmake -B cpp/build cpp -DCMAKE_BUILD_TYPE=Release
-cmake --build cpp/build --target benchmark_harness_i -j  # Integer/uint256 version
-cmake --build cpp/build --target benchmark_harness_d -j  # Double-precision version
+cmake --build cpp/build --target benchmark_harness -j  # Unified harness (mode i|d)
 
 # Run harness directly (JSON I/O handled by Python runners normally)
-./cpp/build/benchmark_harness_i <pools.json> <sequences.json> <output.json>  # Integer/uint256
-./cpp/build/benchmark_harness_d <pools.json> <sequences.json> <output.json>  # Double-precision
+./cpp/build/benchmark_harness i <pools.json> <sequences.json> <output.json>  # Integer/uint256
+./cpp/build/benchmark_harness d <pools.json> <sequences.json> <output.json>  # Double-precision
 
 # Control internal parallelism
-CPP_THREADS=8 ./cpp/build/benchmark_harness_i ...
+CPP_THREADS=8 ./cpp/build/benchmark_harness i ...
 ```
 
 Notes:
 - The harness uses a thread pool internally (default = hardware threads). Override with env `CPP_THREADS`.
-- Two implementations are provided:
-  - `benchmark_harness_i`: Integer/uint256 implementation with exact precision (matches Vyper exactly)
-  - `benchmark_harness_d`: Double-precision floating-point for fast approximations
-- `twocrypto_i.cpp` mirrors Vyper logic and names; `_calc_token_fee` and `_fee` follow the same order and rounding.
-- The double-precision version converts 1e18-scaled JSON inputs to doubles (1.0 == 1e18) and back for outputs
+- One templated implementation is provided via `benchmark_harness`:
+  - Mode `i`: Integer/uint256 (exact parity)
+  - Mode `d`: Double-precision (approximate, usually faster)
+- The double-precision mode converts 1e18-scaled JSON inputs to doubles (1.0 == 1e18) and back for outputs
 
 ## Math Benchmarks (C++ vs Vyper)
 
@@ -96,24 +98,29 @@ Generate datasets (single sequence). Aggregated files are written to `python/ben
 uv run python/benchmark_pool/generate_data.py --pools 3 --trades 20 --seed 42
 ```
 
-Run full benchmark (C++ first, then Vyper):
+Run full benchmark (runs both C++ variants and Vyper):
 ```bash
-# C++ threads per process
-uv run python/benchmark_pool/run_full_benchmark.py --n-cpp 8
+# C++ threads per process; Vyper worker processes
+uv run python/benchmark_pool/run_full_benchmark.py --n-cpp 8 --n-py 1
 ```
 
 What this does:
-- C++ phase: processes all pools with internal threads (`--n-cpp` → env `CPP_THREADS`).
-- Vyper phase: validation runs across all pools in a single process.
+- C++ phase: processes all pools with internal threads (`--n-cpp` → env `CPP_THREADS`) for both `_i` and `_d` harnesses.
+- Vyper phase: validation runs across all pools with `--n-py` worker processes (1 = sequential). Each worker handles a shard of pools in its own process for isolation.
 - Writes results to a timestamped folder under `python/benchmark_pool/data/results/`.
 
 Advanced:
-- Run C++ only for a dataset:
+- Run C++ only for a dataset (mode i|d):
   ```bash
-  uv run python/cpp_pool/cpp_pool_runner.py \
+  uv run python/cpp_pool/cpp_pool_runner.py i \
     python/benchmark_pool/data/pools.json \
     python/benchmark_pool/data/sequences.json \
-    python/benchmark_pool/data/results/cpp_only.json
+    python/benchmark_pool/data/results/cpp_i_only.json
+
+  uv run python/cpp_pool/cpp_pool_runner.py d \
+    python/benchmark_pool/data/pools.json \
+    python/benchmark_pool/data/sequences.json \
+    python/benchmark_pool/data/results/cpp_d_only.json
   ```
 - Run Vyper only:
   ```bash
@@ -125,37 +132,21 @@ Advanced:
 
 ## C++ Variants Benchmark (integer vs double)
 
-Compare C++ implementations side-by-side on the same dataset:
+The unified harness supports both variants; the full benchmark runs both and emits:
+- `cpp_i_combined.json` (integer/uint256)
+- `cpp_d_combined.json` (double)
+- `vyper_combined.json` (reference)
 
-```bash
-# Uses the same generated dataset under python/benchmark_pool/data/
-uv run python/benchmark_pool/run_cpp_variants.py --n-cpp 8
-
-# Options:
-#   --pools-file FILE       Path to pools.json (default: data/pools.json)
-#   --sequences-file FILE   Path to sequences.json (default: data/sequences.json)
-#   --n-cpp N               C++ threads per process (CPP_THREADS)
-```
-
-Outputs are saved in a timestamped folder under `python/benchmark_pool/data/results/` with:
-- `cpp_i.json` (integer/uint256 results)
-- `cpp_d.json` (double-precision results)
-- `summary.json` (timing and final-state absolute diffs vs integer)
-
-- Run C++ double-precision only:
-  ```bash
-  uv run python/cpp_pool/cpp_pool_runner_d.py \
-    python/benchmark_pool/data/pools.json \
-    python/benchmark_pool/data/sequences.json \
-    python/benchmark_pool/data/results/cpp_d_only.json
-  ```
+Use debug helpers to compare variants: `uv run python/benchmark_pool/debug/variants_diff.py`
 
 ## Parity & Testing Notes
 
 - Donation logic: only unlocked donation shares are burnable; protection window damping and cap enforced identically.
 - Oracle EMA: moving average via `wad_exp`; state `last_prices` is capped to `2 * price_scale` when updating EMA.
-- Time-travel: absolute timestamp jumps affect `block_timestamp` only; `last_timestamp` is updated in EMA path (tweak_price) for parity.
+- Time-travel: relative seconds preferred; absolute timestamp supported for legacy. `last_timestamp` updates only in EMA path (tweak_price) for parity.
 - Debug helpers: see `python/benchmark_pool/debug/` for optional diff/inspect utilities.
+- Integer (`_i`) is parity-accurate; double (`_d`) is approximate (≈1% over long runs) but faster (≈2×).
+- Vyper parallelism: `--n-py > 1` enables multiple worker processes; depending on environment, titanoboa stability may prefer `--n-py 1–2`.
 - Inspect runs (debug helpers):
   - Diff summary: `uv run python/benchmark_pool/debug/parse_and_diff.py [run_dir]`
   - Context around first divergence: `uv run python/benchmark_pool/debug/inspect_context.py <run_dir>`
