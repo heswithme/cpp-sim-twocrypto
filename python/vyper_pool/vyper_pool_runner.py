@@ -238,11 +238,17 @@ class VyperPoolRunner:
         
         return snapshots
     
-    def run_benchmark(self, pool_configs_file: str, sequences_file: str) -> Dict:
+    def run_benchmark(self, pool_configs_file: str, sequences_file: str, pool_names: List[str] | None = None) -> Dict:
         """Run complete benchmark with given configurations."""
         # Load configurations
         with open(pool_configs_file, 'r') as f:
-            pools_data = json.load(f)["pools"]
+            pools_all = json.load(f)["pools"]
+        # Optional pool filtering by name
+        if pool_names:
+            wanted = set(pool_names)
+            pools_data = [p for p in pools_all if p.get("name") in wanted]
+        else:
+            pools_data = pools_all
         
         with open(sequences_file, 'r') as f:
             sequences_data = json.load(f)["sequences"]
@@ -251,7 +257,7 @@ class VyperPoolRunner:
             raise RuntimeError("No sequences found in sequences.json")
         sequence = sequences_data[0]
         
-        # Pool isolation not supported; run all pools
+        # Pool isolation handled by filtering above
         
         # Deploy infrastructure once
         self.deploy_infrastructure()
@@ -307,7 +313,7 @@ class VyperPoolRunner:
         return {"results": results}
 
 
-def run_vyper_pool(pool_configs_file: str, sequences_file: str, output_file: str) -> Dict:
+def run_vyper_pool(pool_configs_file: str, sequences_file: str, output_file: str, pool_names: List[str] | None = None) -> Dict:
     """Main entry point for running Vyper pool benchmark."""
     # Path to Vyper contracts (repo-relative)
     from pathlib import Path
@@ -315,7 +321,7 @@ def run_vyper_pool(pool_configs_file: str, sequences_file: str, output_file: str
     
     # Create runner and execute benchmark
     runner = VyperPoolRunner(contracts_path)
-    results = runner.run_benchmark(pool_configs_file, sequences_file)
+    results = runner.run_benchmark(pool_configs_file, sequences_file, pool_names)
     
     # Save results
     with open(output_file, 'w') as f:
@@ -329,26 +335,33 @@ def run_vyper_pool(pool_configs_file: str, sequences_file: str, output_file: str
 
 def main():
     """Command-line interface."""
-    if len(sys.argv) != 4:
-        print("Usage: python vyper_pool_runner.py <pool_configs.json> <sequences.json> <output.json>")
-        return 1
-    
-    pool_configs = sys.argv[1]
-    sequences = sys.argv[2]
-    output = sys.argv[3]
-    
+    import argparse
+    ap = argparse.ArgumentParser(description="Run Vyper pool benchmark (optionally filter pools)")
+    ap.add_argument("pool_configs", help="Path to pools.json")
+    ap.add_argument("sequences", help="Path to sequences.json")
+    ap.add_argument("output", help="Path to write output results.json")
+    ap.add_argument("--pools", default=None, help="Comma-separated list of pool names to run")
+    args = ap.parse_args()
+
+    pool_configs = args.pool_configs
+    sequences = args.sequences
+    output = args.output
+
     # Check files exist
     if not os.path.exists(pool_configs):
         print(f"❌ Pool configs not found: {pool_configs}")
         return 1
-    
     if not os.path.exists(sequences):
         print(f"❌ Sequences not found: {sequences}")
         return 1
-    
+
+    pools_filter = None
+    if args.pools:
+        pools_filter = [p for p in (s.strip() for s in args.pools.split(",")) if p]
+
     # Run benchmark
     try:
-        run_vyper_pool(pool_configs, sequences, output)
+        run_vyper_pool(pool_configs, sequences, output, pools_filter)
         return 0
     except Exception as e:
         print(f"❌ Error: {e}")

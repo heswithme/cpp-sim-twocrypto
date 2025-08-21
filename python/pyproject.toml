@@ -2,7 +2,7 @@
 name = "cpp-twocrypto-benchmark"
 version = "0.1.0"
 description = "Benchmark comparison between C++ and Vyper StableswapMath implementations"
-readme = "README.md"
+readme = { text = "See the repository root README.md for full documentation.", content-type = "text/markdown" }
 requires-python = ">=3.10"
 dependencies = [
     "titanoboa>=0.1.0",

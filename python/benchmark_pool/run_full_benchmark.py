@@ -74,19 +74,60 @@ def run_cpp_double_benchmark(pool_configs_file: str, sequences_file: str, output
     }
 
 
-def run_vyper_benchmark(pool_configs_file: str, sequences_file: str, output_dir: str) -> Dict:
-    """Run Vyper benchmark and save results."""
+def run_vyper_benchmark(pool_configs_file: str, sequences_file: str, output_dir: str, n_py: int = 1) -> Dict:
+    """Run Vyper benchmark possibly with multiple worker processes and save results."""
     print("\n=== Running Vyper Benchmark ===")
-    
-    # Run benchmark
+
     vyper_output = os.path.join(output_dir, "vyper_benchmark_results.json")
-    
     start_time = time.time()
-    results = run_vyper_pool(pool_configs_file, sequences_file, vyper_output)
+
+    if n_py <= 1:
+        # Single-process path
+        results = run_vyper_pool(pool_configs_file, sequences_file, vyper_output)
+    else:
+        # Multi-process sharded by pool names
+        # Load pool names
+        with open(pool_configs_file, "r") as f:
+            pools = [p["name"] for p in json.load(f)["pools"]]
+        # Build shards (round-robin)
+        shards = [pools[i::n_py] for i in range(n_py)]
+        # Remove empty shards
+        shards = [s for s in shards if s]
+        procs: List[subprocess.Popen] = []
+        shard_files: List[str] = []
+        runner_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "vyper_pool", "vyper_pool_runner.py")
+        runner_path = os.path.abspath(runner_path)
+        for idx, names in enumerate(shards):
+            out_path = os.path.join(output_dir, f"vyper_shard_{idx:02d}.json")
+            shard_files.append(out_path)
+            cmd = [
+                sys.executable,
+                runner_path,
+                pool_configs_file,
+                sequences_file,
+                out_path,
+                "--pools",
+                ",".join(names),
+            ]
+            procs.append(subprocess.Popen(cmd))
+        # Wait and check
+        exit_codes = [p.wait() for p in procs]
+        if any(code != 0 for code in exit_codes):
+            failed = [i for i, c in enumerate(exit_codes) if c != 0]
+            raise RuntimeError(f"Vyper shard(s) failed: {failed}")
+        # Merge results
+        combined: Dict[str, Any] = {"results": []}
+        for fp in shard_files:
+            with open(fp, "r") as f:
+                shard_res = json.load(f)
+            combined["results"].extend(shard_res.get("results", []))
+        with open(vyper_output, "w") as f:
+            json.dump(combined, f, indent=2)
+        results = combined
+
     vyper_time = time.time() - start_time
-    
     print(f"✓ Vyper benchmark completed in {vyper_time:.2f}s")
-    
+
     # Extract states for each test (Vyper runner may not include 'sequence')
     vyper_states = {}
     for test in results.get("results", []):
@@ -97,12 +138,8 @@ def run_vyper_benchmark(pool_configs_file: str, sequences_file: str, output_dir:
             vyper_states[key] = test["result"].get("states") or [test["result"].get("final_state")]
         else:
             vyper_states[key] = {"error": test.get("result", {}).get("error", "Failed")}
-    
-    return {
-        "states": vyper_states,
-        "time": vyper_time,
-        "output_file": vyper_output
-    }
+
+    return {"states": vyper_states, "time": vyper_time, "output_file": vyper_output}
 
 
 def compare_results(cpp_results: Dict, vyper_results: Dict = None) -> Dict:
@@ -239,9 +276,9 @@ def _run_uv(cmd: List[str], env: Optional[Dict[str, str]] = None) -> Tuple[int, 
 
 def main():
     import argparse
-    parser = argparse.ArgumentParser(description="Run TwoCrypto full pool benchmarks (single pass, set threads via --n-cpp)")
+    parser = argparse.ArgumentParser(description="Run TwoCrypto full pool benchmarks (single pass; parallelism via --n-cpp/--n-py)")
     parser.add_argument("--workers", type=int, default=0, help="Deprecated. Ignored.")
-    parser.add_argument("--n-py", type=int, default=1, help="Deprecated. Ignored; use --n-cpp for parallelism.")
+    parser.add_argument("--n-py", type=int, default=1, help="Vyper worker processes (>=1)")
     parser.add_argument("--n-cpp", type=int, default=0, help="C++ threads per harness process (0 = auto)")
     parser.add_argument("--save-per-pool", action="store_true", help="Keep per-pool result files (cpp/<pool>.json, vyper/<pool>.json)")
     parser.add_argument("--final-only", action="store_true", help="Only save final state per test (set SAVE_LAST_ONLY=1)")
@@ -283,9 +320,8 @@ def main():
     _write_json(os.path.join(run_dir, "inputs_sequences.json"), {"sequences": [sequence]})
 
     print(f"Testing {len(pools)} pools")
-    # Explain deprecation if user set --n-py/--workers
-    if args.n_py != 1 or args.workers not in (0, 1):
-        print("Note: --n-py/--workers are ignored; harness parallelism uses --n-cpp only.")
+    if args.workers not in (0, 1):
+        print("Note: --workers is deprecated and ignored.")
 
     # Pre-build C++ harness once to avoid rebuild under contention
     try:
@@ -311,7 +347,7 @@ def main():
         cppf_info = run_cpp_double_benchmark(pool_configs_path, sequences_path, run_dir)
         cppf_time = cppf_info["time"]
 
-        vy_info = run_vyper_benchmark(pool_configs_path, sequences_path, run_dir)
+        vy_info = run_vyper_benchmark(pool_configs_path, sequences_path, run_dir, n_py=args.n_py)
         vy_time = vy_info["time"]
     finally:
         # Restore env
