@@ -86,4 +86,6 @@ desktop.ini
 # twocrypto-ng will be tracked as a submodule
 # Benchmark results (generated)
 python/benchmark_pool/data/results/
+python/arb_sim/run_data/
+python/arb_sim/trade_data/
 AGENTS.md
