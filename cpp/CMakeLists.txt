@@ -32,3 +32,14 @@ target_link_libraries(benchmark_harness
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
     target_compile_options(benchmark_harness PRIVATE -O3 -march=native)
 endif()
+
+# Standalone arbitrage harness
+add_executable(arb_harness
+    src/arb_harness.cpp
+)
+target_link_libraries(arb_harness
+    Boost::json
+)
+if(CMAKE_BUILD_TYPE STREQUAL "Release")
+    target_compile_options(arb_harness PRIVATE -O3 -march=native)
+endif()

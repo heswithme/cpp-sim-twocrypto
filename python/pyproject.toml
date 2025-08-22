@@ -12,6 +12,7 @@ dependencies = [
     "rich>=13.0.0",
     "plotly>=5.0.0",
     "snekmate==0.1.2",
+    "matplotlib>=3.10.5",
 ]
 
 [tool.uv]
