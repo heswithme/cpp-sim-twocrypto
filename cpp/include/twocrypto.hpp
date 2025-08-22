@@ -13,15 +13,15 @@
 #include <iostream>
 #include "stableswap_math.hpp"
 
-namespace twocrypto_unified {
+namespace twocrypto {
 
 // Forward declare traits
 template <typename T>
 struct NumTraits;
 
 template <>
-struct NumTraits<stableswap_unified::uint256> {
-    using T = stableswap_unified::uint256;
+struct NumTraits<stableswap::uint256> {
+    using T = stableswap::uint256;
     static T PRECISION() { static T v("1000000000000000000"); return v; }
     static T FEE_PRECISION() { static T v("10000000000"); return v; }
     static T A_MULTIPLIER() { return T(10000); }
@@ -52,7 +52,7 @@ struct NumTraits<double> {
 template <typename T>
 class TwoCryptoPoolT {
 public:
-    using Ops = stableswap_unified::MathOps<T>;
+    using Ops = stableswap::MathOps<T>;
     using Traits = NumTraits<T>;
     static constexpr int N_COINS = 2;
 
@@ -173,7 +173,7 @@ private:
 
     // _xcp: cross-product invariant in xcp units (parity with Vyper virtual price math)
     T _xcp(const T& _D, const T& price_scale) const {
-        if constexpr (std::is_same_v<T, stableswap_unified::uint256>) {
+        if constexpr (std::is_same_v<T, stableswap::uint256>) {
             auto sqrt_price = boost::multiprecision::sqrt(
                 Traits::PRECISION() * price_scale
             );
@@ -315,7 +315,7 @@ public:
         if (old_D > Traits::ZERO()) {
             T approx_fee  = _calc_token_fee(amounts, xp, donation, /*deposit=*/true);
             T d_token_fee = approx_fee * d_token / NumTraits<T>::FEE_PRECISION();
-            if constexpr (std::is_same_v<T, stableswap_unified::uint256>) {
+            if constexpr (std::is_same_v<T, stableswap::uint256>) {
                 // Match Vyper: add +1 after division to avoid rounding undercharge
                 d_token_fee += Traits::ONE();
             }
@@ -487,15 +487,15 @@ public:
         uint64_t last_ts = last_timestamp;
         if (last_ts < block_timestamp) {
             T dt = T(block_timestamp - last_ts);
-            if constexpr (std::is_same_v<T, stableswap_unified::uint256>) {
-                auto neg = stableswap_unified::int256(
+            if constexpr (std::is_same_v<T, stableswap::uint256>) {
+                auto neg = stableswap::int256(
                     -(
-                        stableswap_unified::int256(dt) *
-                        stableswap_unified::int256(NumTraits<T>::PRECISION()) /
-                        stableswap_unified::int256(ma_time)
+                        stableswap::int256(dt) *
+                        stableswap::int256(NumTraits<T>::PRECISION()) /
+                        stableswap::int256(ma_time)
                     )
                 );
-                T alpha  = stableswap_unified::MathOps<T>::wad_exp(neg);
+                T alpha  = stableswap::MathOps<T>::wad_exp(neg);
                 T capped = last_prices;
                 if (capped > 2 * price_scale) capped = 2 * price_scale;
                 price_oracle = (
@@ -515,7 +515,7 @@ public:
 
         // Update last_prices from current state
         last_prices = (
-            stableswap_unified::MathOps<T>::get_p(xp, _D, _A_gamma) * price_scale
+            stableswap::MathOps<T>::get_p(xp, _D, _A_gamma) * price_scale
         ) / NumTraits<T>::PRECISION();
 
         // Compute current virtual price and profits
@@ -531,7 +531,7 @@ public:
 
         xcp_profit = xcp_profit + vp - old_virtual_price;
         if (trace) {
-            if constexpr (std::is_same_v<T, stableswap_unified::uint256>) {
+            if constexpr (std::is_same_v<T, stableswap::uint256>) {
                     std::cout << "TRACE tp_ema price_oracle=" << price_oracle.template convert_to<std::string>()
                           << " last_prices=" << last_prices.template convert_to<std::string>()
                           << "\n";
@@ -550,7 +550,7 @@ public:
             ? (NumTraits<T>::PRECISION() * xcp / locked_supply)
             : vp;
         if (trace) {
-            if constexpr (std::is_same_v<T, stableswap_unified::uint256>) {
+            if constexpr (std::is_same_v<T, stableswap::uint256>) {
                 std::cout << "TRACE tp_gating vp=" << vp.template convert_to<std::string>()
                           << " threshold=" << threshold_vp.template convert_to<std::string>()
                           << " vp_boosted=" << vp_boosted.template convert_to<std::string>()
@@ -576,7 +576,7 @@ public:
 
             T step = NumTraits<T>::max(adjustment_step, norm / 5);
             if (trace) {
-                if constexpr (std::is_same_v<T, stableswap_unified::uint256>) {
+                if constexpr (std::is_same_v<T, stableswap::uint256>) {
                     std::cout << "TRACE tp_norm norm=" << norm.template convert_to<std::string>()
                               << " step=" << step.template convert_to<std::string>()
                               << "\n";
@@ -592,7 +592,7 @@ public:
                 auto xp_new = xp;
                 xp_new[1] = xp[1] * p_new / price_scale;
 
-                T D_new   = stableswap_unified::MathOps<T>::newton_D(
+                T D_new   = stableswap::MathOps<T>::newton_D(
                     _A_gamma[0], _A_gamma[1], xp_new, 0
                 );
                 T new_xcp = _xcp(D_new, p_new);
@@ -620,7 +620,7 @@ public:
 
                 // Commit if within allowed region
                 if (trace) {
-                    if constexpr (std::is_same_v<T, stableswap_unified::uint256>) {
+                    if constexpr (std::is_same_v<T, stableswap::uint256>) {
                         std::cout << "TRACE tp_candidate p_new=" << p_new.template convert_to<std::string>()
                                   << " new_vp=" << new_vp.template convert_to<std::string>()
                                   << " burn=" << burn.template convert_to<std::string>()
@@ -643,7 +643,7 @@ public:
                     }
                     if (trace) {
                         std::cout << "TRACE tp_commit price_scale=";
-                        if constexpr (std::is_same_v<T, stableswap_unified::uint256>) {
+                        if constexpr (std::is_same_v<T, stableswap::uint256>) {
                             std::cout << cached_price_scale.template convert_to<std::string>();
                         } else {
                             std::cout << cached_price_scale;
@@ -687,7 +687,7 @@ public:
     }
 };
 
-using TwoCryptoPoolI = TwoCryptoPoolT<stableswap_unified::uint256>;
+using TwoCryptoPoolI = TwoCryptoPoolT<stableswap::uint256>;
 using TwoCryptoPoolD = TwoCryptoPoolT<double>;
 
-} // namespace twocrypto_unified
+} // namespace twocrypto

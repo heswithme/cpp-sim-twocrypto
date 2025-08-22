@@ -5,7 +5,7 @@
 #include <cstdlib>
 #include <cstring>
 
-using stableswap_unified::uint256;
+using stableswap::uint256;
 
 extern "C" {
 
@@ -29,7 +29,7 @@ const char* newton_D(const char* A, const char* gamma, const char* x0, const cha
     uint256 a = to_u256(A);
     uint256 g = to_u256(gamma);
     std::array<uint256, 2> xp{ to_u256(x0), to_u256(x1) };
-    uint256 D = stableswap_unified::MathOps<uint256>::newton_D(a, g, xp, uint256(0));
+    uint256 D = stableswap::MathOps<uint256>::newton_D(a, g, xp, uint256(0));
     return alloc_cstr(D.str());
 }
 
@@ -40,7 +40,7 @@ char** get_y(const char* A, const char* gamma, const char* x0, const char* x1, c
     std::array<uint256, 2> xp{ to_u256(x0), to_u256(x1) };
     uint256 d = to_u256(D);
     size_t idx = static_cast<size_t>(i);
-    auto res = stableswap_unified::MathOps<uint256>::get_y(a, g, xp, d, idx);
+    auto res = stableswap::MathOps<uint256>::get_y(a, g, xp, d, idx);
     char** arr = static_cast<char**>(std::malloc(sizeof(char*) * 2));
     if (!arr) return nullptr;
     arr[0] = alloc_cstr(res.value.str());
@@ -53,7 +53,7 @@ const char* get_p(const char* x0, const char* x1, const char* D, const char* A) 
     std::array<uint256, 2> xp{ to_u256(x0), to_u256(x1) };
     uint256 d = to_u256(D);
     std::array<uint256, 2> A_gamma{ to_u256(A), uint256(0) };
-    uint256 p = stableswap_unified::MathOps<uint256>::get_p(xp, d, A_gamma);
+    uint256 p = stableswap::MathOps<uint256>::get_p(xp, d, A_gamma);
     return alloc_cstr(p.str());
 }
 

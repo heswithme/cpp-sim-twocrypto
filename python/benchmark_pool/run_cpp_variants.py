@@ -49,6 +49,20 @@ def _extract_states(results: Dict[str, Any]) -> Dict[str, Any]:
     return states
 
 
+def _ensure_built_harness():
+    """Build typed C++ harnesses once to avoid rebuilds when switching modes."""
+    build_dir = (REPO_ROOT / "cpp" / "build").resolve()
+    build_dir.mkdir(parents=True, exist_ok=True)
+    # Configure if needed (Release)
+    cache = build_dir / "CMakeCache.txt"
+    if not cache.exists():
+        import subprocess
+        subprocess.run(["cmake", "..", "-DCMAKE_BUILD_TYPE=Release"], cwd=str(build_dir), check=True)
+    # Build both typed harnesses
+    import subprocess
+    subprocess.run(["cmake", "--build", ".", "--target", "benchmark_harness_i", "benchmark_harness_d"], cwd=str(build_dir), check=True)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Run C++ variants (i vs d) over the same dataset")
     ap.add_argument("--pools-file", default=str(PYTHON_DIR / "benchmark_pool" / "data" / "pools.json"), help="Path to pools.json")
@@ -81,6 +95,12 @@ def main() -> int:
             os.environ.pop("SAVE_LAST_ONLY", None)
         elif args.final_only:
             os.environ["SAVE_LAST_ONLY"] = "1"
+
+        # Pre-build typed harnesses to avoid sequential rebuilds
+        try:
+            _ensure_built_harness()
+        except Exception as e:
+            print(f"⚠ Failed to prebuild harnesses: {e}. Proceeding anyway.")
 
         # Run integer
         print("\n=== C++ integer (uint256) ===")

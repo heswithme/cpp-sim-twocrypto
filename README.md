@@ -31,8 +31,8 @@ cpp-twocrypto/
 │   │   ├── stableswap_math.hpp          # Templated math (uint256 and double specializations)
 │   │   └── twocrypto.hpp                # Templated pool (TwoCryptoPoolT<T>)
 │   ├── src/
-│   │   └── benchmark_harness.cpp        # Unified JSON harness (mode i|d)
-│   └── CMakeLists.txt                   # Builds benchmark_harness
+│   │   └── benchmark_harness.cpp        # JSON harness (builds i|d and unified)
+│   └── CMakeLists.txt                   # Builds benchmark_harness_i, benchmark_harness_d (+ unified)
 │
 └── python/                              # Benchmarks and runners
     ├── benchmark_math/                  # Math-only benchmarks (C++ vs Vyper)
@@ -61,11 +61,15 @@ cpp-twocrypto/
 ```bash
 # Build (Release recommended)
 cmake -B cpp/build cpp -DCMAKE_BUILD_TYPE=Release
-cmake --build cpp/build --target benchmark_harness -j  # Unified harness (mode i|d)
+# Build typed harnesses so switching modes requires no rebuild
+cmake --build cpp/build --target benchmark_harness_i benchmark_harness_d -j
+# (Optional) also build unified harness (accepts mode i|d at runtime)
+cmake --build cpp/build --target benchmark_harness -j
 
-# Run harness directly (JSON I/O handled by Python runners normally)
-./cpp/build/benchmark_harness i <pools.json> <sequences.json> <output.json>  # Integer/uint256
-./cpp/build/benchmark_harness d <pools.json> <sequences.json> <output.json>  # Double-precision
+# Run harness directly (JSON I/O normally driven by Python)
+./cpp/build/benchmark_harness_i <pools.json> <sequences.json> <output.json>  # Integer/uint256
+./cpp/build/benchmark_harness_d <pools.json> <sequences.json> <output.json>  # Double-precision
+./cpp/build/benchmark_harness i <pools.json> <sequences.json> <output.json>  # Unified, mode-select
 
 # Control internal parallelism
 CPP_THREADS=8 ./cpp/build/benchmark_harness i ...

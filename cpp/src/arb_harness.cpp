@@ -54,10 +54,10 @@ static double dyn_fee(const std::array<double,2>& xp, double mid_fee, double out
     return mid_fee * B + out_fee * (1.0 - B);
 }
 
-static double spot_price(const twocrypto_unified::TwoCryptoPoolT<double>& pool) {
+static double spot_price(const twocrypto::TwoCryptoPoolT<double>& pool) {
     std::array<double,2> xp{ pool.balances[0] * pool.precisions[0], pool.balances[1] * pool.precisions[1] * pool.cached_price_scale };
     std::array<double,2> A_gamma{ pool.A, pool.gamma };
-    return stableswap_unified::MathOps<double>::get_p(xp, pool.D, A_gamma) * pool.cached_price_scale;
+    return stableswap::MathOps<double>::get_p(xp, pool.D, A_gamma) * pool.cached_price_scale;
 }
 // ---- Simulation & Decision --------------------------------------------------
 struct SimulationResult {
@@ -68,13 +68,13 @@ struct SimulationResult {
 };
 
 static std::optional<SimulationResult> simulate_exchange(
-    const twocrypto_unified::TwoCryptoPoolT<double>& pool,
+    const twocrypto::TwoCryptoPoolT<double>& pool,
     int i, int j,
     double dx,
     double cex_price,
     const Costs& costs
 ) {
-    using Ops = stableswap_unified::MathOps<double>;
+    using Ops = stableswap::MathOps<double>;
     const double price_scale = pool.cached_price_scale;
 
     // Build local xp with dx injected on side i
@@ -130,7 +130,7 @@ struct Decision {
 };
 
 static Decision decide_trade(
-    const twocrypto_unified::TwoCryptoPoolT<double>& pool,
+    const twocrypto::TwoCryptoPoolT<double>& pool,
     double cex_price,
     const Costs& costs,
     double notional_cap_coin0,
@@ -199,8 +199,8 @@ static Decision decide_trade(
     return d;
 }
 
-static bool simulate_exchange(const twocrypto_unified::TwoCryptoPoolT<double>& pool, int i, int j, double dx, double p_cex, const Costs& costs, double& dy_after_fee, double& profit_coin0, double& fee_tokens) {
-    using Ops = stableswap_unified::MathOps<double>;
+static bool simulate_exchange(const twocrypto::TwoCryptoPoolT<double>& pool, int i, int j, double dx, double p_cex, const Costs& costs, double& dy_after_fee, double& profit_coin0, double& fee_tokens) {
+    using Ops = stableswap::MathOps<double>;
     const double price_scale = pool.cached_price_scale;
     std::array<double,2> balances = pool.balances; balances[i] += dx;
     std::array<double,2> xp{ balances[0] * pool.precisions[0], balances[1] * pool.precisions[1] * price_scale };
@@ -281,7 +281,7 @@ static std::string to_str_1e18(double v) {
     std::ostringstream oss; oss.setf(std::ios::fixed); oss.precision(0); oss << scaled; return oss.str();
 }
 
-static json::object pool_state_json(const twocrypto_unified::TwoCryptoPoolT<double>& p) {
+static json::object pool_state_json(const twocrypto::TwoCryptoPoolT<double>& p) {
     json::object o;
     o["balances"]     = json::array{to_str_1e18(p.balances[0]), to_str_1e18(p.balances[1])};
     o["xp"]           = json::array{to_str_1e18(p.balances[0] * p.precisions[0]), to_str_1e18(p.balances[1] * p.precisions[1] * p.cached_price_scale)};
@@ -403,7 +403,7 @@ int run_arb_mode(const std::string& pool_json, const std::string& candles_path, 
         auto t_read1 = clk::now();
         auto events  = gen_events(candles);
         auto t_exec0 = clk::now();
-        using Pool = twocrypto_unified::TwoCryptoPoolT<double>;
+        using Pool = twocrypto::TwoCryptoPoolT<double>;
         PoolInit cfg; Costs costs;
         if (pool_json != "-" && !pool_json.empty()) {
             parse_pool_and_costs(pool_json, cfg, costs);

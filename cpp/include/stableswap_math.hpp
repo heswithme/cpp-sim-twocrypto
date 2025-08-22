@@ -8,7 +8,7 @@
 #include <cmath>
 #include <boost/multiprecision/cpp_int.hpp>
 
-namespace stableswap_unified {
+namespace stableswap {
 
 using uint256 = boost::multiprecision::uint256_t;
 using int256 = boost::multiprecision::int256_t;
@@ -219,4 +219,4 @@ struct MathOps<uint256> : MathOpsCommon<uint256> {
     }
 };
 
-} // namespace stableswap_unified
+} // namespace stableswap

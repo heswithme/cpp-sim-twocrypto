@@ -342,7 +342,7 @@ def print_summary(parity_cpp_vs_vy: Dict, times: Dict[str, float], d_vs_vy_stats
 
 
 def _ensure_built_harness():
-    """Build unified C++ harness once to avoid parallel rebuild races."""
+    """Build typed C++ harnesses once to avoid rebuilds when switching modes."""
     repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     build_dir = os.path.join(repo_root, "../cpp/build")
     build_dir = os.path.abspath(build_dir)
@@ -350,8 +350,8 @@ def _ensure_built_harness():
     # Configure if needed (Release)
     if not os.path.exists(os.path.join(build_dir, "CMakeCache.txt")):
         subprocess.run(["cmake", "..", "-DCMAKE_BUILD_TYPE=Release"], cwd=build_dir, check=True)
-    # Build unified harness
-    subprocess.run(["cmake", "--build", ".", "--target", "benchmark_harness"], cwd=build_dir, check=True)
+    # Build both typed harnesses
+    subprocess.run(["cmake", "--build", ".", "--target", "benchmark_harness_i", "benchmark_harness_d"], cwd=build_dir, check=True)
 
 
 def _write_json(path: str, obj: Any):

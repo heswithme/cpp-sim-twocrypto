@@ -10,15 +10,15 @@
 #include <mutex>
 #include <atomic>
 
-using namespace twocrypto_unified;
+using namespace twocrypto;
 namespace json = boost::json;
 
 template <typename T>
 T from_string_scaled(const std::string& s); // primary: uint256 specialization below
 
 template <>
-stableswap_unified::uint256 from_string_scaled<stableswap_unified::uint256>(const std::string& s) {
-    return stableswap_unified::uint256(s); // assume already scaled in JSON
+stableswap::uint256 from_string_scaled<stableswap::uint256>(const std::string& s) {
+    return stableswap::uint256(s); // assume already scaled in JSON
 }
 
 template <>
@@ -30,7 +30,7 @@ template <typename T>
 T from_fee_scaled(const std::string& s);
 
 template <>
-stableswap_unified::uint256 from_fee_scaled<stableswap_unified::uint256>(const std::string& s) { return stableswap_unified::uint256(s); }
+stableswap::uint256 from_fee_scaled<stableswap::uint256>(const std::string& s) { return stableswap::uint256(s); }
 
 template <>
 double from_fee_scaled<double>(const std::string& s) { return std::strtod(s.c_str(), nullptr) / 1e10; }
@@ -39,12 +39,12 @@ template <typename T>
 struct Report;
 
 template <>
-struct Report<stableswap_unified::uint256> {
-    static json::object to_json(const TwoCryptoPoolT<stableswap_unified::uint256>& p) {
-        auto to_str = [](const stableswap_unified::uint256& v){ return v.str(); };
+struct Report<stableswap::uint256> {
+    static json::object to_json(const TwoCryptoPoolT<stableswap::uint256>& p) {
+        auto to_str = [](const stableswap::uint256& v){ return v.str(); };
         json::object o;
         o["balances"] = json::array{to_str(p.balances[0]), to_str(p.balances[1])};
-        auto xp = json::array{to_str(p.balances[0] * p.precisions[0]), to_str(p.balances[1] * p.precisions[1] * p.cached_price_scale / NumTraits<stableswap_unified::uint256>::PRECISION())};
+        auto xp = json::array{to_str(p.balances[0] * p.precisions[0]), to_str(p.balances[1] * p.precisions[1] * p.cached_price_scale / NumTraits<stableswap::uint256>::PRECISION())};
         o["xp"] = xp;
         o["D"] = to_str(p.D);
         o["virtual_price"] = to_str(p.virtual_price);
@@ -125,7 +125,7 @@ int run_harness(const std::string& pools_file, const std::string& sequences_file
                 // A uses A_MULTIPLIER scale (not 1e18). gamma is unused in math here; keep unscaled.
                 T A;
                 T gamma;
-                if constexpr (std::is_same_v<T, stableswap_unified::uint256>) {
+                if constexpr (std::is_same_v<T, stableswap::uint256>) {
                     A = from_string_scaled<T>(std::string(pool_obj.at("A").as_string().c_str()));
                     gamma = from_string_scaled<T>(std::string(pool_obj.at("gamma").as_string().c_str()));
                 } else {
@@ -136,7 +136,7 @@ int run_harness(const std::string& pools_file, const std::string& sequences_file
                 T out_fee = from_fee_scaled<T>(std::string(pool_obj.at("out_fee").as_string().c_str()));
                 // fee_gamma uses PRECISION scale
                 T fee_gamma;
-                if constexpr (std::is_same_v<T, stableswap_unified::uint256>) fee_gamma = from_string_scaled<T>(std::string(pool_obj.at("fee_gamma").as_string().c_str()));
+                if constexpr (std::is_same_v<T, stableswap::uint256>) fee_gamma = from_string_scaled<T>(std::string(pool_obj.at("fee_gamma").as_string().c_str()));
                 else fee_gamma = std::strtod(std::string(pool_obj.at("fee_gamma").as_string().c_str()).c_str(), nullptr) / 1e18;
                 T allowed_extra_profit = from_string_scaled<T>(std::string(pool_obj.at("allowed_extra_profit").as_string().c_str()));
                 if constexpr (std::is_same_v<T, double>) allowed_extra_profit = std::strtod(std::string(pool_obj.at("allowed_extra_profit").as_string().c_str()).c_str(), nullptr) / 1e18;
@@ -144,7 +144,7 @@ int run_harness(const std::string& pools_file, const std::string& sequences_file
                 if constexpr (std::is_same_v<T, double>) adjustment_step = std::strtod(std::string(pool_obj.at("adjustment_step").as_string().c_str()).c_str(), nullptr) / 1e18;
                 // ma_time is in seconds (unscaled)
                 T ma_time;
-                if constexpr (std::is_same_v<T, stableswap_unified::uint256>) ma_time = from_string_scaled<T>(std::string(pool_obj.at("ma_time").as_string().c_str()));
+                if constexpr (std::is_same_v<T, stableswap::uint256>) ma_time = from_string_scaled<T>(std::string(pool_obj.at("ma_time").as_string().c_str()));
                 else ma_time = std::strtod(std::string(pool_obj.at("ma_time").as_string().c_str()).c_str(), nullptr);
                 T initial_price = from_string_scaled<T>(std::string(pool_obj.at("initial_price").as_string().c_str()));
                 std::array<T,2> initial_amounts = {from_string_scaled<T>(std::string(init_liq[0].as_string().c_str())), from_string_scaled<T>(std::string(init_liq[1].as_string().c_str()))};
@@ -225,12 +225,30 @@ int run_harness(const std::string& pools_file, const std::string& sequences_file
     } catch (const std::exception& e) { std::cerr << "Error: " << e.what() << std::endl; return 1; }
 }
 
+#if defined(HARNESS_MODE_I)
+int main(int argc, char* argv[]) {
+    if (argc < 4) {
+        std::cerr << "Usage: " << argv[0] << " <pools.json> <sequences.json> <output.json>" << std::endl; return 1;
+    }
+    std::string pools = argv[1]; std::string seq = argv[2]; std::string out = argv[3];
+    return run_harness<stableswap::uint256>(pools, seq, out);
+}
+#elif defined(HARNESS_MODE_D)
+int main(int argc, char* argv[]) {
+    if (argc < 4) {
+        std::cerr << "Usage: " << argv[0] << " <pools.json> <sequences.json> <output.json>" << std::endl; return 1;
+    }
+    std::string pools = argv[1]; std::string seq = argv[2]; std::string out = argv[3];
+    return run_harness<double>(pools, seq, out);
+}
+#else
 int main(int argc, char* argv[]) {
     if (argc < 5) {
         std::cerr << "Usage: " << argv[0] << " <mode:i|d> <pools.json> <sequences.json> <output.json>" << std::endl; return 1;
     }
     std::string mode = argv[1]; std::string pools = argv[2]; std::string seq = argv[3]; std::string out = argv[4];
-    if (mode == "i") return run_harness<stableswap_unified::uint256>(pools, seq, out);
+    if (mode == "i") return run_harness<stableswap::uint256>(pools, seq, out);
     if (mode == "d") return run_harness<double>(pools, seq, out);
     std::cerr << "Unknown mode: " << mode << std::endl; return 1;
 }
+#endif
