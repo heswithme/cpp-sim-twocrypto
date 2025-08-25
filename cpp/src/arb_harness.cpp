@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <cmath>
 #include <cstdint>
 #include <fcntl.h>
 #include <fstream>
@@ -31,6 +32,11 @@
 namespace json = boost::json;
 
 namespace {
+inline bool differs_rel(double a, double b, double rel = 1e-15, double abs_eps = 0.0) {
+    double da = std::abs(a - b);
+    double scale = std::max(1.0, std::max(std::abs(a), std::abs(b)));
+    return da > std::max(abs_eps, rel * scale);
+}
 struct Costs {
     double arb_fee_bps{10.0};
     double gas_coin0{0.0};
@@ -45,6 +51,10 @@ struct Metrics {
     double lp_fee_coin0{0};
     double arb_pnl_coin0{0};
     size_t n_rebalances{0};
+    // Donation stats
+    size_t donations{0};
+    double donation_coin0_total{0.0};
+    std::array<double,2> donation_amounts_total{0.0, 0.0};
 };
 
 // Simple stdout guard for cleaner multi-threaded logs
@@ -329,6 +339,9 @@ struct PoolInit {
     double initial_price{1.0};
     std::array<double,2> initial_liq{1e6,1e6};
     uint64_t start_ts{0};
+    // Donation controls (harness-only)
+    double donation_apy{0.0};              // plain fraction per year, e.g., 0.05 = 5%
+    double donation_frequency{0.0};        // seconds between donations
 };
 
 static void parse_pool_entry(const json::object& entry, PoolInit& out_pool, Costs& out_costs, json::object& echo_pool, json::object& echo_costs) {
@@ -349,6 +362,9 @@ static void parse_pool_entry(const json::object& entry, PoolInit& out_pool, Cost
     if (auto* v = pool.if_contains("ma_time")) out_pool.ma_time = parse_plain_double(*v);
     if (auto* v = pool.if_contains("initial_price")) out_pool.initial_price = parse_scaled_1e18(*v);
     if (auto* v = pool.if_contains("start_timestamp")) out_pool.start_ts = static_cast<uint64_t>(parse_plain_double(*v));
+    // Donation params (plain fraction for APY; frequency in seconds)
+    if (auto* v = pool.if_contains("donation_apy")) out_pool.donation_apy = parse_plain_double(*v);
+    if (auto* v = pool.if_contains("donation_frequency")) out_pool.donation_frequency = parse_plain_double(*v);
     if (auto* c = entry.if_contains("costs")) {
         echo_costs = c->as_object();
         auto co = c->as_object();
@@ -440,14 +456,73 @@ int main(int argc, char* argv[]) {
 
                     using Pool = twocrypto::TwoCryptoPoolT<double>;
                     Pool pool(cfg.precisions, cfg.A, cfg.gamma, cfg.mid_fee, cfg.out_fee, cfg.fee_gamma, cfg.allowed_extra, cfg.adj_step, cfg.ma_time, cfg.initial_price);
-                    if (cfg.start_ts != 0) pool.set_block_timestamp(cfg.start_ts);
+                    // Initialize timestamp baseline so EMA can progress (before any liquidity is added)
+                    uint64_t init_ts = 0;
+                    if (cfg.start_ts != 0) init_ts = cfg.start_ts;
+                    else if (!events.empty()) init_ts = events.front().ts;
+                    if (init_ts != 0) pool.set_block_timestamp(init_ts);
                     (void)pool.add_liquidity(cfg.initial_liq, 0.0);
 
                     Metrics m{};
                     json::array actions;
+                    // Donation scheduler
+                    const double SECONDS_PER_YEAR = 365.0 * 86400.0;
+                    bool donations_enabled = (cfg.donation_apy > 0.0) && (cfg.donation_frequency > 0.0);
+                    uint64_t next_donation_ts = 0;
+                    if (donations_enabled && !events.empty()) {
+                        uint64_t base_ts = (cfg.start_ts != 0) ? cfg.start_ts : events.front().ts;
+                        next_donation_ts = base_ts + static_cast<uint64_t>(cfg.donation_frequency);
+                    }
                     auto t_pool0 = clk::now();
                     for (const auto& ev : events) {
                         pool.set_block_timestamp(ev.ts);
+                        // Apply any due donations before trading
+                        if (donations_enabled) {
+                            while (next_donation_ts != 0 && ev.ts >= next_donation_ts) {
+                                // Compute donation sized as fraction of current TVL in coin0
+                                double ps = pool.cached_price_scale;
+                                double tvl_coin0 = pool.balances[0] + pool.balances[1] * ps;
+                                double frac = cfg.donation_apy * (cfg.donation_frequency / SECONDS_PER_YEAR);
+                                // Skip if fraction exceeds cap approximation (avoid revert/noise)
+                                if (frac > pool.donation_shares_max_ratio) {
+                                    next_donation_ts += static_cast<uint64_t>(cfg.donation_frequency);
+                                    if (next_donation_ts <= ev.ts) next_donation_ts = ev.ts + 1;
+                                    continue;
+                                }
+                                double donate_coin0 = tvl_coin0 * frac;
+                                if (donate_coin0 > 0.0) {
+                                    double amt0 = 0.5 * donate_coin0;
+                                    double amt1 = (0.5 * donate_coin0) / (ps > 0.0 ? ps : 1.0);
+                                    try {
+                                        double price_scale_before = pool.cached_price_scale;
+                                        double minted = pool.add_liquidity({amt0, amt1}, 0.0, true);
+                                        double price_scale_after = pool.cached_price_scale;
+                                        m.donations += 1;
+                                        m.donation_coin0_total += donate_coin0;
+                                        m.donation_amounts_total[0] += amt0;
+                                        m.donation_amounts_total[1] += amt1;
+                                        if (differs_rel(price_scale_after, price_scale_before)) m.n_rebalances += 1;
+                                        if (save_actions) {
+                                            json::object da;
+                                            da["type"] = "donation";
+                                            da["ts"] = next_donation_ts;
+                                            da["amounts"] = json::array{amt0, amt1};
+                                            da["minted"] = minted;
+                                            da["tvl_coin0_before"] = tvl_coin0;
+                                            da["price_scale"] = ps;
+                                            actions.push_back(da);
+                                        }
+                                    } catch (...) {
+                                        // donation failed (e.g., cap). Skip silently.
+                                    }
+                                }
+                                next_donation_ts += static_cast<uint64_t>(cfg.donation_frequency);
+                                if (next_donation_ts <= ev.ts) {
+                                    // avoid stuck if frequency ridiculously small
+                                    next_donation_ts = ev.ts + 1;
+                                }
+                            }
+                        }
                         double pre_p_pool = spot_price(pool);
                         double notional_cap_coin0 = std::numeric_limits<double>::infinity();
                         if (costs.use_volume_cap) notional_cap_coin0 = ev.volume * ev.p_cex * costs.volume_cap_mult;
@@ -458,11 +533,12 @@ int main(int argc, char* argv[]) {
                             auto res = pool.exchange((double)d.i, (double)d.j, d.dx, 0.0);
                             double dy_after_fee = res[0];
                             double fee_tokens   = res[1];
-                            double price_scale_after = res[2];
+                            // Read the committed value directly from the pool after exchange
+                            double price_scale_after = pool.cached_price_scale;
                             m.trades   += 1;
                             m.notional += d.notional_coin0;
                             m.lp_fee_coin0 += (d.j==1 ? fee_tokens * ev.p_cex : fee_tokens);
-                            if (price_scale_after != price_scale_before) m.n_rebalances += 1;
+                            if (differs_rel(price_scale_after, price_scale_before)) m.n_rebalances += 1;
                             double profit_coin0 = 0.0;
                             if (d.i == 0 && d.j == 1) {
                                 double coin0_out_cex = dy_after_fee * ev.p_cex;
@@ -476,6 +552,7 @@ int main(int argc, char* argv[]) {
                             m.arb_pnl_coin0 += profit_coin0;
                             if (save_actions) {
                                 json::object tr;
+                                tr["type"] = "exchange";
                                 tr["ts"] = ev.ts; tr["i"] = d.i; tr["j"] = d.j; tr["dx"] = d.dx;
                                 tr["dy_after_fee"] = dy_after_fee; tr["fee_tokens"] = fee_tokens;
                                 tr["profit_coin0"] = profit_coin0; tr["p_cex"] = ev.p_cex; tr["p_pool_before"] = pre_p_pool;
@@ -493,6 +570,9 @@ int main(int argc, char* argv[]) {
                     summary["lp_fee_coin0"] = m.lp_fee_coin0;
                     summary["arb_pnl_coin0"] = m.arb_pnl_coin0;
                     summary["n_rebalances"] = m.n_rebalances;
+                    summary["donations"] = m.donations;
+                    summary["donation_coin0_total"] = m.donation_coin0_total;
+                    summary["donation_amounts_total"] = json::array{m.donation_amounts_total[0], m.donation_amounts_total[1]};
                     summary["pool_exec_ms"] = pool_exec_ms;
 
                     json::object params;

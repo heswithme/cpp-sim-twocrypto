@@ -44,7 +44,7 @@ class ArbHarnessRunner:
 
     def run(self, pools_json: Path, candles_path: Path, out_json_path: Path,
             n_candles: int = 0, save_actions: bool = False,
-            min_swap: 'Optional[float]' = None, max_swap: 'Optional[float]' = None,
+            min_swap: float = 1e-12, max_swap: float = 1.0,
             threads: int = 1) -> Dict[str, Any]:
         print("Running arb_harness...")
         cmd = [str(self.exe_path), str(pools_json), str(candles_path), str(out_json_path)]

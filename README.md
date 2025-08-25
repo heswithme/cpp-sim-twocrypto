@@ -114,6 +114,14 @@ Key flags:
 - `--save-actions`: include executed trades in result JSON for slower Vyper replay later.
  - `-n/--threads N`: number of C++ worker threads (default: hardware threads).
 
+Donation source (harness-only):
+- Each pool can specify periodic donations that add balanced liquidity as `add_liquidity(..., donation=true)`.
+- Configure per-pool in `python/arb_sim/run_data/pool_config.json` under the `pool` object:
+  - `donation_apy`: plain fraction of TVL donated per year (e.g., `0.05` for 5%).
+  - `donation_frequency`: seconds between donations (e.g., `3600` for hourly).
+- The harness donates equal coin0 value in coin0 and coin1 using current `price_scale` at each donation tick.
+- Added result metrics: `donations`, `donation_coin0_total`, `donation_amounts_total`.
+
 Inputs:
 - Candles JSON is an array of `[timestamp, open, high, low, close, volume]`. If `timestamp > 1e10`, it is interpreted as ms and divided by 1000.
 

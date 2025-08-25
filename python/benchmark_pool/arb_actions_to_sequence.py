@@ -16,9 +16,10 @@ Outputs:
     to the benchmark schema with a "name" field.
 
 Transformations:
-  - Creates relative time travel actions between consecutive trades using
-    the provided action timestamps (seconds).
-  - Converts exchange dx from float tokens to 1e18-scaled integer string.
+  - Inserts absolute time_travel actions using each action's timestamp (seconds).
+  - Exchanges: converts `dx` from float tokens to 1e18-scaled integer string.
+  - Donations: converts to `add_liquidity` with `donation=True` and `amounts`
+    scaled to 1e18 integer strings based on the recorded donation amounts.
 
 Usage:
   uv run python/benchmark_pool/arb_actions_to_sequence.py \
@@ -97,6 +98,10 @@ def _scale_dx_to_str(dx_tokens: Decimal | float) -> str:
     return str(int(scaled))
 
 
+def _scale_amounts_to_strs(amts: List[Decimal | float]) -> List[str]:
+    return [_scale_dx_to_str(x) for x in amts]
+
+
 def convert_actions(arb_run_path: Path, *, run_index: Optional[int] = None,
                     x_val: Optional[str] = None, y_val: Optional[str] = None,
                     sequence_name: Optional[str] = None) -> Dict[str, Any]:
@@ -137,19 +142,39 @@ def convert_actions(arb_run_path: Path, *, run_index: Optional[int] = None,
 
     out_actions: List[Dict[str, Any]] = []
     for a in actions_sorted:
+        atype = str(a.get("type") or "exchange")
         ts = int(a.get("ts", start_ts))
         # Absolute timestamp to avoid drift
         out_actions.append({"type": "time_travel", "timestamp": ts})
-        # Transform exchange
-        i = int(a.get("i", 0))
-        j = int(a.get("j", 1))
-        dx_raw = a.get("dx", Decimal(0))
-        out_actions.append({
-            "type": "exchange",
-            "i": i,
-            "j": j,
-            "dx": _scale_dx_to_str(dx_raw),
-        })
+        if atype == "exchange":
+            # Transform exchange
+            i = int(a.get("i", 0))
+            j = int(a.get("j", 1))
+            dx_raw = a.get("dx", Decimal(0))
+            out_actions.append({
+                "type": "exchange",
+                "i": i,
+                "j": j,
+                "dx": _scale_dx_to_str(dx_raw),
+            })
+        elif atype == "donation":
+            # Balanced donation amounts come from arb_harness action
+            amts = a.get("amounts") or [0, 0]
+            # amounts are in tokens (float); scale to 1e18 integer strings
+            try:
+                amt0 = amts[0]
+                amt1 = amts[1]
+            except Exception:
+                amt0 = 0
+                amt1 = 0
+            out_actions.append({
+                "type": "add_liquidity",
+                "amounts": _scale_amounts_to_strs([amt0, amt1]),
+                "donation": True,
+            })
+        else:
+            # Unknown action type; skip
+            continue
     # If available, align final timestamp to arb_sim's last processed event
     # (does not affect EMA since no exchange follows).
     try:
