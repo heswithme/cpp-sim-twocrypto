@@ -88,4 +88,6 @@ desktop.ini
 python/benchmark_pool/data/results/
 python/arb_sim/run_data/
 python/arb_sim/trade_data/
+cryptopool-simulator/
 AGENTS.md
+python/benchmark_math/test_cases.json
