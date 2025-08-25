@@ -45,6 +45,35 @@ struct Metrics {
     double arb_pnl_coin0{0};
 };
 
+// ---- Pool helpers (read/estimate only) -------------------------------------
+static inline std::array<double,2> pool_xp_from(
+    const twocrypto::TwoCryptoPoolT<double>& pool,
+    const std::array<double,2>& balances,
+    double price_scale
+) {
+    return {
+        balances[0] * pool.precisions[0],
+        balances[1] * pool.precisions[1] * price_scale
+    };
+}
+
+static inline std::array<double,2> pool_xp_current(
+    const twocrypto::TwoCryptoPoolT<double>& pool
+) {
+    return pool_xp_from(pool, pool.balances, pool.cached_price_scale);
+}
+
+static inline double xp_to_tokens_j(
+    const twocrypto::TwoCryptoPoolT<double>& pool,
+    size_t j,
+    double amount_xp,
+    double price_scale
+) {
+    double v = amount_xp;
+    if (j == 1) v = v / price_scale;
+    return v / pool.precisions[j];
+}
+
 // ---- Price/Fee helpers ------------------------------------------------------
 static double dyn_fee(const std::array<double,2>& xp, double mid_fee, double out_fee, double fee_gamma) {
     double Bsum = xp[0] + xp[1];
@@ -55,7 +84,7 @@ static double dyn_fee(const std::array<double,2>& xp, double mid_fee, double out
 }
 
 static double spot_price(const twocrypto::TwoCryptoPoolT<double>& pool) {
-    std::array<double,2> xp{ pool.balances[0] * pool.precisions[0], pool.balances[1] * pool.precisions[1] * pool.cached_price_scale };
+    std::array<double,2> xp = pool_xp_current(pool);
     std::array<double,2> A_gamma{ pool.A, pool.gamma };
     return stableswap::MathOps<double>::get_p(xp, pool.D, A_gamma) * pool.cached_price_scale;
 }
@@ -79,16 +108,14 @@ static std::optional<SimulationResult> simulate_exchange(
 
     // Build local xp with dx injected on side i
     std::array<double,2> balances = pool.balances; balances[i] += dx;
-    std::array<double,2> xp{ balances[0] * pool.precisions[0], balances[1] * pool.precisions[1] * price_scale };
+    std::array<double,2> xp = pool_xp_from(pool, balances, price_scale);
 
     auto y_out = Ops::get_y(pool.A, pool.gamma, xp, pool.D, static_cast<size_t>(j));
     double dy_xp = xp[j] - y_out.value;
     xp[j] -= dy_xp; // post-trade xp for fee computation
 
     // Convert xp delta to token units (apply price_scale for coin1)
-    double dy_tokens = dy_xp;
-    if (j == 1) dy_tokens = dy_tokens / price_scale;
-    dy_tokens = dy_tokens / pool.precisions[j];
+    double dy_tokens = xp_to_tokens_j(pool, static_cast<size_t>(j), dy_xp, price_scale);
 
     // Dynamic fee in token units of coin j
     std::array<double,2> xp_fee{ xp[0], xp[1] };
@@ -134,7 +161,8 @@ static Decision decide_trade(
     double cex_price,
     const Costs& costs,
     double notional_cap_coin0,
-    double arb_step
+    double min_swap_frac,
+    double max_swap_frac
 ) {
     Decision d{};
     const double pool_price = spot_price(pool);
@@ -144,51 +172,49 @@ static Decision decide_trade(
     d.i = (pool_price < cex_price) ? 0 : 1;
     d.j = 1 - d.i;
 
-    // Sizing bounds
+    // Sizing bounds (fractions of available balance)
     double available = pool.balances[d.i];
-    double dx0  = std::max(1e-9, available * 1e-4);
-    double dxHi = available * costs.max_trade_frac;
+    double dx0  = std::max(1e-18, available * std::max(1e-12, min_swap_frac));
+    double dxHi = available * std::min(max_swap_frac, costs.max_trade_frac);
     if (costs.use_volume_cap) {
         if (d.i == 0) dxHi = std::min(dxHi, notional_cap_coin0);
         else if (cex_price > 0) dxHi = std::min(dxHi, notional_cap_coin0 / cex_price);
         if (dxHi <= 0) return d;
     }
 
-    // Coarse search with single multiplicative step (default 2.0)
-    if (arb_step <= 1.0) arb_step = 2.0;
-    double best_dx = 0.0, best_profit = 0.0, best_fee_tokens = 0.0;
-    double last_prof_dx = 0.0; // for bracket
-    double dx = dx0;
-    while (dx <= dxHi) {
-        auto sim = simulate_exchange(pool, d.i, d.j, dx, cex_price, costs);
-        if (!sim) break;
-        last_prof_dx = dx;
-        if (sim->profit_coin0 > best_profit) {
-            best_profit     = sim->profit_coin0;
-            best_dx         = dx;
-            best_fee_tokens = sim->fee_tokens;
-        }
-        dx *= arb_step;
-    }
-    if (best_dx == 0.0) return d;
+    // Evaluate profitability at bounds
+    auto sim_lo = simulate_exchange(pool, d.i, d.j, dx0, cex_price, costs);
+    if (!sim_lo) return d; // not profitable even at minimum size
+    auto sim_hi = simulate_exchange(pool, d.i, d.j, dxHi, cex_price, costs);
 
-    // Fine search by binary refinement around the last profitable bracket
-    double lo = std::max(dx0, last_prof_dx / arb_step);
-    double hi = last_prof_dx;
-    for (int it = 0; it < 12; ++it) {
-        double mid = 0.5 * (lo + hi);
-        auto sim = simulate_exchange(pool, d.i, d.j, mid, cex_price, costs);
-        if (sim) {
-            if (sim->profit_coin0 > best_profit) {
-                best_profit     = sim->profit_coin0;
-                best_dx         = mid;
-                best_fee_tokens = sim->fee_tokens;
+    double best_dx = dx0;
+    double best_profit = sim_lo->profit_coin0;
+    double best_fee_tokens = sim_lo->fee_tokens;
+
+    if (sim_hi && sim_hi->profit_coin0 >= best_profit) {
+        // Entire bracket profitable; choose upper bound
+        best_dx = dxHi;
+        best_profit = sim_hi->profit_coin0;
+        best_fee_tokens = sim_hi->fee_tokens;
+    } else {
+        // Binary search for largest profitable dx in [dx0, dxHi]
+        double lo = dx0;
+        double hi = dxHi;
+        for (int it = 0; it < 40; ++it) {
+            double mid = 0.5 * (lo + hi);
+            auto sim_mid = simulate_exchange(pool, d.i, d.j, mid, cex_price, costs);
+            if (sim_mid) {
+                lo = mid;
+                if (sim_mid->profit_coin0 >= best_profit) {
+                    best_profit = sim_mid->profit_coin0;
+                    best_dx = mid;
+                    best_fee_tokens = sim_mid->fee_tokens;
+                }
+            } else {
+                hi = mid;
             }
-            lo = mid;
-        } else {
-            hi = mid;
+            if (hi - lo <= std::max(1e-12, available * 1e-12)) break;
         }
-        if (hi - lo <= 1e-9) break;
     }
 
     d.do_trade       = true;
@@ -209,9 +235,15 @@ static bool simulate_exchange(const twocrypto::TwoCryptoPoolT<double>& pool, int
     double dy_tokens = dy_xp; if (j == 1) dy_tokens = dy_tokens / price_scale; dy_tokens = dy_tokens / pool.precisions[j];
     std::array<double,2> xp_fee{ xp[0], xp[1] }; double fee_rate = dyn_fee(xp_fee, pool.mid_fee, pool.out_fee, pool.fee_gamma);
     fee_tokens = fee_rate * dy_tokens; dy_after_fee = dy_tokens - fee_tokens;
-    double arb_fee = 0.0;
-    if (i == 0 && j == 1) { double coin0_out_cex = dy_after_fee * p_cex; arb_fee = (costs.arb_fee_bps/1e4) * coin0_out_cex; profit_coin0 = coin0_out_cex - dx - arb_fee - costs.gas_coin0; }
-    else { double coin0_spent_cex = dx * p_cex; arb_fee = (costs.arb_fee_bps/1e4) * coin0_spent_cex; profit_coin0 = dy_after_fee - coin0_spent_cex - arb_fee - costs.gas_coin0; }
+    double arb_fee = 0.0; // kept for readability; profit computed below
+    // Compute profit in coin0
+    if (i == 0 && j == 1) {
+        double coin0_out_cex = dy_after_fee * p_cex;
+        profit_coin0 = coin0_out_cex - dx - (costs.arb_fee_bps/1e4) * coin0_out_cex - costs.gas_coin0;
+    } else {
+        double coin0_spent_cex = dx * p_cex;
+        profit_coin0 = dy_after_fee - coin0_spent_cex - (costs.arb_fee_bps/1e4) * coin0_spent_cex - costs.gas_coin0;
+    }
     return profit_coin0 > 0.0;
 }
 // ---- IO & Event generation --------------------------------------------------
@@ -395,7 +427,7 @@ static void parse_pool_and_costs(const std::string& pool_json_path, PoolInit& ou
 // ---- Main entrypoint --------------------------------------------------------
 int run_arb_mode(const std::string& pool_json, const std::string& candles_path, const std::string& out_json,
                  size_t max_candles = 0, bool save_actions = false,
-                 double arb_step = 2.0) {
+                 double min_swap_frac = 1e-6, double max_swap_frac = 1.0) {
     try {
         using clk = std::chrono::high_resolution_clock;
         auto t_read0 = clk::now();
@@ -420,7 +452,7 @@ int run_arb_mode(const std::string& pool_json, const std::string& candles_path, 
             if (costs.use_volume_cap) {
                 notional_cap_coin0 = ev.volume * ev.p_cex * costs.volume_cap_mult;
             }
-            Decision d = decide_trade(pool, ev.p_cex, costs, notional_cap_coin0, arb_step);
+            Decision d = decide_trade(pool, ev.p_cex, costs, notional_cap_coin0, min_swap_frac, max_swap_frac);
             if (!d.do_trade) continue;
             try {
                 auto res = pool.exchange((double)d.i, (double)d.j, d.dx, 0.0);
@@ -483,12 +515,13 @@ int run_arb_mode(const std::string& pool_json, const std::string& candles_path, 
 
 int main(int argc, char* argv[]) {
     if (argc < 4) {
-        std::cerr << "Usage: " << argv[0] << " <pool.json> <candles.json> <output.json> [--n-candles N] [--save-actions] [--arb-step F]" << std::endl; return 1;
+        std::cerr << "Usage: " << argv[0] << " <pool.json> <candles.json> <output.json> [--n-candles N] [--save-actions] [--min-swap F] [--max-swap F]" << std::endl; return 1;
     }
     std::string pool = argv[1]; std::string candles = argv[2]; std::string out = argv[3];
     size_t max_candles = 0;
     bool save_actions = false;
-    double arb_step = 2.0;
+    double min_swap_frac = 1e-6;
+    double max_swap_frac = 1.0;
     // Parse optional flags
     for (int i = 4; i < argc; ++i) {
         std::string arg = argv[i];
@@ -500,13 +533,20 @@ int main(int argc, char* argv[]) {
             ++i; // skip value
         } else if (arg == "--save-actions") {
             save_actions = true;
-        } else if (arg == "--arb-step" && (i+1) < argc) {
+        } else if (arg == "--min-swap" && (i+1) < argc) {
             try {
                 double f = std::stod(argv[i+1]);
-                if (f > 1.0) arb_step = f;
-            } catch (...) { /* ignore invalid */ }
-            ++i; // skip value
+                if (f > 0.0 && f <= 1.0) min_swap_frac = f;
+            } catch (...) {}
+            ++i;
+        } else if (arg == "--max-swap" && (i+1) < argc) {
+            try {
+                double f = std::stod(argv[i+1]);
+                if (f > 0.0 && f <= 1.0) max_swap_frac = f;
+            } catch (...) {}
+            ++i;
         }
     }
-    return run_arb_mode(pool, candles, out, max_candles, save_actions, arb_step);
+    if (max_swap_frac < min_swap_frac) max_swap_frac = min_swap_frac;
+    return run_arb_mode(pool, candles, out, max_candles, save_actions, min_swap_frac, max_swap_frac);
 }

@@ -7,7 +7,7 @@ Unified arbitrage runner and grid search for the C++ arb_harness.
 - Grid run: pass comma-separated lists for A and/or fees; script detects if
   lengths > 1 and runs a grid across combinations using threads.
 
-Outputs are written under python/arb/run_data/ by default.
+Outputs are written under python/arb_sim/run_data/ by default.
 """
 import argparse
 import json
@@ -16,7 +16,7 @@ import subprocess
 import sys
 from pathlib import Path
 from typing import Dict, List, Tuple
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 def to_wad(x: float) -> str:
@@ -94,13 +94,19 @@ class ArbHarnessRunner:
             raise FileNotFoundError(f"Missing executable: {self.exe_path}")
         print(f"✓ Built: {self.exe_path}")
 
-    def run(self, pool_json_path: Path, candles_path: Path, out_json_path: Path, n_candles: int = 0, save_actions: bool = False):
+    def run(self, pool_json_path: Path, candles_path: Path, out_json_path: Path,
+            n_candles: int = 0, save_actions: bool = False,
+            min_swap: float | None = None, max_swap: float | None = None):
         print("Running arb_harness...")
         cmd = [str(self.exe_path), str(pool_json_path), str(candles_path), str(out_json_path)]
         if n_candles and n_candles > 0:
             cmd += ["--n-candles", str(n_candles)]
         if save_actions:
             cmd += ["--save-actions"]
+        if min_swap is not None:
+            cmd += ["--min-swap", str(min_swap)]
+        if max_swap is not None:
+            cmd += ["--max-swap", str(max_swap)]
         r = subprocess.run(cmd, capture_output=True, text=True)
         if r.returncode != 0:
             print(r.stdout)
@@ -136,7 +142,8 @@ def main():
     parser.add_argument("--use-volume-cap", action="store_true")
     parser.add_argument("--volume-cap-mult", type=float, default=1.0)
     parser.add_argument("--save-actions", action="store_true", help="Ask C++ harness to save executed trades/actions")
-    parser.add_argument("--arb-step", type=float, default=None, help="Multiplicative arb step (>1.0). Example: 1.1 scales 10% per step")
+    parser.add_argument("--min-swap", type=float, default=1e-6, help="Minimum swap fraction of from-side balance (default: 1e-6)")
+    parser.add_argument("--max-swap", type=float, default=1.0, help="Maximum swap fraction of from-side balance (default: 1.0)")
     # Grid controls
     parser.add_argument("--A", type=str, default=None, help="Comma-separated A values for grid (e.g., '50000,100000')")
     parser.add_argument("--mid-fee-bps", type=str, default=None, help="Comma-separated mid fee bps values (e.g., '2.5,3.0')")
@@ -178,10 +185,20 @@ def main():
                 json.dump(cfg, f, indent=2)
             print(f"✓ Wrote pool config: {pool_json_path}")
 
-        out_json_path = Path(args.out) if args.out else (repo_root / "python" / "arb_sim" / "run_data" / f"arb_run_{datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')}.json")
+        out_json_path = Path(args.out) if args.out else (
+            repo_root
+            / "python"
+            / "arb_sim"
+            / "run_data"
+            / f"arb_run_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}.json"
+        )
         out_json_path.parent.mkdir(parents=True, exist_ok=True)
         # Prepare command extras
-        result = runner.run(pool_json_path, Path(args.candles), out_json_path, n_candles=args.n_candles, save_actions=args.save_actions)
+        result = runner.run(
+            pool_json_path, Path(args.candles), out_json_path,
+            n_candles=args.n_candles, save_actions=args.save_actions,
+            min_swap=args.min_swap, max_swap=args.max_swap,
+        )
         pretty_format_json(out_json_path)
         res = result.get("result", {})
         print("Summary:")
@@ -196,7 +213,13 @@ def main():
 
     # Grid mode
     from concurrent.futures import ThreadPoolExecutor, as_completed
-    out_dir = Path(args.out) if args.out else (repo_root / "python" / "arb" / "run_data" / f"arb_grid_{datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')}")
+    out_dir = Path(args.out) if args.out else (
+        repo_root
+        / "python"
+        / "arb_sim"
+        / "run_data"
+        / f"arb_grid_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
+    )
     out_dir.mkdir(parents=True, exist_ok=True)
 
     def make_pool_config(initial_liq0: float, initial_liq1: float, A: float, mid_fee_bps: float, out_fee_bps: float) -> Dict:
@@ -232,8 +255,10 @@ def main():
             cmd += ["--n-candles", str(args.n_candles)]
         if args.save_actions:
             cmd += ["--save-actions"]
-        if args.arb_step and args.arb_step > 1.0:
-            cmd += ["--arb-step", str(args.arb_step)]
+        if args.min_swap is not None:
+            cmd += ["--min-swap", str(args.min_swap)]
+        if args.max_swap is not None:
+            cmd += ["--max-swap", str(args.max_swap)]
         r = subprocess.run(cmd, capture_output=True, text=True)
         if r.returncode != 0:
             return tag, {"error": r.stderr.strip() or "arb_harness failed"}
