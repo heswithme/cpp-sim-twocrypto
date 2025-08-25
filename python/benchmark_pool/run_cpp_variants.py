@@ -96,6 +96,19 @@ def main() -> int:
         elif args.final_only:
             os.environ["SAVE_LAST_ONLY"] = "1"
 
+        # Save copies of inputs for downstream tools (e.g., arb_vs_double)
+        try:
+            with pools_file.open("r") as f:
+                pools_obj = json.load(f)
+            with sequences_file.open("r") as f:
+                seqs_obj = json.load(f)
+            with (run_dir / "inputs_pools.json").open("w") as f:
+                json.dump(pools_obj, f, indent=2)
+            with (run_dir / "inputs_sequences.json").open("w") as f:
+                json.dump(seqs_obj, f, indent=2)
+        except Exception as e:
+            print(f"⚠ Failed to copy inputs into run dir: {e}")
+
         # Pre-build typed harnesses to avoid sequential rebuilds
         try:
             _ensure_built_harness()

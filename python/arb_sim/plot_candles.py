@@ -82,7 +82,7 @@ def load_ohlcv(path: Path, t0: Optional[int], t1: Optional[int]) -> Tuple[List[i
     return ts, o, h, l, c, v
 
 
-def print_stats(ts: List[int], o: List[float], h: List[float], l: List[float], c: List[float], v: List[float] | None = None, k_examples: int = 5):
+def print_stats(ts: List[int], o: List[float], h: List[float], l: List[float], c: List[float], v: 'Optional[List[float]]' = None, k_examples: int = 5):
     n = len(ts)
     if n == 0:
         print("No data loaded; skipping stats")

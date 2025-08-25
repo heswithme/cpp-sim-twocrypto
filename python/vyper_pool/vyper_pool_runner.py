@@ -238,7 +238,7 @@ class VyperPoolRunner:
         
         return snapshots
     
-    def run_benchmark(self, pool_configs_file: str, sequences_file: str, pool_names: List[str] | None = None) -> Dict:
+    def run_benchmark(self, pool_configs_file: str, sequences_file: str, pool_names: 'Optional[List[str]]' = None) -> Dict:
         """Run complete benchmark with given configurations."""
         # Load configurations
         with open(pool_configs_file, 'r') as f:
@@ -313,7 +313,7 @@ class VyperPoolRunner:
         return {"results": results}
 
 
-def run_vyper_pool(pool_configs_file: str, sequences_file: str, output_file: str, pool_names: List[str] | None = None) -> Dict:
+def run_vyper_pool(pool_configs_file: str, sequences_file: str, output_file: str, pool_names: 'Optional[List[str]]' = None) -> Dict:
     """Main entry point for running Vyper pool benchmark."""
     # Path to Vyper contracts (repo-relative)
     from pathlib import Path

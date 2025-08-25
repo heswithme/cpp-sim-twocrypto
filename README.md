@@ -46,7 +46,7 @@ cpp-twocrypto/
     │   └── cpp_pool_runner.py           # Build + run unified C++ pool harness (mode i|d)
     ├── vyper_pool/                      # Vyper via titanoboa
     └── arb_sim/                         # Arbitrage simulator launcher + data
-        ├── arb_sim.py                   # Unified arb runner (single + grid)
+        ├── arb_sim.py                   # Multi-pool arb runner (threaded C++)
         ├── generate_pools.py            # Two-parameter grid pool generator
         ├── plot_candles.py              # Optional visualization
         ├── run_data/                    # Outputs (pretty JSON)
@@ -87,7 +87,7 @@ Notes:
 
 ## Arbitrage Simulator
 
-The arb simulator replays a candles file and simulates an arbitrageur against the pool (CEX with infinite liquidity at per-event price). It is optimized for large files via mmap + byte scanning and provides timing metrics.
+The arb simulator replays a candles file and simulates an arbitrageur against the pool (CEX with infinite liquidity at per‑event price). It is optimized for large files via mmap + byte scanning and provides timing metrics. The C++ harness runs multiple pools in one process with internal threading.
 
 Build:
 ```bash
@@ -95,23 +95,15 @@ cmake -B cpp/build cpp -DCMAKE_BUILD_TYPE=Release
 cmake --build cpp/build --target arb_harness -j
 ```
 
-Python launcher (single or grid):
+Python launcher (multi‑pool via pool_config.json):
 ```bash
-# Single run on first 1000 candles, with balance-based sizing and optional action capture
-python3 python/arb_sim/arb_sim.py \
-  python/arb_sim/trade_data/brlusd/brlusd-1m.json \
-  --n-candles 1000 \
-  --min-swap 1e-6 \
-  --max-swap 1.0 \
-  --save-actions
+# Generate a pool grid (writes python/arb_sim/run_data/pool_config.json)
+python3 python/arb_sim/generate_pools.py
 
-# Grid over A and fees (pretty prints all outputs)
+# Run all pools with 4 threads on first 20k candles
 python3 python/arb_sim/arb_sim.py \
   python/arb_sim/trade_data/brlusd/brlusd-1m.json \
-  --A 50000,100000,150000 \
-  --mid-fee-bps 2.5,3.0 \
-  --out-fee-bps 5.0,6.0 \
-  --jobs 4 \
+  -n 4 \
   --n-candles 20000 \
   --min-swap 1e-6 --max-swap 1.0
 ```
@@ -120,26 +112,25 @@ Key flags:
 - `--n-candles N`: slice the first N candles for rapid iteration (two events per candle).
 - `--min-swap`, `--max-swap`: min/max fraction of from-side balance for binary sizing (default 1e-6 and 1.0). Also capped by `max_trade_frac` and per-event volume cap if enabled.
 - `--save-actions`: include executed trades in result JSON for slower Vyper replay later.
+ - `-n/--threads N`: number of C++ worker threads (default: hardware threads).
 
 Inputs:
 - Candles JSON is an array of `[timestamp, open, high, low, close, volume]`. If `timestamp > 1e10`, it is interpreted as ms and divided by 1000.
 
 Outputs:
 - Written to `python/arb_sim/run_data/`:
-  - Single: `arb_run_<UTC>.json` with:
-    - `result`: events/trades/notional, LP fees, arb PnL, and timing (`candles_read_ms`, `exec_ms`).
-    - `params`: the `pool` and `costs` used (1e18/1e10 scaling where applicable).
-    - `final_state`: complete pool snapshot (1e18 strings for numeric fields).
-    - `actions` (optional): executed trades with timestamps, sizes, fees, and profits.
-  - Grid: per-combo `result_*.json` + `summary.json` (sorted by arb_pnl).
+  - Aggregated: `arb_run_<UTC>.json` with:
+    - `metadata`: `candles_file`, `threads`, `candles_read_ms`, `exec_ms`, and `base_pool` + `grid` (if present).
+    - `runs[]`: one entry per pool with:
+      - `x_key`, `x_val`, `y_key`, `y_val` (from the grid or `None`).
+      - `result`: events, trades, total_notional_coin0, lp_fee_coin0, arb_pnl_coin0, n_rebalances, pool_exec_ms.
+      - `final_state`: complete pool snapshot (1e18 strings for numeric fields).
+      - `actions` (optional): per-trade details if `--save-actions` was used.
 
-Pool grid generator (optional):
-```bash
-python3 python/arb_sim/generate_pools.py \
-  --out python/arb_sim/run_data/pools.json \
-  --param-x A --x-values 50000,100000,150000 \
-  --param-y mid_fee_bps --y-values 2.5,3.0
-```
+Pool grid generator:
+- Edit `python/arb_sim/generate_pools.py` to set `X_name`, `Y_name` and their ranges (uses `numpy.logspace`).
+- All pool parameters are specified as integers in their native units (fees 1e10, WAD‑like fields 1e18, balances 1e18). The script only stringifies when saving.
+- Runs with: `python3 python/arb_sim/generate_pools.py` and writes `python/arb_sim/run_data/pool_config.json` including `meta.base_pool` and `meta.grid`.
 
 ## Math Benchmarks (C++ vs Vyper)
 
@@ -193,6 +184,21 @@ Advanced:
     python/benchmark_pool/data/results/vyper_only.json
   ```
 
+- Convert arb_sim actions to a benchmark sequence:
+  ```bash
+  # Produce an arb_run_*.json with --save-actions first
+  python3 python/arb_sim/arb_sim.py python/arb_sim/trade_data/brlusd/brlusd-1m.json --save-actions
+
+  # Convert latest arb_sim run’s extended actions to sequences.json and pools.json
+  uv run python/benchmark_pool/arb_actions_to_sequence.py \
+    --output-seq python/benchmark_pool/data/sequences.json \
+    --output-pools python/benchmark_pool/data/pools.json
+  # Or select by grid position if present in arb_run: --x-val <X> [--y-val <Y>]
+  # Optionally point to the pool grid used by arb_sim (defaults to run_data/pool_config.json):
+  #   --pool-config python/arb_sim/run_data/pool_config.json
+  # Note: by default it expects a single actions-carrying run and picks the latest arb_run_* file.
+  ```
+
 ## C++ Variants Benchmark (integer vs double)
 
 The unified harness supports both variants; the full benchmark runs both and emits:
@@ -213,6 +219,44 @@ Use debug helpers to compare variants: `uv run python/benchmark_pool/debug/varia
 - Inspect runs (debug helpers):
   - Diff summary: `uv run python/benchmark_pool/debug/parse_and_diff.py [run_dir]`
   - Context around first divergence: `uv run python/benchmark_pool/debug/inspect_context.py <run_dir>`
+
+### arb_sim Parity Replay (no wrapper)
+
+Replay arb_sim trades and validate final-state parity with the cpp-double variant using three explicit steps:
+
+1) Save actions from arb_sim:
+   ```bash
+   python3 python/arb_sim/arb_sim.py \
+     python/arb_sim/trade_data/brlusd/brlusd-1m.json \
+     --save-actions
+   ```
+
+2) Convert actions to benchmark inputs and run C++ variants (i and d):
+   ```bash
+   # Convert latest arb_run_* => python/benchmark_pool/data/{pools,sequences}.json
+   uv run python/benchmark_pool/arb_actions_to_sequence.py
+
+   # Run integer and double harnesses; saves to run_cpp_variants_<UTC>/
+   uv run python/benchmark_pool/run_cpp_variants.py --n-cpp 1
+   ```
+
+3) Compare arb_sim final state vs cpp-double final state:
+   ```bash
+   # By default picks latest arb_run_* and latest run_* unless --run-dir is passed
+   uv run python/benchmark_pool/debug/arb_vs_double.py --run-dir python/benchmark_pool/data/results/run_cpp_variants_YYYYMMDDTHHMMSSZ
+   ```
+
+Notes:
+- For step-wise diffs against Vyper you still need a full run (includes Vyper):
+  ```bash
+  uv run python/benchmark_pool/run_full_benchmark.py --n-cpp 1 --n-py 1
+  uv run python/benchmark_pool/debug/double_vs_vyper.py  # latest run_*
+  ```
+
+- Converter semantics (for exact replay):
+  - Sequence `start_timestamp` is set to the pool’s `start_timestamp` from arb_sim run params when present; otherwise it is omitted to mirror arb_harness initialization (so EMA baseline matches).
+  - Each trade is preceded by an absolute `time_travel { "timestamp": ts }` action to align time precisely.
+  - `dx` is read with `Decimal` and scaled exactly to 1e18 using half-up rounding, minimizing any quantization drift; the double harness reads this back into `double`.
 
 ## Outputs & Cleanup
 

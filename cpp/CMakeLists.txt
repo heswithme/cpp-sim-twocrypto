@@ -52,7 +52,7 @@ if(CMAKE_BUILD_TYPE STREQUAL "Release")
     target_compile_options(benchmark_harness_d PRIVATE -O3 -march=native)
 endif()
 
-# Standalone arbitrage harness
+# Standalone arbitrage harness (multi-pool, threaded)
 add_executable(arb_harness
     src/arb_harness.cpp
 )
