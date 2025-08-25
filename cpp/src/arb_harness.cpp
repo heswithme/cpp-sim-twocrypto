@@ -505,7 +505,10 @@ int main(int argc, char* argv[]) {
                                         if (save_actions) {
                                             json::object da;
                                             da["type"] = "donation";
-                                            da["ts"] = next_donation_ts;
+                                            // Record both the pool timestamp (when donation executed)
+                                            // and the scheduled due time for reference
+                                            da["ts"] = ev.ts;               // actual pool timestamp
+                                            da["ts_due"] = next_donation_ts; // scheduled donation time
                                             da["amounts"] = json::array{amt0, amt1};
                                             da["minted"] = minted;
                                             da["tvl_coin0_before"] = tvl_coin0;

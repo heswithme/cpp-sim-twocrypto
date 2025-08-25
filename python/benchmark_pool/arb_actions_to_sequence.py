@@ -139,11 +139,23 @@ def convert_actions(arb_run_path: Path, *, run_index: Optional[int] = None,
     actions_sorted = sorted(actions, key=lambda a: int(a.get("ts", 0)))
     if not actions_sorted:
         raise ValueError("No actions to convert")
+    # If start_timestamp wasn't provided by pool params, seed it from first action
+    if not has_start_ts:
+        try:
+            start_ts = int(actions_sorted[0].get("ts", 0))
+            has_start_ts = True
+        except Exception:
+            pass
 
     out_actions: List[Dict[str, Any]] = []
     for a in actions_sorted:
         atype = str(a.get("type") or "exchange")
-        ts = int(a.get("ts", start_ts))
+        # Donation actions saved by arb_harness record ts (pool time) and ts_due (schedule).
+        # Prefer pool-execution time to match actual state transitions.
+        ts_key = "ts"
+        if atype == "donation" and "ts_pool" in a:
+            ts_key = "ts_pool"
+        ts = int(a.get(ts_key, start_ts))
         # Absolute timestamp to avoid drift
         out_actions.append({"type": "time_travel", "timestamp": ts})
         if atype == "exchange":
