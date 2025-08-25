@@ -166,6 +166,10 @@ Run full benchmark (runs both C++ variants and Vyper):
 uv run python/benchmark_pool/run_full_benchmark.py --n-cpp 8 --n-py 1
 ```
 
+Notes:
+- Time travel uses absolute timestamps in generated sequences (`time_travel { "timestamp": ... }`).
+- The harness remains compatible with relative seconds (`"seconds"`) for legacy datasets.
+
 What this does:
 - C++ phase: processes all pools with internal threads (`--n-cpp` → env `CPP_THREADS`) for both `_i` and `_d` harnesses.
 - Vyper phase: validation runs across all pools with `--n-py` worker processes (1 = sequential). Each worker handles a shard of pools in its own process for isolation.
@@ -228,18 +232,19 @@ Use debug helpers to compare variants: `uv run python/benchmark_pool/debug/varia
   - Diff summary: `uv run python/benchmark_pool/debug/parse_and_diff.py [run_dir]`
   - Context around first divergence: `uv run python/benchmark_pool/debug/inspect_context.py <run_dir>`
 
-### arb_sim Parity Replay (no wrapper)
+### arb_sim Parity Replay (donations + absolute time)
 
-Replay arb_sim trades and validate final-state parity with the cpp-double variant using three explicit steps:
+Replay arb_sim trades (including donations) and validate final-state parity with the cpp-double variant using three steps:
 
-1) Save actions from arb_sim:
+1) Save actions from arb_sim (absolute timestamps):
    ```bash
    python3 python/arb_sim/arb_sim.py \
      python/arb_sim/trade_data/brlusd/brlusd-1m.json \
+     --n-candles 10000 -n 10 \
      --save-actions
    ```
 
-2) Convert actions to benchmark inputs and run C++ variants (i and d):
+2) Convert actions (exchanges + donations) and run C++ variants (i and d):
    ```bash
    # Convert latest arb_run_* => python/benchmark_pool/data/{pools,sequences}.json
    uv run python/benchmark_pool/arb_actions_to_sequence.py
@@ -250,21 +255,23 @@ Replay arb_sim trades and validate final-state parity with the cpp-double varian
 
 3) Compare arb_sim final state vs cpp-double final state:
    ```bash
-   # By default picks latest arb_run_* and latest run_* unless --run-dir is passed
-   uv run python/benchmark_pool/debug/arb_vs_double.py --run-dir python/benchmark_pool/data/results/run_cpp_variants_YYYYMMDDTHHMMSSZ
+   # Pass the variants run dir; defaults also supported
+   uv run python/benchmark_pool/debug/arb_vs_double.py \
+     --run-dir python/benchmark_pool/data/results/run_cpp_variants_YYYYMMDDTHHMMSSZ
    ```
 
-Notes:
-- For step-wise diffs against Vyper you still need a full run (includes Vyper):
-  ```bash
-  uv run python/benchmark_pool/run_full_benchmark.py --n-cpp 1 --n-py 1
-  uv run python/benchmark_pool/debug/double_vs_vyper.py  # latest run_*
-  ```
+Optional (step-wise diffs vs Vyper):
+```bash
+uv run python/benchmark_pool/run_full_benchmark.py --n-cpp 1 --n-py 1
+uv run python/benchmark_pool/debug/double_vs_vyper.py  # latest run_*
+```
 
-- Converter semantics (for exact replay):
-  - Sequence `start_timestamp` is set to the pool’s `start_timestamp` from arb_sim run params when present; otherwise it is omitted to mirror arb_harness initialization (so EMA baseline matches).
-  - Each trade is preceded by an absolute `time_travel { "timestamp": ts }` action to align time precisely.
-  - `dx` is read with `Decimal` and scaled exactly to 1e18 using half-up rounding, minimizing any quantization drift; the double harness reads this back into `double`.
+Details and semantics:
+- Absolute time travel: converter inserts `time_travel { "timestamp": ts }` for every action.
+- Donations: converter emits `add_liquidity` with `donation: true` and scaled `amounts` from arb_harness actions.
+- Exchanges: `dx` scaled to 1e18 using Decimal half-up; read back as double by the C++ double harness.
+- start_timestamp: set from the pool’s `start_timestamp` if present, else seeded from the first action timestamp, so EMA updates in replays.
+- run_cpp_variants saves inputs as `inputs_pools.json` and `inputs_sequences.json` in its run folder for downstream comparisons.
 
 ## Outputs & Cleanup
 

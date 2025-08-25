@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-Generate benchmark test data for pool configurations and trading sequences
+Generate benchmark test data for pool configurations and trading sequences.
+
+Time travel actions use absolute timestamps ("timestamp").
 """
 import json
 import os
@@ -42,15 +44,17 @@ def generate_pool_configs(num_pools: int = 3) -> List[Dict[str, Any]]:
 
 def generate_action_sequences(trades_per_sequence: int = 20) -> List[Dict[str, Any]]:
     """Generate a single random trading sequence within safe boundaries.
-    Time travel actions are relative (seconds added to current block time)."""
+    Time travel actions are absolute ("timestamp")."""
     START_TS = 1_700_000_000
     actions: List[Dict[str, Any]] = []
+    ts = START_TS
 
     for j in range(trades_per_sequence):
         # Periodic absolute time travel to exercise EMA + donations unlocking
         if j % 3 == 0:
-            # relative time travel: add 5 min to 1 hour
-            actions.append({"type": "time_travel", "seconds": random.randint(300, 3600)})
+            # add 5 min to 1 hour to timestamp
+            ts += random.randint(300, 3600)
+            actions.append({"type": "time_travel", "timestamp": ts})
 
         # Randomly choose between donation add and exchange
         if random.random() < 0.5:
