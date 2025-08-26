@@ -151,14 +151,22 @@ def main() -> int:
 
     # Enrich runs with x/y keys/values
     enriched_runs: List[Dict[str, Any]] = []
+    total_trades = 0
     for rr in runs_raw:
         pool_obj = rr.get("params", {}).get("pool", {})
         xv = str(pool_obj.get(x_name)) if x_name and x_name in pool_obj else None
         yv = str(pool_obj.get(y_name)) if y_name and y_name in pool_obj else None
+        # Accumulate total trades for metadata (no duplicate field in result)
+        result_obj = rr.get("result", {}) or {}
+        try:
+            total_trades += int(result_obj.get("trades", 0))
+        except Exception:
+            pass
+
         enriched = {
             "x_key": x_name, "x_val": xv,
             "y_key": y_name, "y_val": yv,
-            "result": rr.get("result", {}),
+            "result": result_obj,
             "final_state": rr.get("final_state", {}),
         }
         if "actions" in rr:
@@ -175,6 +183,7 @@ def main() -> int:
             "grid": cfg.get("meta", {}).get("grid") if isinstance(cfg, dict) else None,
             "candles_read_ms": raw.get("metadata", {}).get("candles_read_ms"),
             "exec_ms": raw.get("metadata", {}).get("exec_ms"),
+            "total_trades": total_trades,
         },
         "runs": enriched_runs,
     }

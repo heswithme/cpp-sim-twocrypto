@@ -122,13 +122,13 @@ def _format_axis_labels(name: str, values: List[float]) -> Tuple[List[str], str]
     labels: List[str] = []
     if scale == 0.0 and "fee" in (name or "").lower():
         # Convert 1e10-scaled fee to bps: val/1e10 * 1e4
-        labels = [f"{(v / 1e10 * 1e4):.1f}" for v in values]
+        labels = [f"{(v / 1e10 * 1e4):.2f}" for v in values]
         return labels, f"{name} (bps)"
     if scale != 1.0:
-        labels = [f"{(v / scale):.1f}" for v in values]
+        labels = [f"{(v / scale):.2f}" for v in values]
         return labels, f"{name}{suffix}"
     # default
-    labels = [f"{v:.1f}" for v in values]
+    labels = [f"{v:.2f}" for v in values]
     return labels, name
 
 
@@ -147,9 +147,10 @@ def _select_ticks(values: List[float], max_ticks: int) -> List[int]:
 
 def main() -> int:
     import argparse
-    ap = argparse.ArgumentParser(description="Plot heatmap from arb_run grid")
+    ap = argparse.ArgumentParser(description="Plot heatmap(s) from arb_run grid")
     ap.add_argument("--arb", type=str, default=None, help="Path to arb_run_*.json (default: latest)")
-    ap.add_argument("--metric", type=str, default="virtual_price", help="Final_state metric for Z (default: virtual_price)")
+    ap.add_argument("--metric", type=str, default="virtual_price", help="Single metric for Z (default: virtual_price)")
+    ap.add_argument("--metrics", type=str, default=None, help="Comma-separated list of metrics to plot side-by-side (overrides --metric)")
     ap.add_argument("--no-scale", action="store_true", help="Disable 1e18 scaling for Z")
     ap.add_argument("--cmap", type=str, default="jet", help="Matplotlib colormap (default: viridis)")
     ap.add_argument("--out", type=str, default=None, help="Output image path (default: run_data/heatmap_<metric>.png)")
@@ -158,57 +159,116 @@ def main() -> int:
     ap.add_argument("--max-xticks", type=int, default=12, help="Max X tick labels (default: 12)")
     ap.add_argument("--max-yticks", type=int, default=12, help="Max Y tick labels (default: 12)")
     ap.add_argument("--font-size", type=int, default=16, help="Tick label font size (default: 12)")
+    ap.add_argument("--square", dest="square", action="store_true", help="Force a square plot with square cells (default)")
+    ap.add_argument("--no-square", dest="square", action="store_false", help="Disable square plot; size adapts to grid")
+    ap.set_defaults(square=True)
     args = ap.parse_args()
 
     arb_path = Path(args.arb) if args.arb else _latest_arb_run()
     data = _load(arb_path)
 
-    # Heuristic: scale by 1e18 for common 1e18-scaled metrics unless --no-scale
-    metric = args.metric
-    scale_1e18 = (not args.no_scale) and metric in {"virtual_price", "xcp_profit", "price_scale", "D", "totalSupply"}
-    scale_percent = ('apy' in metric.lower())
+    # Determine metrics list
+    metrics: List[str]
+    if args.metrics:
+        metrics = [m.strip() for m in args.metrics.split(',') if m.strip()]
+    else:
+        metrics = [args.metric]
 
-    x_name, y_name, xs, ys, Z = _extract_grid(data, metric, scale_1e18, scale_percent)
+    # Build first grid to define axes
+    def metric_scale_flags(m: str) -> Tuple[bool, bool]:
+        mlow = (m or '').lower()
+        scale_1e18 = (not args.no_scale) and m in {"virtual_price", "xcp_profit", "price_scale", "D", "totalSupply"}
+        scale_percent = ('apy' in mlow)
+        return scale_1e18, scale_percent
 
-    # Scale figure size to grid density to reduce overlap
-    fig_w = max(6.0, min(14.0, 0.4 * max(1, len(xs))))
-    fig_h = max(4.0, min(10.0, 0.3 * max(1, len(ys))))
-    fig, ax = plt.subplots(figsize=(fig_w, fig_h), constrained_layout=True)
-    im = ax.imshow(Z, origin="lower", aspect="auto", cmap=args.cmap)
-    # Downsample ticks to avoid clutter
+    first_m = metrics[0]
+    s18, sperc = metric_scale_flags(first_m)
+    x_name, y_name, xs, ys, Z0 = _extract_grid(data, first_m, s18, sperc)
+
+    # Prepare figure with adaptive rows/cols
+    n = len(metrics)
+    if n <= 3:
+        rows, cols = 1, n
+    elif n == 4:
+        rows, cols = 2, 2
+    else:
+        cols = 3
+        rows = int(np.ceil(n / cols))
+
+    if args.square:
+        base = max(len(xs), len(ys))
+        side = max(4.5, min(12.0, 0.35 * max(1, base)))
+        fig_w, fig_h = side * cols, side * rows
+        fig, axes = plt.subplots(rows, cols, figsize=(fig_w, fig_h), constrained_layout=True)
+    else:
+        unit_w = max(5.5, min(12.0, 0.35 * max(1, len(xs))))
+        unit_h = max(4.0, min(10.0, 0.30 * max(1, len(ys))))
+        fig_w, fig_h = unit_w * cols, unit_h * rows
+        fig, axes = plt.subplots(rows, cols, figsize=(fig_w, fig_h), constrained_layout=True)
+    axes = np.atleast_1d(axes).reshape(rows, cols)
+
+    # Precompute tick indices and labels
     xticks = _select_ticks(xs, args.max_xticks)
     yticks = _select_ticks(ys, args.max_yticks)
-    ax.set_xticks(xticks)
-    ax.set_yticks(yticks)
-    # Normalized labels for selected ticks
     xlab_full, xlabel = _format_axis_labels(x_name, xs)
     ylab_full, ylabel = _format_axis_labels(y_name, ys)
     xlabels = [xlab_full[i] for i in xticks]
     ylabels = [ylab_full[i] for i in yticks]
-    ax.set_xticklabels(xlabels, rotation=45, ha="right", fontsize=args.font_size)
-    ax.set_yticklabels(ylabels, fontsize=args.font_size)
-    ax.set_xlabel(xlabel, fontsize=args.font_size + 2)
-    ax.set_ylabel(ylabel, fontsize=args.font_size + 2)
-    if scale_percent:
-        title_scale = " (%)"
-    else:
-        title_scale = " (scaled 1e18)" if scale_1e18 else ""
-    ax.set_title(f"Heatmap: {metric}{title_scale}", fontsize=args.font_size + 4)
-    cb = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-    cb.set_label(metric + (" (%)" if scale_percent else ""), fontsize=args.font_size)
-    cb.ax.tick_params(labelsize=args.font_size)
 
-    if args.annot:
-        for i in range(Z.shape[0]):
-            for j in range(Z.shape[1]):
-                val = Z[i, j]
-                if np.isfinite(val):
-                    ax.text(j, i, f"{val:.3g}", va="center", ha="center", color="white", fontsize=max(6, args.font_size - 2))
+    # Plot each metric
+    # Plot in row-major order, hide any unused axes
+    idx = 0
+    for r in range(rows):
+        for c in range(cols):
+            ax = axes[r, c]
+            if idx >= n:
+                ax.axis('off')
+                continue
+            m = metrics[idx]
+            s18, sperc = metric_scale_flags(m)
+            _, _, _, _, Z = _extract_grid(data, m, s18, sperc)
+            aspect = 'equal' if args.square else 'auto'
+            im = ax.imshow(Z, origin='lower', aspect=aspect, cmap=args.cmap)
+            if args.square:
+                ax.set_aspect('equal', adjustable='box')
+            # Tick placement at index positions
+            ax.set_xticks(xticks)
+            ax.set_yticks(yticks)
+            ax.set_xticklabels(xlabels, rotation=45, ha="right", fontsize=args.font_size)
+            # Only label y on first column
+            if c == 0:
+                ax.set_yticklabels(ylabels, fontsize=args.font_size)
+                ax.set_ylabel(ylabel, fontsize=args.font_size + 2)
+            else:
+                ax.set_yticklabels([])
+            ax.set_xlabel(xlabel, fontsize=args.font_size + 2)
+            title_scale = " (%)" if sperc else (" (scaled 1e18)" if s18 else "")
+            ax.set_title(f"{m}{title_scale}", fontsize=args.font_size + 4)
+            cb = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+            cb.set_label(m + (" (%)" if sperc else ""), fontsize=args.font_size)
+            cb.ax.tick_params(labelsize=args.font_size)
+            if args.annot:
+                for i in range(Z.shape[0]):
+                    for j in range(Z.shape[1]):
+                        val = Z[i, j]
+                        if np.isfinite(val):
+                            ax.text(j, i, f"{val:.3g}", va="center", ha="center", color="white", fontsize=max(6, args.font_size - 2))
+            idx += 1
+
     # Output
-    out_path = Path(args.out) if args.out else (RUN_DIR / f"heatmap_{metric}.png")
+    if args.out:
+        out_path = Path(args.out)
+    else:
+        if len(metrics) == 1:
+            out_path = RUN_DIR / f"heatmap_{metrics[0]}.png"
+        else:
+            tag = "_".join(m.replace(' ', '') for m in metrics[:3])
+            if len(metrics) > 3:
+                tag += f"_plus{len(metrics)-3}"
+            out_path = RUN_DIR / f"heatmaps_{tag}.png"
     out_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_path, dpi=150)
-    print(f"Saved heatmap to {out_path}")
+    print(f"Saved heatmap(s) to {out_path}")
 
     if args.show:
         plt.show()

@@ -57,13 +57,21 @@ def strify_pool(pool: dict) -> dict:
 
 
 # -------------------- Grid Definition --------------------
-N_GRID = 1
+N_GRID = 32
 
 X_name = "A"  # can be changed to any pool key
+# X_vals = np.linspace(0, 0.1, N_GRID).tolist()
 X_vals = np.logspace(np.log10(5 * 10_000), np.log10(500 * 10_000), N_GRID).round().astype(int).tolist()
+
+# Y_name = "donation_frequency"  # can be changed to any pool key
+# Y_vals = np.linspace(0, 86400, N_GRID).tolist()
 
 Y_name = "mid_fee"  # default second param; also applied to out_fee
 Y_vals = np.logspace(np.log10(1e-4 * 10**10), np.log10(.05 * 10**10), N_GRID).round().astype(int).tolist()
+
+#optionally int-ify
+X_vals = [int(x) for x in X_vals]
+Y_vals = [int(x) for x in Y_vals]
 
 init_liq = 1_000_000 # in coin0
 init_price = 0.190865 #brlusd
@@ -79,7 +87,7 @@ BASE_POOL = {
     "out_fee": int(0.002 * 10**10),
     "fee_gamma": int(0.003 * 10**18),
     "allowed_extra_profit": int(1e-12 * 10**18),
-    "adjustment_step": int(5.5e-3 * 10**18),
+    "adjustment_step": int(1e-7 * 10**18),
     "ma_time": 866,
     "initial_price": int(init_price * 10**18),
     "start_timestamp": START_TS,
@@ -104,8 +112,8 @@ def build_grid():
         for yv in Y_vals:
             pool = dict(BASE_POOL)  # start from base with all params (ints)
             # Apply X then Y onto pool
-            pool[X_name] = int(xv)
-            pool[Y_name] = int(yv)
+            pool[X_name] = xv
+            pool[Y_name] = yv
             # Enforce out_fee >= mid_fee
             mid_fee_val = int(pool.get("mid_fee", 0))
             cur_out_val = int(pool.get("out_fee", 0))
