@@ -150,6 +150,94 @@ static std::optional<std::pair<double,double>> simulate_profit(
     return std::make_pair(dy_after_fee, profit_coin0);
 }
 
+// Decide direction by probing both sides with a fixed small fraction of balance.
+static bool decide_trade_direction(
+    const twocrypto::TwoCryptoPoolT<double>& pool,
+    double cex_price,
+    const Costs& costs,
+    double probe_frac,
+    int& out_i,
+    int& out_j,
+    double& out_fee_tokens,
+    double& out_profit
+) {
+    bool found = false;
+    out_profit = 0.0; out_fee_tokens = 0.0; out_i = 0; out_j = 1;
+    for (int i = 0; i < 2; ++i) {
+        int j = 1 - i;
+        double avail = pool.balances[i];
+        if (!(avail > 0)) continue;
+        double dx = avail * probe_frac;
+        if (!(dx > 0)) continue;
+        double fee_tmp = 0.0;
+        auto sim = simulate_profit(pool, i, j, dx, cex_price, costs, fee_tmp);
+        if (!sim) continue;
+        double profit = sim->second;
+        if (!found || profit > out_profit) {
+            found = true;
+            out_profit = profit;
+            out_fee_tokens = fee_tmp;
+            out_i = i; out_j = j;
+        }
+    }
+    return found;
+}
+
+// Decide trade size via binary search within min/max swap fraction bounds (and optional notional cap).
+static bool decide_trade_size(
+    const twocrypto::TwoCryptoPoolT<double>& pool,
+    double cex_price,
+    const Costs& costs,
+    int i, int j,
+    double notional_cap_coin0,
+    double min_swap_frac,
+    double max_swap_frac,
+    double& out_dx,
+    double& out_fee_tokens,
+    double& out_profit
+) {
+    double available = pool.balances[i];
+    if (!(available > 0)) return false;
+
+    double dx_lo = std::max(1e-18, available * std::max(1e-12, min_swap_frac));
+    double dx_hi = available * std::min(max_swap_frac, costs.max_trade_frac);
+    if (costs.use_volume_cap) {
+        if (i == 0) dx_hi = std::min(dx_hi, notional_cap_coin0);
+        else if (cex_price > 0) dx_hi = std::min(dx_hi, notional_cap_coin0 / cex_price);
+    }
+    if (!(dx_hi > 0)) return false;
+    if (dx_lo > dx_hi) dx_lo = dx_hi;
+
+    double best_dx = 0.0, best_profit = -1e100, best_fee = 0.0;
+
+    // Evaluate lo and hi
+    double fee_lo = 0.0, fee_hi = 0.0;
+    auto lo = simulate_profit(pool, i, j, dx_lo, cex_price, costs, fee_lo);
+    auto hi = simulate_profit(pool, i, j, dx_hi, cex_price, costs, fee_hi);
+    if (lo && lo->second > best_profit) { best_profit = lo->second; best_dx = dx_lo; best_fee = fee_lo; }
+    if (hi && hi->second > best_profit) { best_profit = hi->second; best_dx = dx_hi; best_fee = fee_hi; }
+
+    double L = dx_lo, R = dx_hi;
+    for (int it = 0; it < 40; ++it) {
+        double mid = 0.5 * (L + R);
+        double fee_mid = 0.0;
+        auto m = simulate_profit(pool, i, j, mid, cex_price, costs, fee_mid);
+        if (m) {
+            L = mid;
+            if (m->second > best_profit) { best_profit = m->second; best_dx = mid; best_fee = fee_mid; }
+        } else {
+            R = mid;
+        }
+        if (R - L <= std::max(1e-12, available * 1e-12)) break;
+    }
+
+    if (!(best_profit > 0)) return false;
+    out_dx = best_dx;
+    out_fee_tokens = best_fee;
+    out_profit = best_profit;
+    return true;
+}
+
 static Decision decide_trade(
     const twocrypto::TwoCryptoPoolT<double>& pool,
     double cex_price,
@@ -159,58 +247,27 @@ static Decision decide_trade(
     double max_swap_frac
 ) {
     Decision d{};
-    const double pool_price = spot_price(pool);
-    if (pool_price == cex_price) return d;
-    d.i = (pool_price < cex_price) ? 0 : 1;
-    d.j = 1 - d.i;
+    d.do_trade = false;
 
-    double available = pool.balances[d.i];
-    double dx0  = std::max(1e-18, available * std::max(1e-12, min_swap_frac));
-    double dxHi = available * std::min(max_swap_frac, costs.max_trade_frac);
-    if (costs.use_volume_cap) {
-        if (d.i == 0) dxHi = std::min(dxHi, notional_cap_coin0);
-        else if (cex_price > 0) dxHi = std::min(dxHi, notional_cap_coin0 / cex_price);
-        if (dxHi <= 0) return d;
+    // 1) Decide direction by probing both sides with a fixed small fraction
+    const double PROBE_FRAC = 1e-9;
+    int i = 0, j = 1; double probe_fee = 0.0, probe_profit = 0.0;
+    if (!decide_trade_direction(pool, cex_price, costs, PROBE_FRAC, i, j, probe_fee, probe_profit)) {
+        return d; // no profitable direction
     }
 
-    double fee_lo = 0.0, fee_hi = 0.0;
-    auto lo = simulate_profit(pool, d.i, d.j, dx0, cex_price, costs, fee_lo);
-    if (!lo) return d;
-    auto hi = simulate_profit(pool, d.i, d.j, dxHi, cex_price, costs, fee_hi);
-
-    double best_dx = dx0;
-    double best_profit = lo->second;
-    double best_fee   = fee_lo;
-
-    if (hi && hi->second >= best_profit) {
-        best_dx     = dxHi;
-        best_profit = hi->second;
-        best_fee    = fee_hi;
-    } else {
-        double L = dx0, R = dxHi;
-        for (int it = 0; it < 40; ++it) {
-            double mid = 0.5 * (L + R);
-            double fee_mid = 0.0;
-            auto m = simulate_profit(pool, d.i, d.j, mid, cex_price, costs, fee_mid);
-            if (m) {
-                L = mid;
-                if (m->second >= best_profit) {
-                    best_profit = m->second;
-                    best_dx     = mid;
-                    best_fee    = fee_mid;
-                }
-            } else {
-                R = mid;
-            }
-            if (R - L <= std::max(1e-12, available * 1e-12)) break;
-        }
+    // 2) Decide size using binary search within bounds
+    double dx = 0.0, fee_tokens = 0.0, profit = 0.0;
+    if (!decide_trade_size(pool, cex_price, costs, i, j, notional_cap_coin0, min_swap_frac, max_swap_frac, dx, fee_tokens, profit)) {
+        return d; // size selection found no profitable dx within bounds
     }
 
-    d.do_trade       = true;
-    d.dx             = best_dx;
-    d.profit         = best_profit;
-    d.fee_tokens     = best_fee;
-    d.notional_coin0 = (d.i==0 && d.j==1) ? best_dx : best_dx * cex_price;
+    d.do_trade = true;
+    d.i = i; d.j = j;
+    d.dx = dx;
+    d.fee_tokens = fee_tokens;
+    d.profit = profit;
+    d.notional_coin0 = (i == 0) ? dx : dx * cex_price;
     return d;
 }
 
@@ -408,6 +465,15 @@ int main(int argc, char* argv[]) {
         auto t_read0 = clk::now();
         auto candles = load_candles(candles_path, max_candles);
         auto events  = gen_events(candles);
+        // // print first 10 candles and events
+        // std::cout << "candles:" << std::endl;
+        // for (size_t i = 0; i < 10; ++i) {
+        //     std::cout << "candle " << i << ": " << candles[i].ts << " " << candles[i].open << " " << candles[i].high << " " << candles[i].low << " " << candles[i].close << " " << candles[i].volume << std::endl;
+        // }
+        // std::cout << "events:" << std::endl;
+        // for (size_t i = 0; i < 10; ++i) {
+        //     std::cout << "event " << i << ": " << events[i].ts << " " << events[i].p_cex << " " << events[i].volume << std::endl;
+        // }
         auto t_read1 = clk::now();
 
         std::ifstream in(pools_path); if (!in) throw std::runtime_error("Cannot open pools json: " + pools_path);

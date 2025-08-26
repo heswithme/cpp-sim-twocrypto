@@ -57,46 +57,46 @@ def strify_pool(pool: dict) -> dict:
 
 
 # -------------------- Grid Definition --------------------
-N_GRID = 1
+N_GRID = 10
 
 X_name = "A"  # can be changed to any pool key
-X_vals = np.logspace(np.log10(2 * 10_000), np.log10(1000 * 10_000), N_GRID).round().astype(int).tolist()
+X_vals = np.logspace(np.log10(1 * 10_000), np.log10(1000 * 10_000), N_GRID).round().astype(int).tolist()
 
 Y_name = "mid_fee"  # default second param; also applied to out_fee
 # Y values already as ints in 1e10 fee units: [1e6, 5e8]
 Y_vals = np.logspace(np.log10(.0001 * 10**10), np.log10(.01 * 10**10), N_GRID).round().astype(int).tolist()
 
-init_liq = 1_000_000
-init_price = 1 #brlusd
+init_liq = 1_000_000 # in coin0
+init_price = 0.190865 #brlusd
 DEFAULT_DATAFILE = "python/arb_sim/trade_data/brlusd/brlusd-1m.json"
 START_TS = _first_candle_ts(DEFAULT_DATAFILE)
 # -------------------- Base Templates --------------------
 BASE_POOL = {
     # All values are integers in their native units
-    "initial_liquidity": [int(init_liq//2) * 10**18, int(init_liq//2 * init_price) * 10**18],
+    "initial_liquidity": [int(init_liq//2) * 10**18, int(init_liq//2 / init_price) * 10**18],
     "A": 100 * 10_000,
     "gamma": 10**14, #unused in twocrypto
     "mid_fee": int(0.001 * 10**10),
     "out_fee": int(0.002 * 10**10),
     "fee_gamma": int(0.005 * 10**18),
     "allowed_extra_profit": int(1e-8 * 10**18),
-    "adjustment_step": int(5.5e-6 * 10**18),
+    "adjustment_step": int(5.5e-3 * 10**18),
     "ma_time": 866,
     "initial_price": int(init_price * 10**18),
     "start_timestamp": START_TS,
     # Donations (harness-only):
     # - donation_apy: plain fraction per year (0.05 => 5%).
     # - donation_frequency: seconds between donations.
-    "donation_apy": 0.05,
+    "donation_apy": 0.0,
     "donation_frequency": int(3600),
 }
 
 BASE_COSTS = {
     "arb_fee_bps": 10.0,
-    "gas_coin0": 0,
+    "gas_coin0": 0.1,
     "max_trade_frac": 0.25,
-    "use_volume_cap": False,
-    "volume_cap_mult": 1.0,
+    "use_volume_cap": True,
+    "volume_cap_mult": 0.1,
 }
 
 

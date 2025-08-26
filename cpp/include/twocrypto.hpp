@@ -534,10 +534,12 @@ public:
             if constexpr (std::is_same_v<T, stableswap::uint256>) {
                     std::cout << "TRACE tp_ema price_oracle=" << price_oracle.template convert_to<std::string>()
                           << " last_prices=" << last_prices.template convert_to<std::string>()
+                          << " price_scale=" << price_scale.template convert_to<std::string>()
                           << "\n";
             } else {
                 std::cout << "TRACE tp_ema price_oracle=" << price_oracle
                           << " last_prices=" << last_prices
+                          << " price_scale=" << price_scale
                           << "\n";
             }
         }

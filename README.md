@@ -20,6 +20,29 @@ Performance notes:
 - Double‑precision (`_d`) pool harness runs about 2× faster but loses roughly ~1% accuracy over long runs. Use `_i` for parity validation and `_d` for speed exploration.
 - Arbitrage simulator uses mmap + byte‑scan for candles and is optimized for quick slicing and grid scans.
 
+## Quick Reference
+
+arb_sim → benchmark replay with donations and absolute time:
+
+```bash
+# 1) Save actions from arb_sim (includes donations, absolute timestamps)
+python3 python/arb_sim/arb_sim.py \
+  python/arb_sim/trade_data/brlusd/brlusd-1m.json \
+  --n-candles 10000 -n 10 --save-actions
+
+# 2) Convert latest arb_run_* → benchmark {pools,sequences}.json
+uv run python/benchmark_pool/arb_actions_to_sequence.py
+
+# 3) Run C++ variants (integer and double) and compare final state vs arb_sim
+uv run python/benchmark_pool/run_cpp_variants.py --n-cpp 1
+uv run python/benchmark_pool/debug/arb_vs_double.py \
+  --run-dir python/benchmark_pool/data/results/run_cpp_variants_YYYYMMDDTHHMMSSZ
+
+# Optional: step-wise cpp-double vs Vyper
+uv run python/benchmark_pool/run_full_benchmark.py --n-cpp 1 --n-py 1
+uv run python/benchmark_pool/debug/double_vs_vyper.py
+```
+
 ## Repository Layout
 
 ```
@@ -139,6 +162,20 @@ Pool grid generator:
 - Edit `python/arb_sim/generate_pools.py` to set `X_name`, `Y_name` and their ranges (uses `numpy.logspace`).
 - All pool parameters are specified as integers in their native units (fees 1e10, WAD‑like fields 1e18, balances 1e18). The script only stringifies when saving.
 - Runs with: `python3 python/arb_sim/generate_pools.py` and writes `python/arb_sim/run_data/pool_config.json` including `meta.base_pool` and `meta.grid`.
+
+Plot heatmap (two-parameter grid):
+```bash
+# Plot virtual_price/1e18 across X vs Y grid from latest arb_run_*
+uv run python/arb_sim/plot_heatmap.py
+
+# Options:
+#   --arb <path>           # pick specific arb_run JSON
+#   --metric <field>       # e.g., D, totalSupply, price_scale (default: virtual_price)
+#   --no-scale             # disable /1e18 scaling for Z values
+#   --out <file.png>       # output image path (default saved under run_data)
+#   --show                 # open a window instead of just saving
+#   --annot                # overlay numeric values on cells
+```
 
 ## Math Benchmarks (C++ vs Vyper)
 
