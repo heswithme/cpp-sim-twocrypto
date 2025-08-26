@@ -274,55 +274,35 @@ static Decision decide_trade(
 struct Candle { uint64_t ts; double open, high, low, close, volume; };
 struct Event  { uint64_t ts; double p_cex; double volume; };
 
-inline const unsigned char* skip_ws(const unsigned char* p, const unsigned char* end) {
-    while (p < end && (*p == ' ' || *p == '\n' || *p == '\r' || *p == '\t' || *p == ',')) ++p; return p;
-}
-inline const unsigned char* scan_u64(const unsigned char* p, const unsigned char* end, uint64_t& v) {
-    v = 0; p = skip_ws(p,end); while (p < end && *p >= '0' && *p <= '9') { v = v*10 + (*p - '0'); ++p; } return skip_ws(p,end);
-}
-inline const unsigned char* scan_num(const unsigned char* p, const unsigned char* end, double& d) {
-    p = skip_ws(p,end); const char* c = reinterpret_cast<const char*>(p); char* ce=nullptr; d = std::strtod(c,&ce); if (ce==c) return p; p = reinterpret_cast<const unsigned char*>(ce); return skip_ws(p,end);
-}
+// Simplified candles loading using Boost.JSON (parses full file once)
 
 static std::vector<Candle> load_candles(const std::string& path, size_t max_candles = 0) {
     std::vector<Candle> out; out.reserve(1024);
-    int fd = ::open(path.c_str(), O_RDONLY);
-    if (fd >= 0) {
-        struct stat st{};
-        if (::fstat(fd, &st) == 0 && st.st_size > 0) {
-            size_t sz = static_cast<size_t>(st.st_size);
-            void* map = ::mmap(nullptr, sz, PROT_READ, MAP_PRIVATE, fd, 0);
-            if (map != MAP_FAILED) {
-                const unsigned char* p = reinterpret_cast<const unsigned char*>(map);
-                const unsigned char* end = p + sz;
-                p = skip_ws(p,end); if (p<end && *p=='[') ++p;
-                while (p < end) {
-                    p = skip_ws(p,end); if (p>=end || *p==']') break; if (*p!='[') { ++p; continue; }
-                    ++p; Candle c{}; uint64_t ts=0; double o=0,h=0,l=0,cl=0,v=0;
-                    p=scan_u64(p,end,ts); if (ts>10000000000ULL) ts/=1000ULL;
-                    p=scan_num(p,end,o); p=scan_num(p,end,h); p=scan_num(p,end,l); p=scan_num(p,end,cl); p=scan_num(p,end,v);
-                    while (p<end && *p!=']') ++p; if (p<end && *p==']') ++p;
-                    c.ts=ts; c.open=o; c.high=h; c.low=l; c.close=cl; c.volume=v; out.push_back(c);
-                    if (max_candles > 0 && out.size() >= max_candles) break;
-                }
-                ::munmap(map, sz);
-                ::close(fd);
-                return out;
-            }
-        }
-        ::close(fd);
-    }
-    std::ifstream in(path, std::ios::binary); if (!in) throw std::runtime_error("Cannot open candles file: " + path);
-    std::ostringstream oss; oss << in.rdbuf(); std::string buf = oss.str();
-    const unsigned char* p = reinterpret_cast<const unsigned char*>(buf.data()); const unsigned char* end = p + buf.size();
-    p = skip_ws(p,end); if (p<end && *p=='[') ++p;
-    while (p < end) {
-        p = skip_ws(p,end); if (p>=end || *p==']') break; if (*p!='[') { ++p; continue; }
-        ++p; Candle c{}; uint64_t ts=0; double o=0,h=0,l=0,cl=0,v=0; p=scan_u64(p,end,ts); if (ts>10000000000ULL) ts/=1000ULL;
-        p=scan_num(p,end,o); p=scan_num(p,end,h); p=scan_num(p,end,l); p=scan_num(p,end,cl); p=scan_num(p,end,v);
-        while (p<end && *p!=']') ++p; if (p<end && *p==']') ++p;
-        c.ts=ts; c.open=o; c.high=h; c.low=l; c.close=cl; c.volume=v; out.push_back(c);
-        if (max_candles > 0 && out.size() >= max_candles) break;
+    std::ifstream in(path, std::ios::binary);
+    if (!in) throw std::runtime_error("Cannot open candles file: " + path);
+    std::ostringstream oss; oss << in.rdbuf();
+    std::string s = oss.str();
+    json::value val = json::parse(s);
+    if (!val.is_array()) throw std::runtime_error("Candles JSON must be an array of arrays");
+    const auto& arr = val.as_array();
+    size_t limit = (max_candles > 0) ? std::min<size_t>(arr.size(), max_candles) : arr.size();
+    out.reserve(limit);
+    for (size_t idx = 0; idx < limit; ++idx) {
+        const auto& el = arr[idx];
+        if (!el.is_array()) continue;
+        const auto& a = el.as_array();
+        if (a.size() < 6) continue;
+        Candle c{};
+        uint64_t ts = 0;
+        const auto& tsv = a[0];
+        if (tsv.is_uint64()) ts = tsv.as_uint64();
+        else if (tsv.is_int64()) ts = static_cast<uint64_t>(tsv.as_int64());
+        else if (tsv.is_double()) ts = static_cast<uint64_t>(tsv.as_double());
+        if (ts > 10000000000ULL) ts /= 1000ULL;
+        c.ts = ts;
+        auto to_d = [](const json::value& v)->double { return v.is_double()? v.as_double() : (v.is_int64()? static_cast<double>(v.as_int64()) : 0.0); };
+        c.open = to_d(a[1]); c.high = to_d(a[2]); c.low = to_d(a[3]); c.close = to_d(a[4]); c.volume = to_d(a[5]);
+        out.push_back(c);
     }
     return out;
 }
