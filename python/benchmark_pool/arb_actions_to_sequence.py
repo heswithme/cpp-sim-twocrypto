@@ -104,7 +104,8 @@ def _scale_amounts_to_strs(amts: List[Decimal | float]) -> List[str]:
 
 def convert_actions(arb_run_path: Path, *, run_index: Optional[int] = None,
                     x_val: Optional[str] = None, y_val: Optional[str] = None,
-                    sequence_name: Optional[str] = None) -> Dict[str, Any]:
+                    sequence_name: Optional[str] = None,
+                    start_ts_hint: Optional[int] = None) -> Dict[str, Any]:
     data = _load_json(arb_run_path, as_decimal=True)
     runs: List[Dict[str, Any]] = data.get("runs", [])
     if not runs:
@@ -134,6 +135,10 @@ def convert_actions(arb_run_path: Path, *, run_index: Optional[int] = None,
     pool_params = rr.get("params", {}).get("pool") if isinstance(rr.get("params"), dict) else None
     has_start_ts = bool(pool_params and pool_params.get("start_timestamp") is not None)
     start_ts = int(pool_params.get("start_timestamp")) if has_start_ts else 0
+    # If caller provided a start_ts hint (e.g., from pool_config.json), prefer it
+    if not has_start_ts and start_ts_hint is not None:
+        start_ts = int(start_ts_hint)
+        has_start_ts = True
 
     # Ensure actions sorted by timestamp, though input should already be ordered
     actions_sorted = sorted(actions, key=lambda a: int(a.get("ts", 0)))
@@ -162,18 +167,32 @@ def convert_actions(arb_run_path: Path, *, run_index: Optional[int] = None,
             # Transform exchange
             i = int(a.get("i", 0))
             j = int(a.get("j", 1))
-            dx_raw = a.get("dx", Decimal(0))
+            # Prefer pre-scaled wei field if provided by harness; else scale tokens
+            if "dx_wei" in a:
+                dx_out = str(a.get("dx_wei"))
+            else:
+                dx_raw = a.get("dx", Decimal(0))
+                dx_out = _scale_dx_to_str(dx_raw)
             out_actions.append({
                 "type": "exchange",
                 "i": i,
                 "j": j,
-                "dx": _scale_dx_to_str(dx_raw),
+                "dx": dx_out,
             })
         elif atype == "donation":
             # Balanced donation amounts come from arb_harness action
             amts = a.get("amounts") or [0, 0]
             # amounts are in tokens (float); scale to 1e18 integer strings
             try:
+                if "amounts_wei" in a:
+                    amt0s = str(a.get("amounts_wei")[0])
+                    amt1s = str(a.get("amounts_wei")[1])
+                    out_actions.append({
+                        "type": "add_liquidity",
+                        "amounts": [amt0s, amt1s],
+                        "donation": True,
+                    })
+                    continue
                 amt0 = amts[0]
                 amt1 = amts[1]
             except Exception:
@@ -278,9 +297,29 @@ def main() -> int:
     arb_run_path = Path(args.arb_run) if args.arb_run else _find_latest_arb_run(repo_root)
     print(f"Using arb_run file: {arb_run_path}")
 
+    # Try to load pool-config start_timestamp as a hint if available
+    run_sel = _pick_run(_load_json(arb_run_path).get("runs", []), args.run_index, args.x_val, args.y_val)
+    x_key = run_sel.get("x_key"); y_key = run_sel.get("y_key")
+    x_val = run_sel.get("x_val"); y_val = run_sel.get("y_val")
+    pc_path = Path(args.pool_config) if args.pool_config else (repo_root / "python" / "arb_sim" / "run_data" / "pool_config.json")
+    start_ts_hint = None
+    try:
+        pc = _load_json(pc_path)
+        for p in pc.get("pools", []):
+            pool = p.get("pool", {})
+            okx = True if not x_key or x_val is None else str(pool.get(x_key)) == str(x_val)
+            oky = True if not y_key or y_val is None else str(pool.get(y_key)) == str(y_val)
+            if okx and oky:
+                if pool.get("start_timestamp") is not None:
+                    start_ts_hint = int(pool.get("start_timestamp"))
+                break
+    except Exception:
+        start_ts_hint = None
+
     obj = convert_actions(arb_run_path, run_index=args.run_index,
                           x_val=args.x_val, y_val=args.y_val,
-                          sequence_name=args.name)
+                          sequence_name=args.name,
+                          start_ts_hint=start_ts_hint)
 
     with seq_out.open("w") as f:
         json.dump(obj, f, indent=2)

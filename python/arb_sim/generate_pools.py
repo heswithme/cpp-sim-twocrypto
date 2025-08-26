@@ -57,13 +57,12 @@ def strify_pool(pool: dict) -> dict:
 
 
 # -------------------- Grid Definition --------------------
-N_GRID = 10
+N_GRID = 1
 
 X_name = "A"  # can be changed to any pool key
-X_vals = np.logspace(np.log10(5 * 10_000), np.log10(300 * 10_000), N_GRID).round().astype(int).tolist()
+X_vals = np.logspace(np.log10(5 * 10_000), np.log10(500 * 10_000), N_GRID).round().astype(int).tolist()
 
 Y_name = "mid_fee"  # default second param; also applied to out_fee
-# Y values already as ints in 1e10 fee units: [1e6, 5e8]
 Y_vals = np.logspace(np.log10(1e-4 * 10**10), np.log10(.05 * 10**10), N_GRID).round().astype(int).tolist()
 
 init_liq = 1_000_000 # in coin0

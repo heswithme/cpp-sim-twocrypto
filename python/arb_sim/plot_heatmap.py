@@ -50,7 +50,7 @@ def _to_float(x: Any) -> float:
             return float("nan")
 
 
-def _extract_grid(data: Dict[str, Any], metric: str, scale_1e18: bool) -> Tuple[str, str, List[float], List[float], np.ndarray]:
+def _extract_grid(data: Dict[str, Any], metric: str, scale_1e18: bool, scale_percent: bool) -> Tuple[str, str, List[float], List[float], np.ndarray]:
     runs = data.get("runs", [])
     if not runs:
         raise SystemExit("No runs[] found in arb_run JSON")
@@ -67,10 +67,16 @@ def _extract_grid(data: Dict[str, Any], metric: str, scale_1e18: bool) -> Tuple[
         xv = _to_float(r.get("x_val")) if r.get("x_val") is not None else float("nan")
         yv = _to_float(r.get("y_val")) if r.get("y_val") is not None else float("nan")
         fs = r.get("final_state", {})
-        z_raw = fs.get(metric)
-        z = _to_float(z_raw)
+        res = r.get("result", {})
+        # Prefer final_state; fall back to result summary (for metrics like apy)
+        if metric in fs:
+            z = _to_float(fs.get(metric))
+        else:
+            z = _to_float(res.get(metric))
         if scale_1e18 and np.isfinite(z):
             z = z / 1e18
+        if scale_percent and np.isfinite(z):
+            z = z * 100.0
         if np.isfinite(xv) and np.isfinite(yv) and np.isfinite(z):
             points[(xv, yv)] = z
             xs.append(xv)
@@ -116,14 +122,27 @@ def _format_axis_labels(name: str, values: List[float]) -> Tuple[List[str], str]
     labels: List[str] = []
     if scale == 0.0 and "fee" in (name or "").lower():
         # Convert 1e10-scaled fee to bps: val/1e10 * 1e4
-        labels = [f"{(v / 1e10 * 1e4):g}" for v in values]
+        labels = [f"{(v / 1e10 * 1e4):.1f}" for v in values]
         return labels, f"{name} (bps)"
     if scale != 1.0:
-        labels = [f"{(v / scale):g}" for v in values]
+        labels = [f"{(v / scale):.1f}" for v in values]
         return labels, f"{name}{suffix}"
     # default
-    labels = [f"{v:g}" for v in values]
+    labels = [f"{v:.1f}" for v in values]
     return labels, name
+
+
+def _select_ticks(values: List[float], max_ticks: int) -> List[int]:
+    n = len(values)
+    if n == 0:
+        return []
+    if max_ticks <= 0 or n <= max_ticks:
+        return list(range(n))
+    idxs = np.linspace(0, n - 1, num=max_ticks, dtype=int)
+    uniq = sorted(set(int(i) for i in idxs))
+    if uniq[-1] != n - 1:
+        uniq[-1] = n - 1
+    return uniq
 
 
 def main() -> int:
@@ -136,6 +155,9 @@ def main() -> int:
     ap.add_argument("--out", type=str, default=None, help="Output image path (default: run_data/heatmap_<metric>.png)")
     ap.add_argument("--show", action="store_true", help="Show interactive window")
     ap.add_argument("--annot", action="store_true", help="Annotate cells with values")
+    ap.add_argument("--max-xticks", type=int, default=12, help="Max X tick labels (default: 12)")
+    ap.add_argument("--max-yticks", type=int, default=12, help="Max Y tick labels (default: 12)")
+    ap.add_argument("--font-size", type=int, default=16, help="Tick label font size (default: 12)")
     args = ap.parse_args()
 
     arb_path = Path(args.arb) if args.arb else _latest_arb_run()
@@ -144,32 +166,44 @@ def main() -> int:
     # Heuristic: scale by 1e18 for common 1e18-scaled metrics unless --no-scale
     metric = args.metric
     scale_1e18 = (not args.no_scale) and metric in {"virtual_price", "xcp_profit", "price_scale", "D", "totalSupply"}
+    scale_percent = ('apy' in metric.lower())
 
-    x_name, y_name, xs, ys, Z = _extract_grid(data, metric, scale_1e18)
+    x_name, y_name, xs, ys, Z = _extract_grid(data, metric, scale_1e18, scale_percent)
 
-    fig, ax = plt.subplots(figsize=(8, 6), constrained_layout=True)
+    # Scale figure size to grid density to reduce overlap
+    fig_w = max(6.0, min(14.0, 0.4 * max(1, len(xs))))
+    fig_h = max(4.0, min(10.0, 0.3 * max(1, len(ys))))
+    fig, ax = plt.subplots(figsize=(fig_w, fig_h), constrained_layout=True)
     im = ax.imshow(Z, origin="lower", aspect="auto", cmap=args.cmap)
-    ax.set_xticks(range(len(xs)))
-    ax.set_yticks(range(len(ys)))
-    # Normalized tick labels
-    xlabels, xlabel = _format_axis_labels(x_name, xs)
-    ylabels, ylabel = _format_axis_labels(y_name, ys)
-    ax.set_xticklabels(xlabels, rotation=45, ha="right")
-    ax.set_yticklabels(ylabels)
-    ax.set_xlabel(xlabel)
-    ax.set_ylabel(ylabel)
-    title_scale = " (scaled 1e18)" if scale_1e18 else ""
-    ax.set_title(f"Heatmap: {metric}{title_scale}")
+    # Downsample ticks to avoid clutter
+    xticks = _select_ticks(xs, args.max_xticks)
+    yticks = _select_ticks(ys, args.max_yticks)
+    ax.set_xticks(xticks)
+    ax.set_yticks(yticks)
+    # Normalized labels for selected ticks
+    xlab_full, xlabel = _format_axis_labels(x_name, xs)
+    ylab_full, ylabel = _format_axis_labels(y_name, ys)
+    xlabels = [xlab_full[i] for i in xticks]
+    ylabels = [ylab_full[i] for i in yticks]
+    ax.set_xticklabels(xlabels, rotation=45, ha="right", fontsize=args.font_size)
+    ax.set_yticklabels(ylabels, fontsize=args.font_size)
+    ax.set_xlabel(xlabel, fontsize=args.font_size + 2)
+    ax.set_ylabel(ylabel, fontsize=args.font_size + 2)
+    if scale_percent:
+        title_scale = " (%)"
+    else:
+        title_scale = " (scaled 1e18)" if scale_1e18 else ""
+    ax.set_title(f"Heatmap: {metric}{title_scale}", fontsize=args.font_size + 4)
     cb = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-    cb.set_label(metric)
+    cb.set_label(metric + (" (%)" if scale_percent else ""), fontsize=args.font_size)
+    cb.ax.tick_params(labelsize=args.font_size)
 
     if args.annot:
         for i in range(Z.shape[0]):
             for j in range(Z.shape[1]):
                 val = Z[i, j]
                 if np.isfinite(val):
-                    ax.text(j, i, f"{val:.3g}", va="center", ha="center", color="white", fontsize=8)
-
+                    ax.text(j, i, f"{val:.3g}", va="center", ha="center", color="white", fontsize=max(6, args.font_size - 2))
     # Output
     out_path = Path(args.out) if args.out else (RUN_DIR / f"heatmap_{metric}.png")
     out_path.parent.mkdir(parents=True, exist_ok=True)

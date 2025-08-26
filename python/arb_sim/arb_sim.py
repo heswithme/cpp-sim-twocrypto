@@ -154,6 +154,8 @@ def main() -> int:
         }
         if "actions" in rr:
             enriched["actions"] = rr.get("actions")
+        if "states" in rr:
+            enriched["states"] = rr.get("states")
         enriched_runs.append(enriched)
 
     agg = {

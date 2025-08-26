@@ -506,9 +506,13 @@ int main(int argc, char* argv[]) {
                     else if (!events.empty()) init_ts = events.front().ts;
                     if (init_ts != 0) pool.set_block_timestamp(init_ts);
                     (void)pool.add_liquidity(cfg.initial_liq, 0.0);
+                    // Initial TVL in coin0
+                    const double tvl_start = pool.balances[0] + pool.balances[1] * pool.cached_price_scale;
 
                     Metrics m{};
                     json::array actions;
+                    // Optional per-action state snapshots to aid parity debugging
+                    json::array states;
                     // Donation scheduler
                     const double SECONDS_PER_YEAR = 365.0 * 86400.0;
                     bool donations_enabled = (cfg.donation_apy > 0.0) && (cfg.donation_frequency > 0.0);
@@ -518,8 +522,16 @@ int main(int argc, char* argv[]) {
                         next_donation_ts = base_ts + static_cast<uint64_t>(cfg.donation_frequency);
                     }
                     auto t_pool0 = clk::now();
+                    if (save_actions) {
+                        // Capture initial state snapshot
+                        states.push_back(pool_state_json(pool));
+                    }
                     for (const auto& ev : events) {
                         pool.set_block_timestamp(ev.ts);
+                        if (save_actions) {
+                            // Snapshot after time update (before any donations/trades at this timestamp)
+                            states.push_back(pool_state_json(pool));
+                        }
                         // Apply any due donations before trading
                         if (donations_enabled) {
                             while (next_donation_ts != 0 && ev.ts >= next_donation_ts) {
@@ -554,10 +566,15 @@ int main(int argc, char* argv[]) {
                                             da["ts"] = ev.ts;               // actual pool timestamp
                                             da["ts_due"] = next_donation_ts; // scheduled donation time
                                             da["amounts"] = json::array{amt0, amt1};
+                                            da["amounts_wei"] = json::array{to_str_1e18(amt0), to_str_1e18(amt1)};
                                             da["minted"] = minted;
                                             da["tvl_coin0_before"] = tvl_coin0;
                                             da["price_scale"] = ps;
                                             actions.push_back(da);
+                                        }
+                                        if (save_actions) {
+                                            // Snapshot state after donation commit
+                                            states.push_back(pool_state_json(pool));
                                         }
                                     } catch (...) {
                                         // donation failed (e.g., cap). Skip silently.
@@ -600,10 +617,12 @@ int main(int argc, char* argv[]) {
                             if (save_actions) {
                                 json::object tr;
                                 tr["type"] = "exchange";
-                                tr["ts"] = ev.ts; tr["i"] = d.i; tr["j"] = d.j; tr["dx"] = d.dx;
+                                tr["ts"] = ev.ts; tr["i"] = d.i; tr["j"] = d.j; tr["dx"] = d.dx; tr["dx_wei"] = to_str_1e18(d.dx);
                                 tr["dy_after_fee"] = dy_after_fee; tr["fee_tokens"] = fee_tokens;
                                 tr["profit_coin0"] = profit_coin0; tr["p_cex"] = ev.p_cex; tr["p_pool_before"] = pre_p_pool;
                                 actions.push_back(tr);
+                                // Snapshot state after trade
+                                states.push_back(pool_state_json(pool));
                             }
                         } catch (...) {}
                     }
@@ -621,6 +640,33 @@ int main(int argc, char* argv[]) {
                     summary["donation_coin0_total"] = m.donation_coin0_total;
                     summary["donation_amounts_total"] = json::array{m.donation_amounts_total[0], m.donation_amounts_total[1]};
                     summary["pool_exec_ms"] = pool_exec_ms;
+                    // APY over the run (TVL-based, compounded) and traditional VP-based APY
+                    uint64_t t_start = events.empty() ? init_ts : events.front().ts;
+                    uint64_t t_end   = events.empty() ? init_ts : events.back().ts;
+                    double duration_s = (t_end > t_start) ? double(t_end - t_start) : 0.0;
+                    const double tvl_end = pool.balances[0] + pool.balances[1] * pool.cached_price_scale;
+                    double apy_coin0 = 0.0;
+                    double apy_donation_coin0 = 0.0;
+                    double apy_vp = 0.0;
+                    if (duration_s > 0.0 && tvl_start > 0.0) {
+                        double exponent = SECONDS_PER_YEAR / duration_s;
+                        // Traditional VP-based APY (vp_start = 1.0)
+                        double vp_end = pool.get_virtual_price();
+                        if (vp_end > 0.0) apy_vp = std::pow(vp_end, exponent) - 1.0; else apy_vp = -1.0;
+
+                        // Coin0 TVL-based APY
+                        if (tvl_end > 0.0) apy_coin0 = std::pow(tvl_end / tvl_start, exponent) - 1.0; else apy_coin0 = -1.0;
+                        double tvl_end_adj = tvl_end - m.donation_coin0_total;
+                        if (tvl_end_adj > 0.0) apy_donation_coin0 = std::pow(tvl_end_adj / tvl_start, exponent) - 1.0; else apy_donation_coin0 = -1.0;
+                    }
+                    summary["t_start"] = t_start;
+                    summary["t_end"] = t_end;
+                    summary["duration_s"] = duration_s;
+                    summary["tvl_coin0_start"] = tvl_start;
+                    summary["tvl_coin0_end"] = tvl_end;
+                    summary["apy"] = apy_vp;
+                    summary["apy_coin0"] = apy_coin0;
+                    summary["apy_donation_coin0"] = apy_donation_coin0;
 
                     json::object params;
                     params["pool"] = echo_pool;
@@ -630,7 +676,10 @@ int main(int argc, char* argv[]) {
                     out["result"] = summary;
                     out["params"] = params;
                     out["final_state"] = pool_state_json(pool);
-                    if (save_actions) out["actions"] = actions;
+                    if (save_actions) {
+                        out["actions"] = actions;
+                        out["states"] = states;
+                    }
                     results[idx] = std::move(out);
                     {
                         std::lock_guard<std::mutex> lk(io_mu);
