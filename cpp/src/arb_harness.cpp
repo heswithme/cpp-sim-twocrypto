@@ -40,7 +40,6 @@ inline bool differs_rel(double a, double b, double rel = 1e-15, double abs_eps =
 struct Costs {
     double arb_fee_bps{10.0};
     double gas_coin0{0.0};
-    double max_trade_frac{0.1};
     bool   use_volume_cap{false};
     double volume_cap_mult{1.0};
 };
@@ -200,7 +199,7 @@ static bool decide_trade_size(
     if (!(available > 0)) return false;
 
     double dx_lo = std::max(1e-18, available * std::max(1e-12, min_swap_frac));
-    double dx_hi = available * std::min(max_swap_frac, costs.max_trade_frac);
+    double dx_hi = available * max_swap_frac;
     if (costs.use_volume_cap) {
         if (i == 0) dx_hi = std::min(dx_hi, notional_cap_coin0);
         else if (cex_price > 0) dx_hi = std::min(dx_hi, notional_cap_coin0 / cex_price);
@@ -407,7 +406,6 @@ static void parse_pool_entry(const json::object& entry, PoolInit& out_pool, Cost
         auto co = c->as_object();
         if (auto* v = co.if_contains("arb_fee_bps")) out_costs.arb_fee_bps = parse_plain_double(*v);
         if (auto* v = co.if_contains("gas_coin0")) out_costs.gas_coin0 = parse_scaled_1e18(*v);
-        if (auto* v = co.if_contains("max_trade_frac")) out_costs.max_trade_frac = parse_plain_double(*v);
         if (auto* v = co.if_contains("use_volume_cap")) out_costs.use_volume_cap = v->as_bool();
         if (auto* v = co.if_contains("volume_cap_mult")) out_costs.volume_cap_mult = parse_plain_double(*v);
     } else {

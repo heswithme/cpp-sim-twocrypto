@@ -133,7 +133,7 @@ python3 python/arb_sim/arb_sim.py \
 
 Key flags:
 - `--n-candles N`: slice the first N candles for rapid iteration (two events per candle).
-- `--min-swap`, `--max-swap`: min/max fraction of from-side balance for binary sizing (default 1e-6 and 1.0). Also capped by `max_trade_frac` and per-event volume cap if enabled.
+- `--min-swap`, `--max-swap`: min/max fraction of from-side balance for sizing (default 1e-6 and 1.0). Also capped by per-event volume cap if enabled.
 - `--save-actions`: include executed trades in result JSON for slower Vyper replay later.
  - `-n/--threads N`: number of C++ worker threads (default: hardware threads).
 

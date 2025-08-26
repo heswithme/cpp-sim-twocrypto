@@ -60,11 +60,11 @@ def strify_pool(pool: dict) -> dict:
 N_GRID = 10
 
 X_name = "A"  # can be changed to any pool key
-X_vals = np.logspace(np.log10(1 * 10_000), np.log10(1000 * 10_000), N_GRID).round().astype(int).tolist()
+X_vals = np.logspace(np.log10(5 * 10_000), np.log10(300 * 10_000), N_GRID).round().astype(int).tolist()
 
 Y_name = "mid_fee"  # default second param; also applied to out_fee
 # Y values already as ints in 1e10 fee units: [1e6, 5e8]
-Y_vals = np.logspace(np.log10(.0001 * 10**10), np.log10(.01 * 10**10), N_GRID).round().astype(int).tolist()
+Y_vals = np.logspace(np.log10(1e-4 * 10**10), np.log10(.05 * 10**10), N_GRID).round().astype(int).tolist()
 
 init_liq = 1_000_000 # in coin0
 init_price = 0.190865 #brlusd
@@ -78,8 +78,8 @@ BASE_POOL = {
     "gamma": 10**14, #unused in twocrypto
     "mid_fee": int(0.001 * 10**10),
     "out_fee": int(0.002 * 10**10),
-    "fee_gamma": int(0.005 * 10**18),
-    "allowed_extra_profit": int(1e-8 * 10**18),
+    "fee_gamma": int(0.003 * 10**18),
+    "allowed_extra_profit": int(1e-12 * 10**18),
     "adjustment_step": int(5.5e-3 * 10**18),
     "ma_time": 866,
     "initial_price": int(init_price * 10**18),
@@ -87,16 +87,15 @@ BASE_POOL = {
     # Donations (harness-only):
     # - donation_apy: plain fraction per year (0.05 => 5%).
     # - donation_frequency: seconds between donations.
-    "donation_apy": 0.0,
+    "donation_apy": 0.03,
     "donation_frequency": int(3600),
 }
 
 BASE_COSTS = {
-    "arb_fee_bps": 10.0,
-    "gas_coin0": 0.1,
-    "max_trade_frac": 0.25,
+    "arb_fee_bps": 50.0,
+    "gas_coin0": 0.0,
     "use_volume_cap": True,
-    "volume_cap_mult": 0.1,
+    "volume_cap_mult": 1,
 }
 
 
