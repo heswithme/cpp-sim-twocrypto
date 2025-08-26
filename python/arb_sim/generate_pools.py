@@ -57,7 +57,7 @@ def strify_pool(pool: dict) -> dict:
 
 
 # -------------------- Grid Definition --------------------
-N_GRID = 1
+N_GRID = 32
 
 X_name = "A"  # can be changed to any pool key
 X_vals = np.logspace(np.log10(5 * 10_000), np.log10(500 * 10_000), N_GRID).round().astype(int).tolist()
@@ -86,7 +86,7 @@ BASE_POOL = {
     # Donations (harness-only):
     # - donation_apy: plain fraction per year (0.05 => 5%).
     # - donation_frequency: seconds between donations.
-    "donation_apy": 0.03,
+    "donation_apy": 0.00,
     "donation_frequency": int(3600),
 }
 
