@@ -19,6 +19,8 @@ class CppPoolRunner:
         self.harness_path = os.path.join(self.build_dir, "benchmark_harness")
         self.harness_i_path = os.path.join(self.build_dir, "benchmark_harness_i")
         self.harness_d_path = os.path.join(self.build_dir, "benchmark_harness_d")
+        self.harness_f_path = os.path.join(self.build_dir, "benchmark_harness_f")
+        self.harness_ld_path = os.path.join(self.build_dir, "benchmark_harness_ld")
 
     def configure_build(self):
         os.makedirs(self.build_dir, exist_ok=True)
@@ -32,10 +34,10 @@ class CppPoolRunner:
     def build_harness(self):
         # Always reconfigure to pick up target/name changes cleanly
         self.configure_build()
-        print("Building typed C++ harnesses (i and d)...")
+        print("Building typed C++ harnesses (i, d, f, ld)...")
         # Build both typed harnesses so switching modes requires no rebuild
         result = subprocess.run([
-            "cmake", "--build", ".", "--target", "benchmark_harness_i", "benchmark_harness_d"
+            "cmake", "--build", ".", "--target", "benchmark_harness_i", "benchmark_harness_d", "benchmark_harness_f", "benchmark_harness_ld"
         ], cwd=self.build_dir, capture_output=True, text=True)
         if result.returncode != 0:
             raise RuntimeError(f"Build failed: {result.stderr}")
@@ -44,18 +46,29 @@ class CppPoolRunner:
             missing.append(self.harness_i_path)
         if not os.path.exists(self.harness_d_path):
             missing.append(self.harness_d_path)
+        if not os.path.exists(self.harness_f_path):
+            missing.append(self.harness_f_path)
+        if not os.path.exists(self.harness_ld_path):
+            missing.append(self.harness_ld_path)
         if missing:
             raise RuntimeError(f"Missing built harness(es): {missing}")
         print(f"✓ Built C++ harnesses at {self.harness_i_path} and {self.harness_d_path}")
         return self.harness_i_path, self.harness_d_path
 
     def run_benchmark(self, mode: str, pool_configs_file: str, sequences_file: str, output_file: str) -> Dict:
-        if mode not in ("i", "d"):
-            raise ValueError("mode must be 'i' or 'd'")
+        if mode not in ("i", "d", "f", "ld"):
+            raise ValueError("mode must be 'i' or 'd' or 'f' or 'ld'")
         # Ensure typed harnesses exist; build if needed
-        if not (os.path.exists(self.harness_i_path) and os.path.exists(self.harness_d_path)):
+        if not (os.path.exists(self.harness_i_path) and os.path.exists(self.harness_d_path) and os.path.exists(self.harness_f_path) and os.path.exists(self.harness_ld_path)):
             self.build_harness()
-        harness_bin = self.harness_i_path if mode == "i" else self.harness_d_path
+        if mode == "i":
+            harness_bin = self.harness_i_path
+        elif mode == "d":
+            harness_bin = self.harness_d_path
+        elif mode == "f":
+            harness_bin = self.harness_f_path
+        else:
+            harness_bin = self.harness_ld_path
         print(f"Running C++ harness binary: {os.path.basename(harness_bin)} ...")
         import time as _time
         t0 = _time.perf_counter()

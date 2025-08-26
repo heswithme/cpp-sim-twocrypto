@@ -49,6 +49,36 @@ struct NumTraits<double> {
     static T min(const T& a, const T& b) { return a < b ? a : b; }
 };
 
+template <>
+struct NumTraits<float> {
+    using T = float;
+    static T PRECISION() { return 1.0f; }
+    static T FEE_PRECISION() { return 1.0f; }
+    static T A_MULTIPLIER() { return 10000.0f; }
+    static T NOISE_FEE() { return 1e-5f; }
+    static T ZERO() { return 0.0f; }
+    static T ONE() { return 1.0f; }
+    static T ROUNDING_UNIT_XP() { return 0.0f; }
+    static bool is_zero(const T& x) { return std::abs(x) <= 0.0f; }
+    static T max(const T& a, const T& b) { return a > b ? a : b; }
+    static T min(const T& a, const T& b) { return a < b ? a : b; }
+};
+
+template <>
+struct NumTraits<long double> {
+    using T = long double;
+    static T PRECISION() { return 1.0L; }
+    static T FEE_PRECISION() { return 1.0L; }
+    static T A_MULTIPLIER() { return 10000.0L; }
+    static T NOISE_FEE() { return 1e-12L; }
+    static T ZERO() { return 0.0L; }
+    static T ONE() { return 1.0L; }
+    static T ROUNDING_UNIT_XP() { return 0.0L; }
+    static bool is_zero(const T& x) { return fabsl(x) <= 0.0L; }
+    static T max(const T& a, const T& b) { return a > b ? a : b; }
+    static T min(const T& a, const T& b) { return a < b ? a : b; }
+};
+
 template <typename T>
 class TwoCryptoPoolT {
 public:
@@ -178,13 +208,12 @@ private:
                 Traits::PRECISION() * price_scale
             );
             return _D * Traits::PRECISION() / N_COINS / sqrt_price;
+        } else if constexpr (std::is_same_v<T, long double>) {
+            long double sp = std::sqrt(static_cast<long double>(Traits::PRECISION() * price_scale));
+            return _D * Traits::PRECISION() / T(N_COINS) / T(sp);
         } else {
-            double sp = std::sqrt(
-                static_cast<double>(Traits::PRECISION() * price_scale)
-            );
-            return _D * Traits::PRECISION() /
-                   static_cast<double>(N_COINS) /
-                   sp;
+            double sp = std::sqrt(static_cast<double>(Traits::PRECISION() * price_scale));
+            return _D * Traits::PRECISION() / T(N_COINS) / T(sp);
         }
     }
 
@@ -502,12 +531,12 @@ public:
                     capped * (NumTraits<T>::PRECISION() - alpha) + price_oracle * alpha
                 ) / NumTraits<T>::PRECISION();
             } else {
-                double alpha = std::exp(
+                auto alpha = std::exp(
                     - static_cast<double>(dt) / static_cast<double>(ma_time)
                 );
                 T capped = last_prices;
                 if (capped > 2 * price_scale) capped = 2 * price_scale;
-                price_oracle = capped * (1.0 - alpha) + price_oracle * alpha;
+                price_oracle = capped * (T(1) - T(alpha)) + price_oracle * T(alpha);
             }
             cached_price_oracle = price_oracle;
             last_timestamp      = block_timestamp;

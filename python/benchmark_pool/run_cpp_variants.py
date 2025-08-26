@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Run C++ variants (integer vs double) on the same dataset and summarize timings.
+Run C++ variants (uint256, float, double, long double) on the same dataset and summarize timings.
 
 Usage:
   uv run benchmark_pool/run_cpp_variants.py [--pools-file FILE] [--sequences-file FILE]
@@ -8,8 +8,13 @@ Usage:
 
 Writes a timestamped folder under python/benchmark_pool/data/results/run_cpp_variants_<UTC> containing:
   - cpp_i_combined.json
+  - cpp_f_combined.json
   - cpp_d_combined.json
+  - cpp_ld_combined.json
   - summary.json (timings and basic counts)
+  - final_rel_errors_vs_i.json (per-variant vs integer baseline)
+  - final_abs_errors_vs_i.json
+  - final_rel_stats_vs_i.json
 """
 from __future__ import annotations
 import argparse
@@ -60,7 +65,7 @@ def _ensure_built_harness():
         subprocess.run(["cmake", "..", "-DCMAKE_BUILD_TYPE=Release"], cwd=str(build_dir), check=True)
     # Build both typed harnesses
     import subprocess
-    subprocess.run(["cmake", "--build", ".", "--target", "benchmark_harness_i", "benchmark_harness_d"], cwd=str(build_dir), check=True)
+    subprocess.run(["cmake", "--build", ".", "--target", "benchmark_harness_i", "benchmark_harness_d", "benchmark_harness_f", "benchmark_harness_ld"], cwd=str(build_dir), check=True)
 
 
 def main() -> int:
@@ -121,11 +126,23 @@ def main() -> int:
         res_i = run_cpp("i", str(pools_file), str(sequences_file), str(out_i))
         i_time = res_i.get("metadata", {}).get("harness_time_s")
 
+        # Run float
+        print("\n=== C++ float ===")
+        out_f = run_dir / "cpp_f_combined.json"
+        res_f = run_cpp("f", str(pools_file), str(sequences_file), str(out_f))
+        f_time = res_f.get("metadata", {}).get("harness_time_s")
+
         # Run double
         print("\n=== C++ double ===")
         out_d = run_dir / "cpp_d_combined.json"
         res_d = run_cpp("d", str(pools_file), str(sequences_file), str(out_d))
         d_time = res_d.get("metadata", {}).get("harness_time_s")
+
+        # Run long double
+        print("\n=== C++ long double ===")
+        out_ld = run_dir / "cpp_ld_combined.json"
+        res_ld = run_cpp("ld", str(pools_file), str(sequences_file), str(out_ld))
+        ld_time = res_ld.get("metadata", {}).get("harness_time_s")
 
         # Compute final-state differences for key metrics (percent and absolute wei)
         def _to_int(x: Any) -> int:
@@ -143,107 +160,120 @@ def main() -> int:
             return abs(a - b) * 100.0 / abs(b)
 
         I_states = _extract_states(res_i)
+        F_states = _extract_states(res_f)
         D_states = _extract_states(res_d)
+        LD_states = _extract_states(res_ld)
         metrics = ["balances", "D", "virtual_price", "totalSupply", "price_scale"]
-        final_rel_errors: Dict[str, Dict[str, Any]] = {}
-        final_abs_errors: Dict[str, Dict[str, Any]] = {}
-        agg_stats: Dict[str, Dict[str, float]] = {m: {"count": 0, "max_rel_pct": 0.0, "sum_rel_pct": 0.0} for m in metrics}
 
-        for pool, i_states in I_states.items():
-            d_states = D_states.get(pool)
-            if not d_states:
-                continue
-            i_final = i_states[-1] if isinstance(i_states, list) else i_states
-            d_final = d_states[-1] if isinstance(d_states, list) else d_states
-            per_metric: Dict[str, Any] = {}
-            for m in metrics:
-                if m not in i_final or m not in d_final:
+        def _diffs_vs_i(V_states: Dict[str, Any]):
+            final_rel_errors: Dict[str, Dict[str, Any]] = {}
+            final_abs_errors: Dict[str, Dict[str, Any]] = {}
+            agg_stats: Dict[str, Dict[str, float]] = {m: {"count": 0, "max_rel_pct": 0.0, "sum_rel_pct": 0.0} for m in metrics}
+            for pool, i_states in I_states.items():
+                v_states = V_states.get(pool)
+                if not v_states:
                     continue
-                iv = i_final[m]
-                dv = d_final[m]
-                if isinstance(iv, list) and isinstance(dv, list):
-                    ival = [_to_int(x) for x in iv]
-                    dval = [_to_int(x) for x in dv]
-                    errs_rel = [_rel_err_pct(dval[k], ival[k]) for k in range(min(len(ival), len(dval)))]
-                    errs_abs = [abs(dval[k] - ival[k]) for k in range(min(len(ival), len(dval)))]
-                    per_metric[m] = errs_rel
-                    final_abs_errors.setdefault(pool, {})[m] = errs_abs
-                    # aggregate across elements
-                    for e in errs_rel:
+                i_final = i_states[-1] if isinstance(i_states, list) else i_states
+                v_final = v_states[-1] if isinstance(v_states, list) else v_states
+                per_metric: Dict[str, Any] = {}
+                for m in metrics:
+                    if m not in i_final or m not in v_final:
+                        continue
+                    iv = i_final[m]
+                    vv = v_final[m]
+                    if isinstance(iv, list) and isinstance(vv, list):
+                        ival = [_to_int(x) for x in iv]
+                        vval = [_to_int(x) for x in vv]
+                        errs_rel = [_rel_err_pct(vval[k], ival[k]) for k in range(min(len(ival), len(vval)))]
+                        errs_abs = [abs(vval[k] - ival[k]) for k in range(min(len(ival), len(vval)))]
+                        per_metric[m] = errs_rel
+                        final_abs_errors.setdefault(pool, {})[m] = errs_abs
+                        for e in errs_rel:
+                            agg_stats[m]["count"] += 1
+                            agg_stats[m]["sum_rel_pct"] += (0.0 if e == float('inf') else e)
+                            if e > agg_stats[m]["max_rel_pct"]:
+                                agg_stats[m]["max_rel_pct"] = e
+                    else:
+                        ivn = _to_int(iv)
+                        vvn = _to_int(vv)
+                        err_rel = _rel_err_pct(vvn, ivn)
+                        err_abs = abs(vvn - ivn)
+                        per_metric[m] = err_rel
+                        final_abs_errors.setdefault(pool, {})[m] = err_abs
                         agg_stats[m]["count"] += 1
-                        agg_stats[m]["sum_rel_pct"] += (0.0 if e == float('inf') else e)
-                        if e > agg_stats[m]["max_rel_pct"]:
-                            agg_stats[m]["max_rel_pct"] = e
-                else:
-                    ivn = _to_int(iv)
-                    dvn = _to_int(dv)
-                    err_rel = _rel_err_pct(dvn, ivn)
-                    err_abs = abs(dvn - ivn)
-                    per_metric[m] = err_rel
-                    final_abs_errors.setdefault(pool, {})[m] = err_abs
-                    agg_stats[m]["count"] += 1
-                    agg_stats[m]["sum_rel_pct"] += (0.0 if err_rel == float('inf') else err_rel)
-                    if err_rel > agg_stats[m]["max_rel_pct"]:
-                        agg_stats[m]["max_rel_pct"] = err_rel
-            final_rel_errors[pool] = per_metric
+                        agg_stats[m]["sum_rel_pct"] += (0.0 if err_rel == float('inf') else err_rel)
+                        if err_rel > agg_stats[m]["max_rel_pct"]:
+                            agg_stats[m]["max_rel_pct"] = err_rel
+                final_rel_errors[pool] = per_metric
+            for m in metrics:
+                st = agg_stats[m]
+                cnt = max(st["count"], 1)
+                st["mean_rel_pct"] = st["sum_rel_pct"] / cnt
+                st.pop("sum_rel_pct", None)
+            return final_rel_errors, final_abs_errors, agg_stats
 
-        # Finalize aggregated stats
-        for m in metrics:
-            st = agg_stats[m]
-            cnt = max(st["count"], 1)
-            st["mean_rel_pct"] = st["sum_rel_pct"] / cnt
-            st.pop("sum_rel_pct", None)
+        rel_f, abs_f, stats_f = _diffs_vs_i(F_states)
+        rel_d, abs_d, stats_d = _diffs_vs_i(D_states)
+        rel_ld, abs_ld, stats_ld = _diffs_vs_i(LD_states)
 
-        _write(run_dir / "final_rel_errors.json", final_rel_errors)
-        _write(run_dir / "final_abs_errors.json", final_abs_errors)
-        _write(run_dir / "final_rel_stats.json", agg_stats)
+        _write(run_dir / "final_rel_errors_vs_i.json", {"f": rel_f, "d": rel_d, "ld": rel_ld})
+        _write(run_dir / "final_abs_errors_vs_i.json", {"f": abs_f, "d": abs_d, "ld": abs_ld})
+        _write(run_dir / "final_rel_stats_vs_i.json", {"f": stats_f, "d": stats_d, "ld": stats_ld})
 
         # Summary
         summary = {
             "i_time_s": i_time,
+            "f_time_s": f_time,
             "d_time_s": d_time,
-            "speedup_x": (i_time / d_time) if (i_time and d_time and d_time > 0) else None,
+            "ld_time_s": ld_time,
+            "speedup_vs_i": {
+                "f": (i_time / f_time) if (i_time and f_time and f_time > 0) else None,
+                "d": (i_time / d_time) if (i_time and d_time and d_time > 0) else None,
+                "ld": (i_time / ld_time) if (i_time and ld_time and ld_time > 0) else None,
+            },
             "tests": len(res_i.get("results", [])),
         }
         _write(run_dir / "summary.json", summary)
         print("\n=== Summary ===")
         print(json.dumps(summary, indent=2))
 
-        # Print concise per-pool final-state relative and absolute errors
-        print("\n=== Final-state differences (double vs integer) ===")
-        for pool in sorted(final_rel_errors.keys()):
-            per_metric = final_rel_errors[pool]
-            abs_metric = final_abs_errors.get(pool, {})
-            vp = per_metric.get("virtual_price"); vp_abs = abs_metric.get("virtual_price")
-            ps = per_metric.get("price_scale"); ps_abs = abs_metric.get("price_scale")
-            Drel = per_metric.get("D"); Dabs = abs_metric.get("D")
-            ts = per_metric.get("totalSupply"); ts_abs = abs_metric.get("totalSupply")
-            bal = per_metric.get("balances"); bal_abs = abs_metric.get("balances")
-            # Format relative errors as fraction (ratio) in scientific notation (not tied to specific unit)
-            def _to_ratio(val: float) -> float:
-                if val == float('inf'):
-                    return float('inf')
-                # final_rel_errors stores percent; convert to ratio
-                return val / 100.0
-            def fmt_ratio(x: Any) -> str:
-                if isinstance(x, list):
-                    return "[" + ", ".join("inf" if v == float('inf') else f"{_to_ratio(v):.3e}" for v in x) + "]"
-                if isinstance(x, float):
-                    return "inf" if x == float('inf') else f"{_to_ratio(x):.3e}"
+        # Print concise per-pool final-state relative errors vs integer baseline
+        def _to_ratio(val: float) -> float:
+            if val == float('inf'):
+                return float('inf')
+            return val / 100.0
+        def fmt_ratio(x: Any) -> str:
+            if isinstance(x, list):
+                return "[" + ", ".join("inf" if v == float('inf') else f"{_to_ratio(v):.3e}" for v in x) + "]"
+            if isinstance(x, float):
+                return "inf" if x == float('inf') else f"{_to_ratio(x):.3e}"
+            try:
+                return f"{_to_ratio(float(x)):.3e}"
+            except Exception:
                 return str(x)
-            def fmt_abs(x: Any) -> str:
-                if isinstance(x, list):
-                    return "[" + ", ".join(f"{v:.3e}" for v in x) + "]"
-                try:
-                    return f"{float(x):.3e}"
-                except Exception:
-                    return str(x)
-            print(f"- {pool}:")
-            print(f"    virtual_price: rel={fmt_ratio(vp)} abs={fmt_abs(vp_abs)}")
-            print(f"    price_scale  : rel={fmt_ratio(ps)} abs={fmt_abs(ps_abs)}")
-            print(f"    D            : rel={fmt_ratio(Drel)} abs={fmt_abs(Dabs)}")
-            print(f"    totalSupply  : rel={fmt_ratio(ts)} abs={fmt_abs(ts_abs)}")
-            print(f"    balances     : rel={fmt_ratio(bal)} abs={fmt_abs(bal_abs)}")
+        def fmt_abs(x: Any) -> str:
+            if isinstance(x, list):
+                return "[" + ", ".join(f"{float(v):.3e}" for v in x) + "]"
+            try:
+                return f"{float(x):.3e}"
+            except Exception:
+                return str(x)
+
+        def print_block(title: str, rel: Dict[str, Any], absd: Dict[str, Any]):
+            print(f"\n=== Final-state differences vs integer ({title}) ===")
+            for pool in sorted(rel.keys()):
+                per_metric = rel[pool]
+                abs_metric = absd.get(pool, {})
+                print(f"- {pool}:")
+                print(f"    virtual_price: rel={fmt_ratio(per_metric.get('virtual_price'))} abs={fmt_abs(abs_metric.get('virtual_price'))}")
+                print(f"    price_scale  : rel={fmt_ratio(per_metric.get('price_scale'))} abs={fmt_abs(abs_metric.get('price_scale'))}")
+                print(f"    D            : rel={fmt_ratio(per_metric.get('D'))} abs={fmt_abs(abs_metric.get('D'))}")
+                print(f"    totalSupply  : rel={fmt_ratio(per_metric.get('totalSupply'))} abs={fmt_abs(abs_metric.get('totalSupply'))}")
+                print(f"    balances     : rel={fmt_ratio(per_metric.get('balances'))} abs={fmt_abs(abs_metric.get('balances'))}")
+
+        print_block("float", rel_f, abs_f)
+        print_block("double", rel_d, abs_d)
+        print_block("long double", rel_ld, abs_ld)
 
         # (No aggregated stats printed; focus on last final pool state only.)
         print(f"\n✓ Results saved to {run_dir}")

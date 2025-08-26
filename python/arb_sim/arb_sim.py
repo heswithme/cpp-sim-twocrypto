@@ -15,11 +15,19 @@ from datetime import datetime, timezone
 
 
 class ArbHarnessRunner:
-    def __init__(self, repo_root: Path):
+    def __init__(self, repo_root: Path, real: str = "double"):
         self.repo_root = Path(repo_root)
         self.cpp_dir = self.repo_root / "cpp"
         self.build_dir = self.cpp_dir / "build"
-        self.exe_path = self.build_dir / "arb_harness"
+        # Resolve binary name based on real type
+        real = (real or "double").lower()
+        if real in ("float", "f"):
+            self.target = "arb_harness_f"
+        elif real in ("longdouble", "long_double", "ld", "long"):
+            self.target = "arb_harness_ld"
+        else:
+            self.target = "arb_harness"
+        self.exe_path = self.build_dir / self.target
 
     def configure_build(self):
         self.build_dir.mkdir(parents=True, exist_ok=True)
@@ -32,8 +40,8 @@ class ArbHarnessRunner:
 
     def build(self):
         self.configure_build()
-        print("Building arb_harness...")
-        r = subprocess.run(["cmake", "--build", ".", "--target", "arb_harness"], cwd=self.build_dir, capture_output=True, text=True)
+        print(f"Building {self.target}...")
+        r = subprocess.run(["cmake", "--build", ".", "--target", self.target], cwd=self.build_dir, capture_output=True, text=True)
         if r.returncode != 0:
             print(r.stdout)
             print(r.stderr)
@@ -76,10 +84,11 @@ def main() -> int:
     parser.add_argument("--min-swap", type=float, default=1e-6, help="Minimum swap fraction of from-side balance (default: 1e-6)")
     parser.add_argument("--max-swap", type=float, default=1.0, help="Maximum swap fraction of from-side balance (default: 1.0)")
     parser.add_argument("-n", "--threads", type=int, default=1, help="Threads in C++ harness (default: 1)")
+    parser.add_argument("--real", type=str, default="double", choices=["float", "double", "longdouble"], help="Numeric precision for C++ harness")
     args = parser.parse_args()
 
     repo_root = Path(__file__).resolve().parents[2]
-    runner = ArbHarnessRunner(repo_root)
+    runner = ArbHarnessRunner(repo_root, real=args.real)
     runner.build()
 
     # Load pool_config.json

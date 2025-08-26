@@ -52,6 +52,25 @@ if(CMAKE_BUILD_TYPE STREQUAL "Release")
     target_compile_options(benchmark_harness_d PRIVATE -O3 -march=native)
 endif()
 
+
+# Float and long double variants
+add_executable(benchmark_harness_f
+    src/benchmark_harness.cpp
+)
+target_compile_definitions(benchmark_harness_f PRIVATE HARNESS_MODE_F)
+target_link_libraries(benchmark_harness_f Boost::json)
+if(CMAKE_BUILD_TYPE STREQUAL "Release")
+    target_compile_options(benchmark_harness_f PRIVATE -O3 -march=native)
+endif()
+
+add_executable(benchmark_harness_ld
+    src/benchmark_harness.cpp
+)
+target_compile_definitions(benchmark_harness_ld PRIVATE HARNESS_MODE_LD)
+target_link_libraries(benchmark_harness_ld Boost::json)
+if(CMAKE_BUILD_TYPE STREQUAL "Release")
+    target_compile_options(benchmark_harness_ld PRIVATE -O3 -march=native)
+endif()
 # Standalone arbitrage harness (multi-pool, threaded)
 add_executable(arb_harness
     src/arb_harness.cpp
@@ -61,4 +80,20 @@ target_link_libraries(arb_harness
 )
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
     target_compile_options(arb_harness PRIVATE -O3 -march=native)
+endif()
+
+
+# Typed arbitrage harness variants
+add_executable(arb_harness_f src/arb_harness.cpp)
+target_compile_definitions(arb_harness_f PRIVATE ARB_MODE_F)
+target_link_libraries(arb_harness_f Boost::json)
+if(CMAKE_BUILD_TYPE STREQUAL "Release")
+    target_compile_options(arb_harness_f PRIVATE -O3 -march=native)
+endif()
+
+add_executable(arb_harness_ld src/arb_harness.cpp)
+target_compile_definitions(arb_harness_ld PRIVATE ARB_MODE_LD)
+target_link_libraries(arb_harness_ld Boost::json)
+if(CMAKE_BUILD_TYPE STREQUAL "Release")
+    target_compile_options(arb_harness_ld PRIVATE -O3 -march=native)
 endif()

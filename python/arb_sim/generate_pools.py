@@ -57,7 +57,7 @@ def strify_pool(pool: dict) -> dict:
 
 
 # -------------------- Grid Definition --------------------
-N_GRID = 32
+N_GRID = 1
 
 X_name = "A"  # can be changed to any pool key
 X_vals = np.logspace(np.log10(5 * 10_000), np.log10(500 * 10_000), N_GRID).round().astype(int).tolist()
@@ -86,7 +86,7 @@ BASE_POOL = {
     # Donations (harness-only):
     # - donation_apy: plain fraction per year (0.05 => 5%).
     # - donation_frequency: seconds between donations.
-    "donation_apy": 0.00,
+    "donation_apy": 0.03,
     "donation_frequency": int(3600),
 }
 
@@ -110,7 +110,7 @@ def build_grid():
             mid_fee_val = int(pool.get("mid_fee", 0))
             cur_out_val = int(pool.get("out_fee", 0))
             pool["out_fee"] = max(mid_fee_val, cur_out_val)
-
+            pool["out_fee"] = mid_fee_val
             costs = dict(BASE_COSTS)
             tag_x = f"{X_name}_{xv}"
             tag_y = f"{Y_name}_{yv}"

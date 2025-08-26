@@ -49,6 +49,21 @@ struct MathTraits<double> {
     }
 };
 
+// Additional floating-point variants
+template <>
+struct MathTraits<float> {
+    static constexpr size_t N = 2;
+    static float A_MULTIPLIER() { return 10000.0f; }
+    static float PRECISION() { return 1.0f; }
+};
+
+template <>
+struct MathTraits<long double> {
+    static constexpr size_t N = 2;
+    static long double A_MULTIPLIER() { return 10000.0L; }
+    static long double PRECISION() { return 1.0L; }
+};
+
 // Convergence and iteration traits per numeric type
 template <typename T>
 struct Convergence;
@@ -71,6 +86,22 @@ struct Convergence<double> {
     }
 
     static constexpr size_t MAX_IT = 128;
+};
+
+template <>
+struct Convergence<float> {
+    static bool close(float a, float b) {
+        return std::fabs(a - b) <= 1e-6f * std::max(1.0f, a);
+    }
+    static constexpr size_t MAX_IT = 128;
+};
+
+template <>
+struct Convergence<long double> {
+    static bool close(long double a, long double b) {
+        return fabsl(a - b) <= 1e-12L * std::max< long double >(1.0L, a);
+    }
+    static constexpr size_t MAX_IT = 192;
 };
 
 // Common templated implementation
