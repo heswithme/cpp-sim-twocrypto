@@ -27,6 +27,42 @@ HERE = Path(__file__).resolve().parent
 RUN_DIR = HERE / "run_data"
 
 
+def _edges_from_centers(centers: List[float], log_scale: bool = False) -> np.ndarray:
+    """Compute bin edges from bin centers for pcolormesh.
+
+    - Linear: arithmetic midpoints, with first/last extrapolated by mirroring.
+    - Log: operate in log-space using geometric midpoints; requires centers > 0.
+    """
+    c = np.asarray(centers, dtype=float)
+    if c.ndim != 1 or c.size == 0:
+        raise ValueError("centers must be a 1D non-empty sequence")
+    if c.size == 1:
+        # Degenerate case: create a tiny band around the single center
+        x0 = float(c[0])
+        if log_scale:
+            if x0 <= 0:
+                raise ValueError("log-scale edges require positive centers")
+            f = np.sqrt(10.0)
+            return np.array([x0 / f, x0 * f])
+        else:
+            d = abs(x0) * 0.5 if x0 != 0 else 0.5
+            return np.array([x0 - d, x0 + d])
+
+    if log_scale:
+        if np.any(c <= 0):
+            raise ValueError("log-scale edges require all centers > 0")
+        logs = np.log(c)
+        mids = (logs[:-1] + logs[1:]) / 2.0
+        first = logs[0] - (mids[0] - logs[0])  # mirror distance
+        last = logs[-1] + (logs[-1] - mids[-1])
+        edges_log = np.concatenate([[first], mids, [last]])
+        return np.exp(edges_log)
+    else:
+        mids = (c[:-1] + c[1:]) / 2.0
+        first = c[0] - (mids[0] - c[0])
+        last = c[-1] + (c[-1] - mids[-1])
+        return np.concatenate([[first], mids, [last]])
+
 def _latest_arb_run() -> Path:
     files = sorted([p for p in RUN_DIR.glob("arb_run_*.json")])
     if not files:
@@ -159,6 +195,10 @@ def main() -> int:
     ap.add_argument("--max-xticks", type=int, default=12, help="Max X tick labels (default: 12)")
     ap.add_argument("--max-yticks", type=int, default=12, help="Max Y tick labels (default: 12)")
     ap.add_argument("--font-size", type=int, default=16, help="Tick label font size (default: 12)")
+    ap.add_argument("--log-x", dest="log_x", action="store_true", help="Use log scale on X (default: disabled)", default=False)
+    ap.add_argument("--no-log-x", dest="log_x", action="store_false", help="Disable log scale on X")
+    ap.add_argument("--log-y", dest="log_y", action="store_true", help="Use log scale on Y (default: disabled)", default=False)
+    ap.add_argument("--no-log-y", dest="log_y", action="store_false", help="Disable log scale on Y")
     ap.add_argument("--square", dest="square", action="store_true", help="Force a square plot with square cells (default)")
     ap.add_argument("--no-square", dest="square", action="store_false", help="Disable square plot; size adapts to grid")
     ap.set_defaults(square=True)
@@ -215,8 +255,7 @@ def main() -> int:
     xlabels = [xlab_full[i] for i in xticks]
     ylabels = [ylab_full[i] for i in yticks]
 
-    # Plot each metric
-    # Plot in row-major order, hide any unused axes
+    # Plot each metric in row-major order, hide any unused axes
     idx = 0
     for r in range(rows):
         for c in range(cols):
@@ -227,13 +266,51 @@ def main() -> int:
             m = metrics[idx]
             s18, sperc = metric_scale_flags(m)
             _, _, _, _, Z = _extract_grid(data, m, s18, sperc)
-            aspect = 'equal' if args.square else 'auto'
-            im = ax.imshow(Z, origin='lower', aspect=aspect, cmap=args.cmap)
-            if args.square:
-                ax.set_aspect('equal', adjustable='box')
-            # Tick placement at index positions
-            ax.set_xticks(xticks)
-            ax.set_yticks(yticks)
+            # Optional log axes controlled via CLI
+            log_x_flag = bool(args.log_x)
+            log_y_flag = bool(args.log_y)
+            if log_x_flag and any(x <= 0 for x in xs):
+                log_x_flag = False
+            if log_y_flag and any(y <= 0 for y in ys):
+                log_y_flag = False
+
+            if log_x_flag or log_y_flag:
+                Xedges = _edges_from_centers(xs, log_x_flag)
+                Yedges = _edges_from_centers(ys, log_y_flag)
+                # Use edges with pcolormesh and auto shading so
+                # (len(xs)+1, len(ys)+1) edges match C=(len(ys),len(xs))
+                im = ax.pcolormesh(Xedges, Yedges, Z, cmap=args.cmap, shading='auto')
+                if log_x_flag:
+                    try:
+                        ax.set_xscale('log')
+                    except Exception:
+                        pass
+                if log_y_flag:
+                    try:
+                        ax.set_yscale('log')
+                    except Exception:
+                        pass
+                if args.square:
+                    ny, nx = Z.shape
+                    try:
+                        ax.set_box_aspect(ny / nx)
+                    except Exception:
+                        ax.set_aspect('equal', adjustable='box')
+                # Tick placement at data values
+                ax.set_xticks([xs[i] for i in xticks])
+                ax.set_yticks([ys[i] for i in yticks])
+            else:
+                aspect = 'auto'
+                im = ax.imshow(Z, origin='lower', aspect=aspect, cmap=args.cmap)
+                if args.square:
+                    ny, nx = Z.shape
+                    try:
+                        ax.set_box_aspect(ny / nx)
+                    except Exception:
+                        ax.set_aspect('equal', adjustable='box')
+                # Tick placement at index positions
+                ax.set_xticks(xticks)
+                ax.set_yticks(yticks)
             ax.set_xticklabels(xlabels, rotation=45, ha="right", fontsize=args.font_size)
             # Only label y on first column
             if c == 0:
@@ -251,8 +328,23 @@ def main() -> int:
                 for i in range(Z.shape[0]):
                     for j in range(Z.shape[1]):
                         val = Z[i, j]
-                        if np.isfinite(val):
-                            ax.text(j, i, f"{val:.3g}", va="center", ha="center", color="white", fontsize=max(6, args.font_size - 2))
+                        if not np.isfinite(val):
+                            continue
+                        if log_x_flag or log_y_flag:
+                            x_pos = xs[j]
+                            y_pos = ys[i]
+                        else:
+                            x_pos = j
+                            y_pos = i
+                        ax.text(
+                            x_pos,
+                            y_pos,
+                            f"{val:.3g}",
+                            va="center",
+                            ha="center",
+                            color="white",
+                            fontsize=max(6, args.font_size - 2),
+                        )
             idx += 1
 
     # Output

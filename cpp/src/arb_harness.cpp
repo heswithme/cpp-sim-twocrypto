@@ -440,6 +440,7 @@ int main(int argc, char* argv[]) {
     double min_swap_frac = 1e-6;
     double max_swap_frac = 1.0;
     size_t n_workers = std::max<size_t>(1, std::thread::hardware_concurrency());
+    uint64_t dustswapfreq_s = 3600; // seconds between dust swaps when no arb trade
     for (int i = 4; i < argc; ++i) {
         std::string arg = argv[i];
         if (arg == "--n-candles" && (i+1) < argc) { try { long long v = std::stoll(argv[++i]); if (v > 0) max_candles = static_cast<size_t>(v);} catch(...){} }
@@ -447,6 +448,7 @@ int main(int argc, char* argv[]) {
         else if (arg == "--min-swap" && (i+1) < argc) { try { double f = std::stod(argv[++i]); if (f > 0.0 && f <= 1.0) min_swap_frac = f; } catch(...){} }
         else if (arg == "--max-swap" && (i+1) < argc) { try { double f = std::stod(argv[++i]); if (f > 0.0 && f <= 1.0) max_swap_frac = f; } catch(...){} }
         else if ((arg == "--threads" || arg == "-n") && (i+1) < argc) { try { long long v = std::stoll(argv[++i]); if (v > 0) n_workers = static_cast<size_t>(v); } catch(...){} }
+        else if (arg == "--dustswapfreq" && (i+1) < argc) { try { long long v = std::stoll(argv[++i]); if (v >= 0) dustswapfreq_s = static_cast<uint64_t>(v); } catch(...){} }
     }
 
     try {
@@ -537,6 +539,8 @@ int main(int argc, char* argv[]) {
                         next_donation_ts = base_ts + static_cast<uint64_t>(cfg.donation_frequency);
                     }
                     auto t_pool0 = clk::now();
+                    bool wash_toggle = false; // alternate dust direction when no arb trade
+                    uint64_t last_dust_ts = 0;
                     if (save_actions) {
                         // Capture initial state snapshot
                         states.push_back(pool_state_json(pool));
@@ -606,7 +610,40 @@ int main(int argc, char* argv[]) {
                         RealT notional_cap_coin0 = std::numeric_limits<RealT>::infinity();
                         if (costs.use_volume_cap) notional_cap_coin0 = ev.volume * ev.p_cex * static_cast<RealT>(costs.volume_cap_mult);
                         Decision d = decide_trade(pool, ev.p_cex, costs, notional_cap_coin0, static_cast<RealT>(min_swap_frac), static_cast<RealT>(max_swap_frac));
-                        if (!d.do_trade) continue;
+                        if (!d.do_trade) {
+                            // Respect cooldown for dust swap
+                            bool can_dust = (dustswapfreq_s > 0) && (last_dust_ts == 0 || ev.ts >= last_dust_ts + dustswapfreq_s);
+                            if (!can_dust) continue;
+                            // No arb opportunity: perform a tiny wash trade to trigger price updates
+                            int wi = wash_toggle ? 0 : 1;
+                            int wj = 1 - wi;
+                            wash_toggle = !wash_toggle;
+                            RealT avail = pool.balances[wi];
+                            if (avail > RealT(0)) {
+                                RealT frac = std::max<RealT>(RealT(1e-12), static_cast<RealT>(min_swap_frac) * RealT(0.1));
+                                RealT wdx = std::max<RealT>(RealT(1e-18), avail * frac);
+                                try {
+                                    RealT price_scale_before = pool.cached_price_scale;
+                                    auto wres = pool.exchange((RealT)wi, (RealT)wj, wdx, RealT(0));
+                                    RealT w_dy_after_fee = wres[0];
+                                    RealT w_fee_tokens   = wres[1];
+                                    RealT price_scale_after = pool.cached_price_scale;
+                                    if (differs_rel(price_scale_after, price_scale_before)) m.n_rebalances += 1;
+                                    if (save_actions) {
+                                        json::object tr;
+                                        tr["type"] = "exchange";
+                                        tr["wash"] = true;
+                                        tr["ts"] = ev.ts; tr["i"] = wi; tr["j"] = wj; tr["dx"] = static_cast<double>(wdx); tr["dx_wei"] = to_str_1e18(wdx);
+                                        tr["dy_after_fee"] = static_cast<double>(w_dy_after_fee); tr["fee_tokens"] = static_cast<double>(w_fee_tokens);
+                                        tr["profit_coin0"] = 0.0; tr["p_cex"] = static_cast<double>(ev.p_cex); tr["p_pool_before"] = static_cast<double>(pre_p_pool);
+                                        actions.push_back(tr);
+                                        states.push_back(pool_state_json(pool));
+                                    }
+                                    last_dust_ts = ev.ts;
+                                } catch (...) { /* ignore */ }
+                            }
+                            continue;
+                        }
                         try {
                             RealT price_scale_before = pool.cached_price_scale;
                             auto res = pool.exchange((RealT)d.i, (RealT)d.j, d.dx, RealT(0));

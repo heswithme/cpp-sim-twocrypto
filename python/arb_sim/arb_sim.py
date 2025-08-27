@@ -53,7 +53,7 @@ class ArbHarnessRunner:
     def run(self, pools_json: Path, candles_path: Path, out_json_path: Path,
             n_candles: int = 0, save_actions: bool = False,
             min_swap: float = 1e-12, max_swap: float = 1.0,
-            threads: int = 1) -> Dict[str, Any]:
+            threads: int = 1, dustswapfreq: int | None = None) -> Dict[str, Any]:
         print("Running arb_harness...")
         cmd = [str(self.exe_path), str(pools_json), str(candles_path), str(out_json_path)]
         if n_candles and n_candles > 0:
@@ -66,6 +66,8 @@ class ArbHarnessRunner:
             cmd += ["--max-swap", str(max_swap)]
         # Always pass threads to ensure explicit control (even when 1)
         cmd += ["--threads", str(max(1, threads))]
+        if dustswapfreq is not None:
+            cmd += ["--dustswapfreq", str(int(dustswapfreq))]
         # Stream harness stdout/stderr directly to the console for live progress
         r = subprocess.run(cmd)
         if r.returncode != 0:
@@ -85,6 +87,7 @@ def main() -> int:
     parser.add_argument("--max-swap", type=float, default=1.0, help="Maximum swap fraction of from-side balance (default: 1.0)")
     parser.add_argument("-n", "--threads", type=int, default=1, help="Threads in C++ harness (default: 1)")
     parser.add_argument("--real", type=str, default="double", choices=["float", "double", "longdouble"], help="Numeric precision for C++ harness")
+    parser.add_argument("--dustswapfreq", type=int, default=None, help="Seconds between dust swaps when no arb trade (cooldown)")
     args = parser.parse_args()
 
     repo_root = Path(__file__).resolve().parents[2]
@@ -106,7 +109,8 @@ def main() -> int:
 
     raw = runner.run(pool_config_path, Path(args.candles), out_json_path,
                      n_candles=args.n_candles, save_actions=args.save_actions,
-                     min_swap=args.min_swap, max_swap=args.max_swap, threads=max(1, args.threads))
+                     min_swap=args.min_swap, max_swap=args.max_swap, threads=max(1, args.threads),
+                     dustswapfreq=args.dustswapfreq)
 
     runs_raw: List[Dict[str, Any]] = raw.get("runs", [])
 
