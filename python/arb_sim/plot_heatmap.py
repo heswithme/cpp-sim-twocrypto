@@ -194,7 +194,7 @@ def main() -> int:
     ap.add_argument("--annot", action="store_true", help="Annotate cells with values")
     ap.add_argument("--max-xticks", type=int, default=12, help="Max X tick labels (default: 12)")
     ap.add_argument("--max-yticks", type=int, default=12, help="Max Y tick labels (default: 12)")
-    ap.add_argument("--font-size", type=int, default=16, help="Tick label font size (default: 12)")
+    ap.add_argument("--font-size", type=int, default=18, help="Tick label font size (default: 12)")
     ap.add_argument("--log-x", dest="log_x", action="store_true", help="Use log scale on X (default: disabled)", default=False)
     ap.add_argument("--no-log-x", dest="log_x", action="store_false", help="Disable log scale on X")
     ap.add_argument("--log-y", dest="log_y", action="store_true", help="Use log scale on Y (default: disabled)", default=False)

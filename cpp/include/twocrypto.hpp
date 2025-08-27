@@ -306,6 +306,13 @@ private:
     }
 
 public:
+    // Cheap tick to update EMA/oracle and possibly adjust price_scale without a swap
+    void tick() {
+        auto A_gamma = std::array<T, 2>{ A, gamma };
+        const auto xp = _xp(balances, cached_price_scale);
+        cached_price_scale = tweak_price(A_gamma, xp, D);
+    }
+
     // API
     // add_liquidity: deposit into the pool; supports donation mode with cap semantics
     T add_liquidity(

@@ -14,19 +14,13 @@
 #include <chrono>
 #include <cmath>
 #include <cstdint>
-#include <fcntl.h>
 #include <fstream>
 #include <iostream>
-#include <optional>
 #include <sstream>
 #include <string>
-#include <sys/mman.h>
-#include <sys/stat.h>
-#include <sys/types.h>
 #include <thread>
 #include <iomanip>
 #include <mutex>
-#include <unistd.h>
 #include <vector>
 
 namespace json = boost::json;
@@ -121,129 +115,126 @@ struct Decision {
     RealT notional_coin0{0.0};
 };
 
-static std::optional<std::pair<RealT,RealT>> simulate_profit(
-    const twocrypto::TwoCryptoPoolT<RealT>& pool,
-    int i, int j,
-    RealT dx,
-    RealT cex_price,
-    const Costs& costs,
-    RealT& out_fee_tokens
-) {
-    using Ops = stableswap::MathOps<RealT>;
-    const RealT price_scale = pool.cached_price_scale;
-
-    std::array<RealT,2> balances = pool.balances; balances[i] += dx;
-    std::array<RealT,2> xp = pool_xp_from(pool, balances, price_scale);
-
-    auto y_out = Ops::get_y(pool.A, pool.gamma, xp, pool.D, static_cast<size_t>(j));
-    RealT dy_xp = xp[j] - y_out.value;
-    xp[j] -= dy_xp;
-
-    RealT dy_tokens = xp_to_tokens_j(pool, static_cast<size_t>(j), dy_xp, price_scale);
-    RealT fee_rate = dyn_fee(xp, pool.mid_fee, pool.out_fee, pool.fee_gamma);
-    RealT fee_tokens = fee_rate * dy_tokens;
-    RealT dy_after_fee = dy_tokens - fee_tokens;
-
-    RealT profit_coin0 = RealT(0);
-    if (i == 0 && j == 1) {
-        RealT coin0_out_cex = dy_after_fee * cex_price;
-        RealT arb_fee = (costs.arb_fee_bps / RealT(1e4)) * coin0_out_cex;
-        profit_coin0 = coin0_out_cex - dx - arb_fee - costs.gas_coin0;
-    } else {
-        RealT coin0_spent_cex = dx * cex_price;
-        RealT arb_fee = (costs.arb_fee_bps / RealT(1e4)) * coin0_spent_cex;
-        profit_coin0 = dy_after_fee - coin0_spent_cex - arb_fee - costs.gas_coin0;
-    }
-    if (!(profit_coin0 > RealT(0))) return std::nullopt;
-    out_fee_tokens = fee_tokens;
-    return std::make_pair(dy_after_fee, profit_coin0);
-}
-
-// Decide direction by probing both sides with a fixed small fraction of balance.
-static bool decide_trade_direction(
-    const twocrypto::TwoCryptoPoolT<RealT>& pool,
-    RealT cex_price,
-    const Costs& /*costs*/,
-    RealT /*probe_frac*/,
-    int& out_i,
-    int& out_j,
-    RealT& out_fee_tokens,
-    RealT& out_profit
-) {
-    // Direction by spot price comparison: last_prices is the pool spot (get_p*price_scale)
-    // If CEX > pool, buy coin1 from pool with coin0 (i=0->j=1), then sell on CEX.
-    // If CEX < pool, buy coin1 on CEX and sell to pool for coin0 (i=1->j=0).
-    RealT p_pool = pool.get_p();
-    out_fee_tokens = RealT(0);
-    out_profit = RealT(0);
-    out_i = 0; out_j = 1;
-    if (differs_rel(cex_price, p_pool)) {
-        if (cex_price > p_pool) { out_i = 0; out_j = 1; }
-        else { out_i = 1; out_j = 0; }
-        // Ensure we have some balance to trade on chosen side
-        if (!(pool.balances[out_i] > RealT(0))) {
-            int alt_i = 1 - out_i;
-            int alt_j = 1 - out_j;
-            if (pool.balances[alt_i] > RealT(0)) { out_i = alt_i; out_j = alt_j; return true; }
-            return false;
-        }
-        return true;
-    }
-    return false;
-}
+// Direction is chosen purely by comparing CEX vs pool spot price (get_p)
 
 // Decide trade size via binary search within min/max swap fraction bounds (and optional notional cap).
 static bool decide_trade_size(
     const twocrypto::TwoCryptoPoolT<RealT>& pool,
     RealT cex_price,
     const Costs& costs,
-    int i, int j,
+    int i_in, int j_out,
     RealT notional_cap_coin0,
     RealT min_swap_frac,
     RealT max_swap_frac,
-    RealT& out_dx,
-    RealT& out_fee_tokens,
-    RealT& out_profit
+    Decision& out_decision
 ) {
+    using std::max; using std::min; using std::sqrt; using std::log; using std::exp;
+    size_t i = static_cast<size_t>(i_in);
+    size_t j = static_cast<size_t>(j_out);
     RealT available = pool.balances[i];
-    if (!(available > 0)) return false;
+    if (!(available > RealT(0))) return false;
 
-    RealT dx_lo = std::max<RealT>(RealT(1e-18), available * std::max<RealT>(RealT(1e-12), min_swap_frac));
-    RealT dx_hi = available * max_swap_frac;
-    if (costs.use_volume_cap) {
-        if (i == 0) dx_hi = std::min(dx_hi, notional_cap_coin0);
-        else if (cex_price > 0) dx_hi = std::min(dx_hi, notional_cap_coin0 / cex_price);
+    // Build upper bound based on balances, max swap fraction, and optional notional cap
+    RealT hi = available * max_swap_frac;
+    if (notional_cap_coin0 > RealT(0)) {
+        if (i == 0) hi = min(hi, notional_cap_coin0);
+        else if (cex_price > RealT(0)) hi = min(hi, notional_cap_coin0 / cex_price);
     }
-    if (!(dx_hi > 0)) return false;
-    if (dx_lo > dx_hi) dx_lo = dx_hi;
+    if (!(hi > RealT(0))) return false;
 
-    RealT best_dx = RealT(0), best_fee = RealT(0); RealT best_profit = std::numeric_limits<RealT>::lowest();
+    // Compute optimistic no-slippage, min-LP-fee profit per unit dx and gas-driven minimum size
+    RealT lo = max( RealT(1e-18), available * max(RealT(1e-12), min_swap_frac)  );
+    if (!(hi > lo)) return false;
 
-    // Evaluate lo and hi
-    RealT fee_lo = RealT(0), fee_hi = RealT(0);
-    auto lo = simulate_profit(pool, i, j, dx_lo, cex_price, costs, fee_lo);
-    auto hi = simulate_profit(pool, i, j, dx_hi, cex_price, costs, fee_hi);
-    if (lo && lo->second > best_profit) { best_profit = lo->second; best_dx = dx_lo; best_fee = fee_lo; }
-    if (hi && hi->second > best_profit) { best_profit = hi->second; best_dx = dx_hi; best_fee = fee_hi; }
+    // Lightweight simulator: returns dy_after_fee and fee_tokens without mutating pool
+    auto simulate_exchange = [&](RealT dx)->std::pair<RealT, RealT> {
+        using Ops = stableswap::MathOps<RealT>;
+        RealT ps = pool.cached_price_scale;
+        auto balances_local = pool.balances; balances_local[i] += dx;
+        auto xp = pool_xp_from(pool, balances_local, ps);
+        auto y_out = Ops::get_y(pool.A, pool.gamma, xp, pool.D, j);
+        RealT dy_xp = xp[j] - y_out.value; xp[j] -= dy_xp;
+        RealT dy_tokens = xp_to_tokens_j(pool, j, dy_xp, ps);
+        RealT fee_rate = dyn_fee(xp, pool.mid_fee, pool.out_fee, pool.fee_gamma);
+        RealT fee_tokens = fee_rate * dy_tokens;
+        RealT dy_after_fee = dy_tokens - fee_tokens;
+        return {dy_after_fee, fee_tokens};
+    };
 
-    RealT L = dx_lo, R = dx_hi;
-    for (int it = 0; it < 40; ++it) {
-        RealT mid = RealT(0.5) * (L + R);
-        RealT fee_mid = RealT(0);
-        auto m = simulate_profit(pool, i, j, mid, cex_price, costs, fee_mid);
-        if (m) {
-            L = mid;
-            if (m->second > best_profit) { best_profit = m->second; best_dx = mid; best_fee = fee_mid; }
+    struct Eval { RealT dx; RealT profit; RealT dy_after_fee; RealT fee_tokens; };
+    auto eval = [&](RealT dx)->Eval {
+        auto sim = simulate_exchange(dx);
+        RealT dy_after_fee = sim.first;
+        RealT fee_tokens   = sim.second;
+        RealT profit = RealT(0);
+        if (i == 0 && j == 1) {
+            RealT coin0_out_cex = dy_after_fee * cex_price;
+            RealT arb_fee = (costs.arb_fee_bps / RealT(1e4)) * coin0_out_cex;
+            profit = coin0_out_cex - dx - arb_fee - costs.gas_coin0;
         } else {
-            R = mid;
+            RealT coin0_spent_cex = dx * cex_price;
+            RealT arb_fee = (costs.arb_fee_bps / RealT(1e4)) * coin0_spent_cex;
+            profit = dy_after_fee - coin0_spent_cex - arb_fee - costs.gas_coin0;
         }
-        if (R - L <= std::max<RealT>(RealT(1e-12), available * RealT(1e-12))) break;
+        return {dx, profit, dy_after_fee, fee_tokens};
+    };
+
+    // Geometric pre-sampling in log-space to bracket the peak
+    int pre_samples = 9;
+    const RealT L = log(lo), H = log(hi);
+    const RealT step = (H - L) / static_cast<RealT>(pre_samples - 1);
+    std::vector<Eval> grid; grid.reserve(static_cast<size_t>(pre_samples));
+    for (int k = 0; k < pre_samples; ++k) {
+        RealT x  = L + step * static_cast<RealT>(k);
+        RealT dx = exp(x);
+        grid.push_back(eval(dx));
     }
 
-    if (!(best_profit > 0)) return false;
-    out_dx = best_dx;
-    out_fee_tokens = best_fee;
-    out_profit = best_profit;
+    // Find top point and choose adjacent bracket around it
+    int m = 0; for (int k = 1; k < pre_samples; ++k) if (grid[k].profit > grid[m].profit) m = k;
+    int a_idx, b_idx;
+    if (m == 0) { a_idx = 0; b_idx = std::min(1, pre_samples - 1); }
+    else if (m == pre_samples - 1) { a_idx = pre_samples - 2; b_idx = pre_samples - 1; }
+    else { a_idx = m - 1; b_idx = m + 1; }
+
+    // Local bracket [a, b] in log-space
+    RealT a = log(grid[a_idx].dx);
+    RealT b = log(grid[b_idx].dx);
+    if (a > b) std::swap(a, b);
+
+    // Best so far
+    Eval best = grid[m];
+
+    // Golden-section search in log-space (short budget)
+    const RealT phi = (RealT(1) + sqrt(RealT(5))) / RealT(2);
+    RealT c = b - (b - a) / phi;
+    RealT d = a + (b - a) / phi;
+    Eval F_c = eval(exp(c));
+    Eval F_d = eval(exp(d));
+    if (F_c.profit > best.profit) best = F_c;
+    if (F_d.profit > best.profit) best = F_d;
+
+    const int golden_iters = 9;
+    const RealT dx_tol_abs = max( available * RealT(1e-12), RealT(1e-18) );
+    const RealT x_tol = log( RealT(1) + dx_tol_abs / max(lo, RealT(1e-18)) );
+    for (int it = 0; it < golden_iters; ++it) {
+        if ((b - a) <= x_tol) break;
+        if (F_c.profit < F_d.profit) {
+            a = c; F_c = F_d; c = b - (b - a) / phi; F_d = eval(exp(c));
+            if (F_d.profit > best.profit) best = F_d;
+        } else {
+            b = d; F_d = F_c; d = a + (b - a) / phi; F_c = eval(exp(d));
+            if (F_c.profit > best.profit) best = F_c;
+        }
+    }
+
+    if (!(best.profit > RealT(0))) return false;
+    out_decision.do_trade = true;
+    out_decision.i = static_cast<int>(i); out_decision.j = static_cast<int>(j);
+    out_decision.dx = best.dx;
+    out_decision.fee_tokens = best.fee_tokens;
+    out_decision.profit = best.profit;
+    out_decision.notional_coin0 = (i == 0) ? best.dx : best.dx * cex_price;
     return true;
 }
 
@@ -258,25 +249,22 @@ static Decision decide_trade(
     Decision d{};
     d.do_trade = false;
 
-    // 1) Decide direction by probing both sides with a fixed small fraction
-    const RealT PROBE_FRAC = RealT(1e-9);
-    int i = 0, j = 1; RealT probe_fee = RealT(0); RealT probe_profit = RealT(0);
-    if (!decide_trade_direction(pool, cex_price, costs, PROBE_FRAC, i, j, probe_fee, probe_profit)) {
-        return d; // no profitable direction
+    // Direction by price compare
+    int i = 0, j = 1;
+    RealT p_pool = pool.get_p();
+    if (!differs_rel(cex_price, p_pool)) return d; // equal within tolerance, skip
+    if (cex_price > p_pool) { i = 0; j = 1; } else { i = 1; j = 0; }
+    // Early termination by fee floor vs price diff
+    RealT fees_sum = (1+pool.mid_fee) * (1+costs.arb_fee_bps / RealT(1e4)) - 1;
+    if (i == 0 && j == 1) {
+        // Require p_cex to exceed pool by at least fees_sum fraction
+        if (!(cex_price > p_pool * (RealT(1) + fees_sum))) return d;
+    } else {
+        // Require pool to exceed p_cex by at least fees_sum fraction
+        if (!(p_pool > cex_price * (RealT(1) + fees_sum))) return d;
     }
-
-    // 2) Decide size using binary search within bounds
-    RealT dx = RealT(0), fee_tokens = RealT(0); RealT profit = RealT(0);
-    if (!decide_trade_size(pool, cex_price, costs, i, j, notional_cap_coin0, min_swap_frac, max_swap_frac, dx, fee_tokens, profit)) {
-        return d; // size selection found no profitable dx within bounds
-    }
-
-    d.do_trade = true;
-    d.i = i; d.j = j;
-    d.dx = dx;
-    d.fee_tokens = fee_tokens;
-    d.profit = profit;
-    d.notional_coin0 = (i == 0) ? dx : dx * cex_price;
+    if (!(pool.balances[i] > RealT(0))) return d;
+    if (!decide_trade_size(pool, cex_price, costs, i, j, notional_cap_coin0, min_swap_frac, max_swap_frac, d)) return d;
     return d;
 }
 
@@ -458,15 +446,6 @@ int main(int argc, char* argv[]) {
         auto t_read0 = clk::now();
         auto candles = load_candles(candles_path, max_candles);
         auto events  = gen_events(candles);
-        // // print first 10 candles and events
-        // std::cout << "candles:" << std::endl;
-        // for (size_t i = 0; i < 10; ++i) {
-        //     std::cout << "candle " << i << ": " << candles[i].ts << " " << candles[i].open << " " << candles[i].high << " " << candles[i].low << " " << candles[i].close << " " << candles[i].volume << std::endl;
-        // }
-        // std::cout << "events:" << std::endl;
-        // for (size_t i = 0; i < 10; ++i) {
-        //     std::cout << "event " << i << ": " << events[i].ts << " " << events[i].p_cex << " " << events[i].volume << std::endl;
-        // }
         auto t_read1 = clk::now();
 
         std::ifstream in(pools_path); if (!in) throw std::runtime_error("Cannot open pools json: " + pools_path);
@@ -541,7 +520,6 @@ int main(int argc, char* argv[]) {
                         next_donation_ts = base_ts + static_cast<uint64_t>(cfg.donation_frequency);
                     }
                     auto t_pool0 = clk::now();
-                    bool wash_toggle = false; // alternate dust direction when no arb trade
                     uint64_t last_dust_ts = 0;
                     if (save_actions) {
                         // Capture initial state snapshot
@@ -613,37 +591,26 @@ int main(int argc, char* argv[]) {
                         if (costs.use_volume_cap) notional_cap_coin0 = ev.volume * ev.p_cex * static_cast<RealT>(costs.volume_cap_mult);
                         Decision d = decide_trade(pool, ev.p_cex, costs, notional_cap_coin0, static_cast<RealT>(min_swap_frac), static_cast<RealT>(max_swap_frac));
                         if (!d.do_trade) {
-                            // Respect cooldown for dust swap
-                            bool can_dust = (dustswapfreq_s > 0) && (last_dust_ts == 0 || ev.ts >= last_dust_ts + dustswapfreq_s);
-                            if (!can_dust) continue;
-                            // No arb opportunity: perform a tiny wash trade to trigger price updates
-                            int wi = wash_toggle ? 0 : 1;
-                            int wj = 1 - wi;
-                            wash_toggle = !wash_toggle;
-                            RealT avail = pool.balances[wi];
-                            if (avail > RealT(0)) {
-                                RealT frac = std::max<RealT>(RealT(1e-12), static_cast<RealT>(min_swap_frac) * RealT(0.1));
-                                RealT wdx = std::max<RealT>(RealT(1e-18), avail * frac);
-                                try {
-                                    RealT price_scale_before = pool.cached_price_scale;
-                                    auto wres = pool.exchange((RealT)wi, (RealT)wj, wdx, RealT(0));
-                                    RealT w_dy_after_fee = wres[0];
-                                    RealT w_fee_tokens   = wres[1];
-                                    RealT price_scale_after = pool.cached_price_scale;
-                                    if (differs_rel(price_scale_after, price_scale_before)) m.n_rebalances += 1;
-                                    if (save_actions) {
-                                        json::object tr;
-                                        tr["type"] = "exchange";
-                                        tr["wash"] = true;
-                                        tr["ts"] = ev.ts; tr["i"] = wi; tr["j"] = wj; tr["dx"] = static_cast<double>(wdx); tr["dx_wei"] = to_str_1e18(wdx);
-                                        tr["dy_after_fee"] = static_cast<double>(w_dy_after_fee); tr["fee_tokens"] = static_cast<double>(w_fee_tokens);
-                                        tr["profit_coin0"] = 0.0; tr["p_cex"] = static_cast<double>(ev.p_cex); tr["p_pool_before"] = static_cast<double>(pre_p_pool);
-                                        actions.push_back(tr);
-                                        states.push_back(pool_state_json(pool));
-                                    }
-                                    last_dust_ts = ev.ts;
-                                } catch (...) { /* ignore */ }
-                            }
+                            // Respect cooldown for tick update (zero-cost EMA/price tweak)
+                            bool can_tick = (dustswapfreq_s > 0) && (last_dust_ts == 0 || ev.ts >= last_dust_ts + dustswapfreq_s);
+                            if (!can_tick) continue;
+                            try {
+                                RealT price_scale_before = pool.cached_price_scale;
+                                RealT p_pool_before = pre_p_pool;
+                                pool.tick();
+                                RealT price_scale_after = pool.cached_price_scale;
+                                if (differs_rel(price_scale_after, price_scale_before)) m.n_rebalances += 1;
+                                if (save_actions) {
+                                    json::object tr;
+                                    tr["type"] = "tick";
+                                    tr["ts"] = ev.ts;
+                                    tr["p_cex"] = static_cast<double>(ev.p_cex);
+                                    tr["p_pool_before"] = static_cast<double>(p_pool_before);
+                                    actions.push_back(tr);
+                                    states.push_back(pool_state_json(pool));
+                                }
+                                last_dust_ts = ev.ts;
+                            } catch (...) { /* ignore */ }
                             continue;
                         }
                         try {
@@ -657,16 +624,7 @@ int main(int argc, char* argv[]) {
                             m.notional += d.notional_coin0;
                             m.lp_fee_coin0 += (d.j==1 ? fee_tokens * ev.p_cex : fee_tokens);
                             if (differs_rel(price_scale_after, price_scale_before)) m.n_rebalances += 1;
-                            RealT profit_coin0 = RealT(0);
-                            if (d.i == 0 && d.j == 1) {
-                                RealT coin0_out_cex = dy_after_fee * ev.p_cex;
-                                RealT arb_fee = (costs.arb_fee_bps / RealT(1e4)) * coin0_out_cex;
-                                profit_coin0 = coin0_out_cex - d.dx - arb_fee - costs.gas_coin0;
-                            } else {
-                                RealT coin0_spent_cex = d.dx * ev.p_cex;
-                                RealT arb_fee = (costs.arb_fee_bps / RealT(1e4)) * coin0_spent_cex;
-                                profit_coin0 = dy_after_fee - coin0_spent_cex - arb_fee - costs.gas_coin0;
-                            }
+                            RealT profit_coin0 = d.profit;
                             m.arb_pnl_coin0 += profit_coin0;
                             if (save_actions) {
                                 json::object tr;

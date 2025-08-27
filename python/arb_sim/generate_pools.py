@@ -62,19 +62,18 @@ N_GRID = 32
 X_name = "A"  # can be changed to any pool key
 xmin = 5 * 10_000
 xmax = 300 * 10_000
-xlogspace = False
+xlogspace = True
+
+Y_name = "mid_fee"  # default second param; also applied to out_fee
+ymin = 1e-4 * 10**10
+ymax =  .05 * 10**10
+ylogspace = True
+
 if xlogspace:
     X_vals = np.logspace(np.log10(xmin), np.log10(xmax), N_GRID).round().astype(int).tolist()
 else:
     X_vals = np.linspace(xmin, xmax, N_GRID).tolist()
 
-# Y_name = "donation_frequency"  # can be changed to any pool key
-# Y_vals = np.linspace(0, 86400, N_GRID).tolist()
-
-Y_name = "mid_fee"  # default second param; also applied to out_fee
-ymin = 1e-4 * 10**10
-ymax =  .05 * 10**10
-ylogspace = False
 if ylogspace:
     Y_vals = np.logspace(np.log10(ymin), np.log10(ymax), N_GRID).round().astype(int).tolist()
 else:
@@ -111,7 +110,7 @@ BASE_POOL = {
 
 BASE_COSTS = {
     "arb_fee_bps": 50.0,
-    "gas_coin0": 1.0,
+    "gas_coin0": 0.2,
     "use_volume_cap": True,
     "volume_cap_mult": 1,
 }
