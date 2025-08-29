@@ -57,27 +57,27 @@ def strify_pool(pool: dict) -> dict:
 
 
 # -------------------- Grid Definition --------------------
-N_GRID = 16
+N_GRID = 32
 
-# X_name = "A"  # can be changed to any pool key
-# xmin = 5 * 10_000
-# xmax = 1000 * 10_000
-# xlogspace = True
+X_name = "A"  # can be changed to any pool key
+xmin = 5 * 10_000
+xmax = 1000 * 10_000
+xlogspace = True
 
-# Y_name = "mid_fee"  # default second param; also applied to out_fee
-# ymin = 1e-4 * 10**10
-# ymax =  .05 * 10**10
+Y_name = "mid_fee"  # default second param; also applied to out_fee
+ymin = 1e-4 * 10**10
+ymax =  .05 * 10**10
+ylogspace = True
+
+# X_name = "donation_apy" 
+# xmin = 0.01
+# xmax = 0.1
+# xlogspace = False
+
+# Y_name = "donation_frequency"  
+# ymin = 600
+# ymax =  86400*7
 # ylogspace = False
-
-X_name = "donation_apy" 
-xmin = 0.01
-xmax = 0.1
-xlogspace = False
-
-Y_name = "donation_frequency"  
-ymin = 600
-ymax =  86400*7
-ylogspace = False
 
 if xlogspace:
     X_vals = np.logspace(np.log10(xmin), np.log10(xmax), N_GRID).round().tolist()
@@ -122,7 +122,7 @@ BASE_POOL = {
 }
 
 BASE_COSTS = {
-    "arb_fee_bps": 50.0,
+    "arb_fee_bps": 10.0,
     "gas_coin0": 0.0,
     "use_volume_cap": True,
     "volume_cap_mult": 1,
