@@ -123,7 +123,7 @@ BASE_POOL = {
 
 BASE_COSTS = {
     "arb_fee_bps": 50.0,
-    "gas_coin0": 0.5,
+    "gas_coin0": 0.0,
     "use_volume_cap": True,
     "volume_cap_mult": 1,
 }

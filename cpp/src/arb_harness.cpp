@@ -111,7 +111,7 @@ struct Decision {
     RealT notional_coin0{0.0};
 };
 
-// --- Decide trade v2: exact ratio pre-filter + Brent sizing on marginal equality ---
+// --- Decide trade: exact ratio pre-filter + Brent sizing on marginal equality ---
 
 // Helper: compute post-trade marginal pool price p_new (coin0 per coin1) and LP fee at post-trade skew
 static inline std::pair<RealT, RealT>
@@ -181,6 +181,10 @@ static inline bool lin_bisect_root(F&& f,
         RealT Fm = f(m);
         if (Flo * Fm <= RealT(0)) { b = m; Fhi = Fm; }
         else { a = m; Flo = Fm; }
+        //early exit if within tolerance
+        if (std::abs(b - a) < 1e-4) {
+            break;
+        }
     }
     out_root = (a + b) / RealT(2);
     return true;
@@ -208,8 +212,8 @@ static Decision decide_trade(
     const RealT f_cex = costs.arb_fee_bps / RealT(1e4);
 
     // Two "edges" (positive => potentially profitable near dx->0)
-    const RealT edge_01 = (RealT(1) - f_cex) * (RealT(1) - f_lp0) * cex_price - p_now;            // 0->1 candidate
-    const RealT edge_10 = (RealT(1) - f_lp0) * p_now - (RealT(1) + f_cex) * cex_price;            // 1->0 candidate
+    const RealT edge_01 = (RealT(1) - f_cex) * (RealT(1) - f_lp0) * cex_price - p_now;            // 0->1 in pool, 1->0 on cex
+    const RealT edge_10 = (RealT(1) - f_lp0) * p_now - (RealT(1) + f_cex) * cex_price;            // 1->0 in pool, 0->1 on cex
 
     int dir_i = -1, dir_j = -1;
     if (edge_01 <= RealT(0) && edge_10 <= RealT(0)) {
@@ -258,7 +262,7 @@ static Decision decide_trade(
 
     if (has_root) {
         RealT root;
-        if (lin_bisect_root(residual, dx_lo, dx_hi, F_lo, F_hi, 20, root)) dx_star = std::max<RealT>(root, dx_lo);
+        if (lin_bisect_root(residual, dx_lo, dx_hi, F_lo, F_hi, 100, root)) dx_star = std::max<RealT>(root, dx_lo);
     } else {
         // No sign change. Two cases:
         //  * Entire interval profitable (cannot equalize within caps): pick dx_hi.
