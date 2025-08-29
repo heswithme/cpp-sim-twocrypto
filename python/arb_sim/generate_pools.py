@@ -57,22 +57,22 @@ def strify_pool(pool: dict) -> dict:
 
 
 # -------------------- Grid Definition --------------------
-N_GRID = 32
+N_GRID = 1
 
-# X_name = "A"  # can be changed to any pool key
-# xmin = 5 * 10_000
-# xmax = 300 * 10_000
-# xlogspace = True
+X_name = "A"  # can be changed to any pool key
+xmin = 5 * 10_000
+xmax = 300 * 10_000
+xlogspace = True
 
 Y_name = "mid_fee"  # default second param; also applied to out_fee
 ymin = 1e-4 * 10**10
 ymax =  .05 * 10**10
 ylogspace = True
 
-X_name = "donation_apy"  # can be changed to any pool key
-xmin = 0.01
-xmax = 0.1
-xlogspace = False
+# X_name = "donation_apy"  # can be changed to any pool key
+# xmin = 0.01
+# xmax = 0.1
+# xlogspace = False
 
 # Y_name = "donation_coins_ratio"  # default second param; also applied to out_fee
 # ymin = 0
@@ -90,8 +90,8 @@ else:
     Y_vals = np.linspace(ymin, ymax, N_GRID).tolist()
 
 # #optionally int-ify
-# X_vals = [int(x) for x in X_vals]
-# Y_vals = [int(x) for x in Y_vals]
+X_vals = [int(x) for x in X_vals]
+Y_vals = [int(x) for x in Y_vals]
 
 init_liq = 1_000_000 # in coin0
 init_price = 0.190865 #brlusd

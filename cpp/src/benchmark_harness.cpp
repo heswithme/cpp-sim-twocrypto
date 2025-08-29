@@ -153,44 +153,46 @@ int run_harness(const std::string& pools_file, const std::string& sequences_file
         auto worker = [&]() {
             for (;;) {
                 size_t idx = next.fetch_add(1); if (idx >= tasks.size()) break; auto pool_obj = pools[tasks[idx].pi].as_object();
-                std::string pool_name = std::string(pool_obj.at("name").as_string().c_str());
-                {
-                    std::lock_guard<std::mutex> lk(io_mu); std::cout << "Processing " << pool_name << "..." << std::endl;
-                }
-                // Normalize params
-                auto init_liq = pool_obj.at("initial_liquidity").as_array();
-                std::array<T,2> precisions = {NumTraits<T>::ONE(), NumTraits<T>::ONE()};
-                // A uses A_MULTIPLIER scale (not 1e18). gamma is unused in math here; keep unscaled.
-                T A;
-                T gamma;
-                if constexpr (std::is_same_v<T, stableswap::uint256>) {
-                    A = from_string_scaled_T<stableswap::uint256>(std::string(pool_obj.at("A").as_string().c_str()));
-                    gamma = from_string_scaled_T<stableswap::uint256>(std::string(pool_obj.at("gamma").as_string().c_str()));
-                } else {
-                    A = static_cast<T>(std::strtold(std::string(pool_obj.at("A").as_string().c_str()).c_str(), nullptr));
-                    gamma = static_cast<T>(std::strtold(std::string(pool_obj.at("gamma").as_string().c_str()).c_str(), nullptr));
-                }
-                T mid_fee = from_fee_scaled_T<T>(std::string(pool_obj.at("mid_fee").as_string().c_str()));
-                T out_fee = from_fee_scaled_T<T>(std::string(pool_obj.at("out_fee").as_string().c_str()));
-                // fee_gamma uses PRECISION scale
-                T fee_gamma;
-                if constexpr (std::is_same_v<T, stableswap::uint256>) fee_gamma = from_string_scaled_T<stableswap::uint256>(std::string(pool_obj.at("fee_gamma").as_string().c_str()));
-                else fee_gamma = static_cast<T>(std::strtold(std::string(pool_obj.at("fee_gamma").as_string().c_str()).c_str(), nullptr) / 1e18L);
-                T allowed_extra_profit = from_string_scaled_T<T>(std::string(pool_obj.at("allowed_extra_profit").as_string().c_str()));
-                if constexpr (!std::is_same_v<T, stableswap::uint256>) allowed_extra_profit = static_cast<T>(std::strtold(std::string(pool_obj.at("allowed_extra_profit").as_string().c_str()).c_str(), nullptr) / 1e18L);
-                T adjustment_step = from_string_scaled_T<T>(std::string(pool_obj.at("adjustment_step").as_string().c_str()));
-                if constexpr (!std::is_same_v<T, stableswap::uint256>) adjustment_step = static_cast<T>(std::strtold(std::string(pool_obj.at("adjustment_step").as_string().c_str()).c_str(), nullptr) / 1e18L);
-                // ma_time is in seconds (unscaled)
-                T ma_time;
-                if constexpr (std::is_same_v<T, stableswap::uint256>) ma_time = from_string_scaled_T<stableswap::uint256>(std::string(pool_obj.at("ma_time").as_string().c_str()));
-                else ma_time = static_cast<T>(std::strtold(std::string(pool_obj.at("ma_time").as_string().c_str()).c_str(), nullptr));
-                T initial_price = from_string_scaled_T<T>(std::string(pool_obj.at("initial_price").as_string().c_str()));
-                std::array<T,2> initial_amounts = {from_string_scaled_T<T>(std::string(init_liq[0].as_string().c_str())), from_string_scaled_T<T>(std::string(init_liq[1].as_string().c_str()))};
+                std::string pool_name;
+                try {
+                    pool_name = std::string(pool_obj.at("name").as_string().c_str());
+                    {
+                        std::lock_guard<std::mutex> lk(io_mu); std::cout << "Processing " << pool_name << "..." << std::endl;
+                    }
+                    // Normalize params
+                    auto init_liq = pool_obj.at("initial_liquidity").as_array();
+                    std::array<T,2> precisions = {NumTraits<T>::ONE(), NumTraits<T>::ONE()};
+                    // A uses A_MULTIPLIER scale (not 1e18). gamma is unused in math here; keep unscaled.
+                    T A;
+                    T gamma;
+                    if constexpr (std::is_same_v<T, stableswap::uint256>) {
+                        A = from_string_scaled_T<stableswap::uint256>(std::string(pool_obj.at("A").as_string().c_str()));
+                        gamma = from_string_scaled_T<stableswap::uint256>(std::string(pool_obj.at("gamma").as_string().c_str()));
+                    } else {
+                        A = static_cast<T>(std::strtold(std::string(pool_obj.at("A").as_string().c_str()).c_str(), nullptr));
+                        gamma = static_cast<T>(std::strtold(std::string(pool_obj.at("gamma").as_string().c_str()).c_str(), nullptr));
+                    }
+                    T mid_fee = from_fee_scaled_T<T>(std::string(pool_obj.at("mid_fee").as_string().c_str()));
+                    T out_fee = from_fee_scaled_T<T>(std::string(pool_obj.at("out_fee").as_string().c_str()));
+                    // fee_gamma uses PRECISION scale
+                    T fee_gamma;
+                    if constexpr (std::is_same_v<T, stableswap::uint256>) fee_gamma = from_string_scaled_T<stableswap::uint256>(std::string(pool_obj.at("fee_gamma").as_string().c_str()));
+                    else fee_gamma = static_cast<T>(std::strtold(std::string(pool_obj.at("fee_gamma").as_string().c_str()).c_str(), nullptr) / 1e18L);
+                    T allowed_extra_profit = from_string_scaled_T<T>(std::string(pool_obj.at("allowed_extra_profit").as_string().c_str()));
+                    if constexpr (!std::is_same_v<T, stableswap::uint256>) allowed_extra_profit = static_cast<T>(std::strtold(std::string(pool_obj.at("allowed_extra_profit").as_string().c_str()).c_str(), nullptr) / 1e18L);
+                    T adjustment_step = from_string_scaled_T<T>(std::string(pool_obj.at("adjustment_step").as_string().c_str()));
+                    if constexpr (!std::is_same_v<T, stableswap::uint256>) adjustment_step = static_cast<T>(std::strtold(std::string(pool_obj.at("adjustment_step").as_string().c_str()).c_str(), nullptr) / 1e18L);
+                    // ma_time is in seconds (unscaled)
+                    T ma_time;
+                    if constexpr (std::is_same_v<T, stableswap::uint256>) ma_time = from_string_scaled_T<stableswap::uint256>(std::string(pool_obj.at("ma_time").as_string().c_str()));
+                    else ma_time = static_cast<T>(std::strtold(std::string(pool_obj.at("ma_time").as_string().c_str()).c_str(), nullptr));
+                    T initial_price = from_string_scaled_T<T>(std::string(pool_obj.at("initial_price").as_string().c_str()));
+                    std::array<T,2> initial_amounts = {from_string_scaled_T<T>(std::string(init_liq[0].as_string().c_str())), from_string_scaled_T<T>(std::string(init_liq[1].as_string().c_str()))};
 
-                TwoCryptoPoolT<T> pool(precisions, A, gamma, mid_fee, out_fee, fee_gamma, allowed_extra_profit, adjustment_step, ma_time, initial_price);
-                // start timestamp
-                if (sequence.if_contains("start_timestamp")) pool.set_block_timestamp(static_cast<uint64_t>(sequence.at("start_timestamp").as_int64()));
-                (void)pool.add_liquidity(initial_amounts, NumTraits<T>::ZERO());
+                    TwoCryptoPoolT<T> pool(precisions, A, gamma, mid_fee, out_fee, fee_gamma, allowed_extra_profit, adjustment_step, ma_time, initial_price);
+                    // start timestamp
+                    if (sequence.if_contains("start_timestamp")) pool.set_block_timestamp(static_cast<uint64_t>(sequence.at("start_timestamp").as_int64()));
+                    (void)pool.add_liquidity(initial_amounts, NumTraits<T>::ZERO());
 
                 json::array states;
                 json::object last_state;
@@ -254,6 +256,12 @@ int run_harness(const std::string& pools_file, const std::string& sequences_file
                     res["states"] = states;
                 }
                 tr["result"] = res; results[idx] = std::move(tr);
+                } catch (const std::exception& e) {
+                    // Per-pool failure should not bring down the whole harness
+                    json::object tr; tr["pool_config"] = pool_name; tr["sequence"] = sequence.at("name").as_string();
+                    json::object res; res["success"] = false; res["error"] = e.what();
+                    tr["result"] = res; results[idx] = std::move(tr);
+                }
             }
         };
         std::vector<std::thread> ws; ws.reserve(threads); for (size_t t=0;t<threads;++t) ws.emplace_back(worker); for (auto& th:ws) th.join();
