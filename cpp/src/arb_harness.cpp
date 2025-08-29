@@ -22,6 +22,7 @@
 #include <iomanip>
 #include <mutex>
 #include <vector>
+#include <limits>
 
 namespace json = boost::json;
 
@@ -110,129 +111,82 @@ struct Decision {
     RealT notional_coin0{0.0};
 };
 
-// Direction is chosen purely by comparing CEX vs pool spot price (get_p)
+// --- Decide trade v2: exact ratio pre-filter + Brent sizing on marginal equality ---
 
-// Decide trade size via binary search within min/max swap fraction bounds (and optional notional cap).
-static bool decide_trade_size(
-    const twocrypto::TwoCryptoPoolT<RealT>& pool,
-    RealT cex_price,
-    const Costs& costs,
-    int i_in, int j_out,
-    RealT notional_cap_coin0,
-    RealT min_swap_frac,
-    RealT max_swap_frac,
-    Decision& out_decision
-) {
-    using std::max; using std::min; using std::sqrt; using std::log; using std::exp;
-    size_t i = static_cast<size_t>(i_in);
-    size_t j = static_cast<size_t>(j_out);
-    RealT available = pool.balances[i];
-    if (!(available > RealT(0))) return false;
+// Helper: compute post-trade marginal pool price p_new (coin0 per coin1) and LP fee at post-trade skew
+static inline std::pair<RealT, RealT>
+post_trade_price_fee(const twocrypto::TwoCryptoPoolT<RealT>& pool,
+                     size_t i, size_t j, RealT dx)
+{
+    using Ops = stableswap::MathOps<RealT>;
+    const RealT ps = pool.cached_price_scale;
 
-    // Build upper bound based on balances, max swap fraction, and optional notional cap
-    RealT hi = available * max_swap_frac;
-    if (notional_cap_coin0 > RealT(0)) {
-        if (i == 0) hi = min(hi, notional_cap_coin0);
-        else if (cex_price > RealT(0)) hi = min(hi, notional_cap_coin0 / cex_price);
-    }
-    if (!(hi > RealT(0))) return false;
+    // balances after adding dx on i
+    auto balances_local = pool.balances;
+    balances_local[i] += dx;
 
-    // Compute optimistic no-slippage, min-LP-fee profit per unit dx and gas-driven minimum size
-    RealT lo = max( RealT(1e-18), available * max(RealT(1e-12), min_swap_frac)  );
+    // xp after adding dx (before taking dy from j)
+    auto xp = pool_xp_from(pool, balances_local, ps);
+
+    // solve outflow on j and form xp AFTER the trade
+    auto y_out = Ops::get_y(pool.A, pool.gamma, xp, pool.D, j);
+    RealT dy_xp = xp[j] - y_out.value;
+    xp[j] -= dy_xp;
+
+    // dynamic LP fee at post-trade skew
+    RealT f_lp = dyn_fee(xp, pool.mid_fee, pool.out_fee, pool.fee_gamma);
+
+    // D and marginal price at post-trade state
+    RealT D_new = Ops::newton_D(pool.A, pool.gamma, xp, RealT(0));
+    RealT p_new = Ops::get_p(xp, D_new, {pool.A, pool.gamma}) * ps; // coin0 per coin1
+
+    return {p_new, f_lp};
+}
+
+// Evaluate dy_after_fee and fee_tokens (no commit)
+static inline std::pair<RealT, RealT>
+simulate_exchange_once(const twocrypto::TwoCryptoPoolT<RealT>& pool,
+                       size_t i, size_t j, RealT dx)
+{
+    using Ops = stableswap::MathOps<RealT>;
+    const RealT ps = pool.cached_price_scale;
+
+    auto balances_local = pool.balances; balances_local[i] += dx;
+    auto xp = pool_xp_from(pool, balances_local, ps);
+    auto y_out = Ops::get_y(pool.A, pool.gamma, xp, pool.D, j);
+    RealT dy_xp = xp[j] - y_out.value;
+    xp[j] -= dy_xp;
+
+    RealT dy_tokens = xp_to_tokens_j(pool, j, dy_xp, ps);
+    RealT f_lp      = dyn_fee(xp, pool.mid_fee, pool.out_fee, pool.fee_gamma);
+    RealT fee_tokens = f_lp * dy_tokens;
+    RealT dy_after   = dy_tokens - fee_tokens;
+    return {dy_after, fee_tokens};
+}
+
+// Root finding helper: linear-space bisection on [lo, hi] with a sign change.
+template <typename F>
+static inline bool lin_bisect_root(F&& f,
+                                   RealT lo,
+                                   RealT hi,
+                                   RealT Flo,
+                                   RealT Fhi,
+                                   int iters,
+                                   RealT& out_root) {
     if (!(hi > lo)) return false;
-
-    // Lightweight simulator: returns dy_after_fee and fee_tokens without mutating pool
-    auto simulate_exchange = [&](RealT dx)->std::pair<RealT, RealT> {
-        using Ops = stableswap::MathOps<RealT>;
-        RealT ps = pool.cached_price_scale;
-        auto balances_local = pool.balances; balances_local[i] += dx;
-        auto xp = pool_xp_from(pool, balances_local, ps);
-        auto y_out = Ops::get_y(pool.A, pool.gamma, xp, pool.D, j);
-        RealT dy_xp = xp[j] - y_out.value; xp[j] -= dy_xp;
-        RealT dy_tokens = xp_to_tokens_j(pool, j, dy_xp, ps);
-        RealT fee_rate = dyn_fee(xp, pool.mid_fee, pool.out_fee, pool.fee_gamma);
-        RealT fee_tokens = fee_rate * dy_tokens;
-        RealT dy_after_fee = dy_tokens - fee_tokens;
-        return {dy_after_fee, fee_tokens};
-    };
-
-    struct Eval { RealT dx; RealT profit; RealT dy_after_fee; RealT fee_tokens; };
-    auto eval = [&](RealT dx)->Eval {
-        auto sim = simulate_exchange(dx);
-        RealT dy_after_fee = sim.first;
-        RealT fee_tokens   = sim.second;
-        RealT profit = RealT(0);
-        if (i == 0 && j == 1) {
-            RealT coin0_out_cex = dy_after_fee * cex_price;
-            RealT arb_fee = (costs.arb_fee_bps / RealT(1e4)) * coin0_out_cex;
-            profit = coin0_out_cex - dx - arb_fee - costs.gas_coin0;
-        } else {
-            RealT coin0_spent_cex = dx * cex_price;
-            RealT arb_fee = (costs.arb_fee_bps / RealT(1e4)) * coin0_spent_cex;
-            profit = dy_after_fee - coin0_spent_cex - arb_fee - costs.gas_coin0;
-        }
-        return {dx, profit, dy_after_fee, fee_tokens};
-    };
-
-    // Geometric pre-sampling in log-space to bracket the peak
-    int pre_samples = 9;
-    const RealT L = log(lo), H = log(hi);
-    const RealT step = (H - L) / static_cast<RealT>(pre_samples - 1);
-    std::vector<Eval> grid; grid.reserve(static_cast<size_t>(pre_samples));
-    for (int k = 0; k < pre_samples; ++k) {
-        RealT x  = L + step * static_cast<RealT>(k);
-        RealT dx = exp(x);
-        grid.push_back(eval(dx));
+    if (!(Flo * Fhi <= RealT(0))) return false;
+    RealT a = lo, b = hi;
+    for (int it = 0; it < iters; ++it) {
+        RealT m = (a + b) / RealT(2);
+        RealT Fm = f(m);
+        if (Flo * Fm <= RealT(0)) { b = m; Fhi = Fm; }
+        else { a = m; Flo = Fm; }
     }
-
-    // Find top point and choose adjacent bracket around it
-    int m = 0; for (int k = 1; k < pre_samples; ++k) if (grid[k].profit > grid[m].profit) m = k;
-    int a_idx, b_idx;
-    if (m == 0) { a_idx = 0; b_idx = std::min(1, pre_samples - 1); }
-    else if (m == pre_samples - 1) { a_idx = pre_samples - 2; b_idx = pre_samples - 1; }
-    else { a_idx = m - 1; b_idx = m + 1; }
-
-    // Local bracket [a, b] in log-space
-    RealT a = log(grid[a_idx].dx);
-    RealT b = log(grid[b_idx].dx);
-    if (a > b) std::swap(a, b);
-
-    // Best so far
-    Eval best = grid[m];
-
-    // Golden-section search in log-space (short budget)
-    const RealT phi = (RealT(1) + sqrt(RealT(5))) / RealT(2);
-    RealT c = b - (b - a) / phi;
-    RealT d = a + (b - a) / phi;
-    Eval F_c = eval(exp(c));
-    Eval F_d = eval(exp(d));
-    if (F_c.profit > best.profit) best = F_c;
-    if (F_d.profit > best.profit) best = F_d;
-
-    const int golden_iters = 9;
-    const RealT dx_tol_abs = max( available * RealT(1e-12), RealT(1e-18) );
-    const RealT x_tol = log( RealT(1) + dx_tol_abs / max(lo, RealT(1e-18)) );
-    for (int it = 0; it < golden_iters; ++it) {
-        if ((b - a) <= x_tol) break;
-        if (F_c.profit < F_d.profit) {
-            a = c; F_c = F_d; c = b - (b - a) / phi; F_d = eval(exp(c));
-            if (F_d.profit > best.profit) best = F_d;
-        } else {
-            b = d; F_d = F_c; d = a + (b - a) / phi; F_c = eval(exp(d));
-            if (F_c.profit > best.profit) best = F_c;
-        }
-    }
-
-    if (!(best.profit > RealT(0))) return false;
-    out_decision.do_trade = true;
-    out_decision.i = static_cast<int>(i); out_decision.j = static_cast<int>(j);
-    out_decision.dx = best.dx;
-    out_decision.fee_tokens = best.fee_tokens;
-    out_decision.profit = best.profit;
-    out_decision.notional_coin0 = (i == 0) ? best.dx : best.dx * cex_price;
+    out_root = (a + b) / RealT(2);
     return true;
 }
 
+// Arb decision routine
 static Decision decide_trade(
     const twocrypto::TwoCryptoPoolT<RealT>& pool,
     RealT cex_price,
@@ -244,24 +198,106 @@ static Decision decide_trade(
     Decision d{};
     d.do_trade = false;
 
-    // Direction by price compare
-    int i = 0, j = 1;
-    RealT p_pool = pool.get_p();
-    if (!differs_rel(cex_price, p_pool)) return d; // equal within tolerance, skip
-    if (cex_price > p_pool) { i = 0; j = 1; } else { i = 1; j = 0; }
-    // Early termination by fee floor vs price diff
-    RealT fees_sum = (1+pool.mid_fee) * (1+costs.arb_fee_bps / RealT(1e4)) - 1;
-    if (i == 0 && j == 1) {
-        // Require p_cex to exceed pool by at least fees_sum fraction
-        if (!(cex_price > p_pool * (RealT(1) + fees_sum))) return d;
+    // Sanity checks
+    if (!(cex_price > RealT(0))) return d;
+
+    // ---- Exact ratio pre-filter at current state ----
+    auto xp_now = pool_xp_current(pool);
+    const RealT p_now = stableswap::MathOps<RealT>::get_p(xp_now, pool.D, {pool.A, pool.gamma}) * pool.cached_price_scale;
+    const RealT f_lp0 = dyn_fee(xp_now, pool.mid_fee, pool.out_fee, pool.fee_gamma);
+    const RealT f_cex = costs.arb_fee_bps / RealT(1e4);
+
+    // Two "edges" (positive => potentially profitable near dx->0)
+    const RealT edge_01 = (RealT(1) - f_cex) * (RealT(1) - f_lp0) * cex_price - p_now;            // 0->1 candidate
+    const RealT edge_10 = (RealT(1) - f_lp0) * p_now - (RealT(1) + f_cex) * cex_price;            // 1->0 candidate
+
+    int dir_i = -1, dir_j = -1;
+    if (edge_01 <= RealT(0) && edge_10 <= RealT(0)) {
+        return d; // no profitable direction even at the margin
+    } else if (edge_01 > edge_10) {
+        dir_i = 0; dir_j = 1;
     } else {
-        // Require pool to exceed p_cex by at least fees_sum fraction
-        if (!(p_pool > cex_price * (RealT(1) + fees_sum))) return d;
+        dir_i = 1; dir_j = 0;
     }
-    if (!(pool.balances[i] > RealT(0))) return d;
-    if (!decide_trade_size(pool, cex_price, costs, i, j, notional_cap_coin0, min_swap_frac, max_swap_frac, d)) return d;
+
+    // ---- Bounds for dx ----
+    const RealT avail = pool.balances[dir_i];
+    if (!(avail > RealT(0))) return d;
+
+    RealT dx_lo = std::max<RealT>(RealT(1e-18), avail * std::max<RealT>(RealT(1e-12), min_swap_frac));
+    RealT dx_hi = avail * max_swap_frac;
+    if (notional_cap_coin0 > RealT(0) && std::isfinite(static_cast<double>(notional_cap_coin0))) {
+        if (dir_i == 0) dx_hi = std::min(dx_hi, notional_cap_coin0);
+        else            dx_hi = (cex_price > RealT(0)) ? std::min(dx_hi, notional_cap_coin0 / cex_price) : dx_hi;
+    }
+    if (!(dx_hi > dx_lo)) return d;
+
+    // ---- Residual for the marginal equality ----
+    auto residual = [&](RealT dx)->RealT {
+        auto [p_new, f_lp] = post_trade_price_fee(pool, static_cast<size_t>(dir_i), static_cast<size_t>(dir_j), dx);
+        if (dir_i == 0) {
+            // 0->1: p_new = (1 - f_lp) * (1 - f_cex) * p_cex
+            RealT rhs = (RealT(1) - f_lp) * (RealT(1) - f_cex) * cex_price;
+            return p_new - rhs;
+        } else {
+            // 1->0: (1 - f_lp) * p_new = (1 + f_cex) * p_cex
+            return (RealT(1) - f_lp) * p_new - (RealT(1) + f_cex) * cex_price;
+        }
+    };
+
+    // Evaluate residual at the bracket
+    RealT F_lo = residual(dx_lo);
+    RealT F_hi = residual(dx_hi);
+
+    // Expected signs:
+    //  - For 0->1 we usually have F_lo < 0 and F_hi may cross to > 0 as dx increases.
+    //  - For 1->0 we usually have F_lo > 0 and F_hi may cross to < 0 as dx increases.
+    const bool has_root = (F_lo * F_hi < RealT(0));
+
+    RealT dx_star = dx_hi;
+
+    if (has_root) {
+        RealT root;
+        if (lin_bisect_root(residual, dx_lo, dx_hi, F_lo, F_hi, 20, root)) dx_star = std::max<RealT>(root, dx_lo);
+    } else {
+        // No sign change. Two cases:
+        //  * Entire interval profitable (cannot equalize within caps): pick dx_hi.
+        //  * Interval already beyond equality (numerical edge): quick reject.
+        // Heuristic: check the "right" sign at dx_lo against expected direction
+        if (dir_i == 0) {
+            // 0->1 expects F_lo < 0 to be profitable near zero
+            if (!(F_lo < RealT(0))) return d; // already beyond; don't trade
+        } else {
+            // 1->0 expects F_lo > 0 to be profitable near zero
+            if (!(F_lo > RealT(0))) return d; // already beyond; don't trade
+        }
+        // Use cap dx_hi
+        dx_star = dx_hi;
+    }
+
+    // Final sanity: simulate once to compute dy_after_fee, fees and profit
+    auto [dy_after_fee, fee_tokens] = simulate_exchange_once(pool, static_cast<size_t>(dir_i), static_cast<size_t>(dir_j), dx_star);
+
+    RealT profit_coin0 = RealT(0);
+    if (dir_i == 0 && dir_j == 1) {
+        RealT coin0_from_cex = dy_after_fee * cex_price * (RealT(1) - f_cex);
+        profit_coin0 = coin0_from_cex - dx_star - costs.gas_coin0;
+    } else {
+        RealT coin0_spent_cex = dx_star * cex_price * (RealT(1) + f_cex);
+        profit_coin0 = dy_after_fee - coin0_spent_cex - costs.gas_coin0;
+    }
+    if (!(profit_coin0 > RealT(0))) return d;
+
+    // Populate decision
+    d.do_trade = true;
+    d.i = dir_i; d.j = dir_j;
+    d.dx = dx_star;
+    d.fee_tokens = fee_tokens;
+    d.profit = profit_coin0;
+    d.notional_coin0 = (dir_i == 0) ? dx_star : dx_star * cex_price;
     return d;
 }
+
 
 struct Candle { uint64_t ts; RealT open, high, low, close, volume; };
 struct Event  { uint64_t ts; RealT p_cex; RealT volume; };

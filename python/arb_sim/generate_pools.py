@@ -57,7 +57,7 @@ def strify_pool(pool: dict) -> dict:
 
 
 # -------------------- Grid Definition --------------------
-N_GRID = 1
+N_GRID = 16
 
 X_name = "A"  # can be changed to any pool key
 xmin = 5 * 10_000
@@ -123,7 +123,7 @@ BASE_POOL = {
 
 BASE_COSTS = {
     "arb_fee_bps": 50.0,
-    "gas_coin0": 0.1,
+    "gas_coin0": 0.5,
     "use_volume_cap": True,
     "volume_cap_mult": 1,
 }

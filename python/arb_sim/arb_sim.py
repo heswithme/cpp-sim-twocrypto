@@ -13,7 +13,6 @@ from pathlib import Path
 from typing import Any, Dict, List
 from datetime import datetime, timezone
 
-
 class ArbHarnessRunner:
     def __init__(self, repo_root: Path, real: str = "double"):
         self.repo_root = Path(repo_root)
@@ -106,14 +105,14 @@ def main() -> int:
         repo_root / "python" / "arb_sim" / "run_data" / f"arb_run_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}.json"
     )
     out_json_path.parent.mkdir(parents=True, exist_ok=True)
-
+    ts = datetime.now()
     raw = runner.run(pool_config_path, Path(args.candles), out_json_path,
                      n_candles=args.n_candles, save_actions=args.save_actions,
                      min_swap=args.min_swap, max_swap=args.max_swap, threads=max(1, args.threads),
                      dustswapfreq=args.dustswapfreq)
 
     runs_raw: List[Dict[str, Any]] = raw.get("runs", [])
-
+    print(f"Time taken: {(datetime.now() - ts).total_seconds()} seconds")
     # Derive x/y and base_pool from pool_config meta
     def get_meta(conf: Dict[str, Any]):
         meta = conf.get("meta", {}) if isinstance(conf, dict) else {}
@@ -191,7 +190,6 @@ def main() -> int:
         },
         "runs": enriched_runs,
     }
-
     with open(out_json_path, 'w') as f:
         json.dump(agg, f, indent=2)
     print(f"\n✓ Wrote aggregated run: {out_json_path}")
