@@ -59,29 +59,39 @@ def strify_pool(pool: dict) -> dict:
 # -------------------- Grid Definition --------------------
 N_GRID = 32
 
-X_name = "A"  # can be changed to any pool key
-xmin = 5 * 10_000
-xmax = 300 * 10_000
-xlogspace = True
+# X_name = "A"  # can be changed to any pool key
+# xmin = 5 * 10_000
+# xmax = 300 * 10_000
+# xlogspace = True
 
 Y_name = "mid_fee"  # default second param; also applied to out_fee
 ymin = 1e-4 * 10**10
 ymax =  .05 * 10**10
 ylogspace = True
 
+X_name = "donation_apy"  # can be changed to any pool key
+xmin = 0.01
+xmax = 0.1
+xlogspace = False
+
+# Y_name = "donation_coins_ratio"  # default second param; also applied to out_fee
+# ymin = 0
+# ymax =  1
+# ylogspace = False
+
 if xlogspace:
-    X_vals = np.logspace(np.log10(xmin), np.log10(xmax), N_GRID).round().astype(int).tolist()
+    X_vals = np.logspace(np.log10(xmin), np.log10(xmax), N_GRID).round().tolist()
 else:
     X_vals = np.linspace(xmin, xmax, N_GRID).tolist()
 
 if ylogspace:
-    Y_vals = np.logspace(np.log10(ymin), np.log10(ymax), N_GRID).round().astype(int).tolist()
+    Y_vals = np.logspace(np.log10(ymin), np.log10(ymax), N_GRID).round().tolist()
 else:
     Y_vals = np.linspace(ymin, ymax, N_GRID).tolist()
 
-#optionally int-ify
-X_vals = [int(x) for x in X_vals]
-Y_vals = [int(x) for x in Y_vals]
+# #optionally int-ify
+# X_vals = [int(x) for x in X_vals]
+# Y_vals = [int(x) for x in Y_vals]
 
 init_liq = 1_000_000 # in coin0
 init_price = 0.190865 #brlusd
@@ -101,16 +111,19 @@ BASE_POOL = {
     "ma_time": 866,
     "initial_price": int(init_price * 10**18),
     "start_timestamp": START_TS,
+
     # Donations (harness-only):
     # - donation_apy: plain fraction per year (0.05 => 5%).
     # - donation_frequency: seconds between donations.
+    # - donation_coins_ratio: fraction of donation in coin1 (0=all coin0, 1=all coin1)
     "donation_apy": 0.03,
     "donation_frequency": int(7*86400),
+    "donation_coins_ratio": 0.5,
 }
 
 BASE_COSTS = {
     "arb_fee_bps": 50.0,
-    "gas_coin0": 0.2,
+    "gas_coin0": 0.1,
     "use_volume_cap": True,
     "volume_cap_mult": 1,
 }

@@ -99,11 +99,6 @@ static RealT dyn_fee(const std::array<RealT,2>& xp, RealT mid_fee, RealT out_fee
     return mid_fee * B + out_fee * (1.0 - B);
 }
 
-static RealT spot_price(const twocrypto::TwoCryptoPoolT<RealT>& pool) {
-    std::array<RealT,2> xp = pool_xp_current(pool);
-    std::array<RealT,2> A_gamma{ pool.A, pool.gamma };
-    return stableswap::MathOps<RealT>::get_p(xp, pool.D, A_gamma) * pool.cached_price_scale;
-}
 
 struct Decision {
     bool do_trade{false};
@@ -273,7 +268,7 @@ struct Event  { uint64_t ts; RealT p_cex; RealT volume; };
 
 // Simplified candles loading using Boost.JSON (parses full file once)
 
-static std::vector<Candle> load_candles(const std::string& path, size_t max_candles = 0) {
+static std::vector<Candle> load_candles(const std::string& path, size_t max_candles = 0, double candle_filter_frac = 0.10) {
     std::vector<Candle> out; out.reserve(1024);
     std::ifstream in(path, std::ios::binary);
     if (!in) throw std::runtime_error("Cannot open candles file: " + path);
@@ -299,6 +294,16 @@ static std::vector<Candle> load_candles(const std::string& path, size_t max_cand
         c.ts = ts;
         auto to_d = [](const json::value& v)->RealT { return v.is_double()? static_cast<RealT>(v.as_double()) : (v.is_int64()? static_cast<RealT>(v.as_int64()) : RealT(0)); };
         c.open = to_d(a[1]); c.high = to_d(a[2]); c.low = to_d(a[3]); c.close = to_d(a[4]); c.volume = to_d(a[5]);
+        // Candle squeeze filter: clamp H/L to within +/-x% of midpoint between O and C
+        if (candle_filter_frac > 0.0) {
+            RealT oc_mid = static_cast<RealT>(0.5) * (c.open + c.close);
+            if (oc_mid > 0) {
+                RealT max_h = oc_mid * static_cast<RealT>(1.0 + candle_filter_frac);
+                RealT min_l = oc_mid * static_cast<RealT>(1.0 - candle_filter_frac);
+                if (c.high > max_h) c.high = max_h;
+                if (c.low  < min_l) c.low  = min_l;
+            }
+        }
         out.push_back(c);
     }
     return out;
@@ -378,6 +383,7 @@ struct PoolInit {
     // Donation controls (harness-only)
     RealT donation_apy{static_cast<RealT>(0.0)};        // plain fraction per year, e.g., 0.05 = 5%
     RealT donation_frequency{static_cast<RealT>(0.0)};  // seconds between donations
+    RealT donation_coins_ratio{static_cast<RealT>(0.5)}; // fraction of donation in coin1 (0=all coin0, 1=all coin1)
 };
 
 static void parse_pool_entry(const json::object& entry, PoolInit& out_pool, Costs& out_costs, json::object& echo_pool, json::object& echo_costs) {
@@ -401,6 +407,12 @@ static void parse_pool_entry(const json::object& entry, PoolInit& out_pool, Cost
     // Donation params (plain fraction for APY; frequency in seconds)
     if (auto* v = pool.if_contains("donation_apy")) out_pool.donation_apy = parse_plain_real(*v);
     if (auto* v = pool.if_contains("donation_frequency")) out_pool.donation_frequency = parse_plain_real(*v);
+    if (auto* v = pool.if_contains("donation_coins_ratio")) {
+        RealT r = parse_plain_real(*v);
+        if (!(r >= RealT(0))) r = RealT(0);
+        if (r > RealT(1)) r = RealT(1);
+        out_pool.donation_coins_ratio = r;
+    }
     if (auto* c = entry.if_contains("costs")) {
         echo_costs = c->as_object();
         auto co = c->as_object();
@@ -420,7 +432,7 @@ int main(int argc, char* argv[]) {
     // Ensure immediate flushing of stdout for progress logs
     std::cout.setf(std::ios::unitbuf);
     if (argc < 4) {
-        std::cerr << "Usage: " << argv[0] << " <pools.json> <candles.json> <output.json> [--n-candles N] [--save-actions] [--min-swap F] [--max-swap F] [--threads N|-n N]" << std::endl; return 1;
+        std::cerr << "Usage: " << argv[0] << " <pools.json> <candles.json> <output.json> [--n-candles N] [--save-actions] [--min-swap F] [--max-swap F] [--threads N|-n N] [--candle-filter PCT]" << std::endl; return 1;
     }
     std::string pools_path = argv[1];
     std::string candles_path = argv[2];
@@ -430,6 +442,7 @@ int main(int argc, char* argv[]) {
     double min_swap_frac = 1e-6;
     double max_swap_frac = 1.0;
     size_t n_workers = std::max<size_t>(1, std::thread::hardware_concurrency());
+    double candle_filter_pct = 10.0; // default 10% around (O+C)/2
     uint64_t dustswapfreq_s = 3600; // seconds between dust swaps when no arb trade
     for (int i = 4; i < argc; ++i) {
         std::string arg = argv[i];
@@ -439,12 +452,13 @@ int main(int argc, char* argv[]) {
         else if (arg == "--max-swap" && (i+1) < argc) { try { double f = std::stod(argv[++i]); if (f > 0.0 && f <= 1.0) max_swap_frac = f; } catch(...){} }
         else if ((arg == "--threads" || arg == "-n") && (i+1) < argc) { try { long long v = std::stoll(argv[++i]); if (v > 0) n_workers = static_cast<size_t>(v); } catch(...){} }
         else if (arg == "--dustswapfreq" && (i+1) < argc) { try { long long v = std::stoll(argv[++i]); if (v >= 0) dustswapfreq_s = static_cast<uint64_t>(v); } catch(...){} }
+        else if (arg == "--candle-filter" && (i+1) < argc) { try { double p = std::stod(argv[++i]); if (p >= 0.0) candle_filter_pct = p; } catch(...){} }
     }
 
     try {
         using clk = std::chrono::high_resolution_clock;
         auto t_read0 = clk::now();
-        auto candles = load_candles(candles_path, max_candles);
+        auto candles = load_candles(candles_path, max_candles, candle_filter_pct / 100.0);
         auto events  = gen_events(candles);
         auto t_read1 = clk::now();
 
@@ -504,8 +518,9 @@ int main(int argc, char* argv[]) {
                     else if (!events.empty()) init_ts = events.front().ts;
                     if (init_ts != 0) pool.set_block_timestamp(init_ts);
                     (void)pool.add_liquidity({static_cast<RealT>(cfg.initial_liq[0]), static_cast<RealT>(cfg.initial_liq[1])}, RealT(0));
-                    // Initial TVL in coin0
-                    const RealT tvl_start = pool.balances[0] + pool.balances[1] * pool.cached_price_scale;
+                    // Initial TVL in coin0 and initial price scale snapshot
+                    const RealT ps_init   = pool.cached_price_scale;
+                    const RealT tvl_start = pool.balances[0] + pool.balances[1] * ps_init;
 
                     Metrics m{};
                     json::array actions;
@@ -518,6 +533,19 @@ int main(int argc, char* argv[]) {
                     if (donations_enabled && !events.empty()) {
                         uint64_t base_ts = (cfg.start_ts != 0) ? cfg.start_ts : events.front().ts;
                         next_donation_ts = base_ts + static_cast<uint64_t>(cfg.donation_frequency);
+                    }
+                    // Pre-compute fixed donation amounts per period based on initial TVL and coin ratio
+                    RealT donate_amt0_per_period = RealT(0);
+                    RealT donate_amt1_per_period = RealT(0);
+                    if (donations_enabled) {
+                        RealT per_period_coin0 = tvl_start * cfg.donation_frequency * cfg.donation_apy / SECONDS_PER_YEAR;       // coin0 units per donation
+                        RealT r1 = cfg.donation_coins_ratio; // fraction in coin1
+                        if (r1 < RealT(0)) r1 = RealT(0);
+                        if (r1 > RealT(1)) r1 = RealT(1);
+                        RealT r0 = RealT(1) - r1;             // fraction in coin0
+                        donate_amt0_per_period = r0 * per_period_coin0;                                  // token0 amount
+                        donate_amt1_per_period = (ps_init > RealT(0)) ? (r1 * per_period_coin0 / ps_init) // token1 amount
+                                                                      : RealT(0);
                     }
                     auto t_pool0 = clk::now();
                     uint64_t last_dust_ts = 0;
@@ -534,26 +562,26 @@ int main(int argc, char* argv[]) {
                         // Apply any due donations before trading
                         if (donations_enabled) {
                             while (next_donation_ts != 0 && ev.ts >= next_donation_ts) {
-                                // Compute donation sized as fraction of current TVL in coin0
-                                RealT ps = pool.cached_price_scale;
+                                // Use fixed per-period amounts based on initial TVL and chosen ratio
+                                RealT ps = pool.cached_price_scale; // current price for coin0-equivalent accounting
                                 RealT tvl_coin0 = pool.balances[0] + pool.balances[1] * ps;
-                                RealT frac = cfg.donation_apy * (cfg.donation_frequency / SECONDS_PER_YEAR);
-                                // Skip if fraction exceeds cap approximation (avoid revert/noise)
-                                if (frac > pool.donation_shares_max_ratio) {
+                                // Approximate minted share ratio by coin0-equivalent / TVL (cap precheck)
+                                RealT donate_coin0_equiv = donate_amt0_per_period + donate_amt1_per_period * ps;
+                                RealT approx_ratio = (tvl_coin0 > RealT(0)) ? (donate_coin0_equiv / tvl_coin0) : RealT(0);
+                                if (approx_ratio > pool.donation_shares_max_ratio) {
                                     next_donation_ts += static_cast<uint64_t>(cfg.donation_frequency);
                                     if (next_donation_ts <= ev.ts) next_donation_ts = ev.ts + 1;
                                     continue;
                                 }
-                                RealT donate_coin0 = tvl_coin0 * static_cast<RealT>(frac);
-                                if (donate_coin0 > 0.0) {
-                                    RealT amt0 = RealT(0.5) * donate_coin0;
-                                    RealT amt1 = (RealT(0.5) * donate_coin0) / (ps > 0.0 ? ps : RealT(1));
+                                if (donate_amt0_per_period > RealT(0) || donate_amt1_per_period > RealT(0)) {
+                                    RealT amt0 = donate_amt0_per_period;
+                                    RealT amt1 = donate_amt1_per_period;
                                     try {
                                         RealT price_scale_before = pool.cached_price_scale;
                                         RealT minted = pool.add_liquidity({amt0, amt1}, RealT(0), true);
                                         RealT price_scale_after = pool.cached_price_scale;
                                         m.donations += 1;
-                                        m.donation_coin0_total += donate_coin0;
+                                        m.donation_coin0_total += donate_coin0_equiv;
                                         m.donation_amounts_total[0] += amt0;
                                         m.donation_amounts_total[1] += amt1;
                                         if (differs_rel(price_scale_after, price_scale_before)) m.n_rebalances += 1;
@@ -569,6 +597,7 @@ int main(int argc, char* argv[]) {
                                             da["minted"] = static_cast<double>(minted);
                                             da["tvl_coin0_before"] = static_cast<double>(tvl_coin0);
                                             da["price_scale"] = static_cast<double>(ps);
+                                            da["donation_coins_ratio"] = static_cast<double>(cfg.donation_coins_ratio);
                                             actions.push_back(da);
                                         }
                                         if (save_actions) {
@@ -586,7 +615,7 @@ int main(int argc, char* argv[]) {
                                 }
                             }
                         }
-                        RealT pre_p_pool = spot_price(pool);
+                        RealT pre_p_pool = pool.get_p();
                         RealT notional_cap_coin0 = std::numeric_limits<RealT>::infinity();
                         if (costs.use_volume_cap) notional_cap_coin0 = ev.volume * ev.p_cex * static_cast<RealT>(costs.volume_cap_mult);
                         Decision d = decide_trade(pool, ev.p_cex, costs, notional_cap_coin0, static_cast<RealT>(min_swap_frac), static_cast<RealT>(max_swap_frac));
