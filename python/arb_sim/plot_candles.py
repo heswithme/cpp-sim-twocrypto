@@ -213,7 +213,7 @@ def plot_candles(ts: List[int], o: List[float], h: List[float], l: List[float], 
 
 def main():
     ap = argparse.ArgumentParser(description="Plot OHLCV JSON as candles/line")
-    default_file = Path(__file__).parent / "data" / "brlusd" / "brlusd-1m.json"
+    default_file = Path(__file__).parent / "trade_data" / "brlusd" / "brlusd-1m.json"
     ap.add_argument("--file", type=Path, default=default_file, help="Path to JSON file")
     ap.add_argument("--start", type=str, default=None, help="Start (YYYY-MM-DD or unix seconds)")
     ap.add_argument("--end", type=str, default=None, help="End (YYYY-MM-DD or unix seconds)")

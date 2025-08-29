@@ -59,25 +59,25 @@ def strify_pool(pool: dict) -> dict:
 # -------------------- Grid Definition --------------------
 N_GRID = 16
 
-X_name = "A"  # can be changed to any pool key
-xmin = 5 * 10_000
-xmax = 300 * 10_000
-xlogspace = True
+# X_name = "A"  # can be changed to any pool key
+# xmin = 5 * 10_000
+# xmax = 1000 * 10_000
+# xlogspace = True
 
-Y_name = "mid_fee"  # default second param; also applied to out_fee
-ymin = 1e-4 * 10**10
-ymax =  .05 * 10**10
-ylogspace = True
-
-# X_name = "donation_apy"  # can be changed to any pool key
-# xmin = 0.01
-# xmax = 0.1
-# xlogspace = False
-
-# Y_name = "donation_coins_ratio"  # default second param; also applied to out_fee
-# ymin = 0
-# ymax =  1
+# Y_name = "mid_fee"  # default second param; also applied to out_fee
+# ymin = 1e-4 * 10**10
+# ymax =  .05 * 10**10
 # ylogspace = False
+
+X_name = "donation_apy" 
+xmin = 0.01
+xmax = 0.1
+xlogspace = False
+
+Y_name = "donation_frequency"  
+ymin = 600
+ymax =  86400*7
+ylogspace = False
 
 if xlogspace:
     X_vals = np.logspace(np.log10(xmin), np.log10(xmax), N_GRID).round().tolist()
@@ -90,7 +90,7 @@ else:
     Y_vals = np.linspace(ymin, ymax, N_GRID).tolist()
 
 # #optionally int-ify
-X_vals = [int(x) for x in X_vals]
+# X_vals = [int(x) for x in X_vals]
 Y_vals = [int(x) for x in Y_vals]
 
 init_liq = 1_000_000 # in coin0
@@ -101,7 +101,7 @@ START_TS = _first_candle_ts(DEFAULT_DATAFILE)
 BASE_POOL = {
     # All values are integers in their native units
     "initial_liquidity": [int(init_liq//2) * 10**18, int(init_liq//2 / init_price) * 10**18],
-    "A": 100 * 10_000,
+    "A": 200 * 10_000,
     "gamma": 10**14, #unused in twocrypto
     "mid_fee": int(0.001 * 10**10),
     "out_fee": int(0.002 * 10**10),
@@ -118,7 +118,7 @@ BASE_POOL = {
     # - donation_coins_ratio: fraction of donation in coin1 (0=all coin0, 1=all coin1)
     "donation_apy": 0.03,
     "donation_frequency": int(7*86400),
-    "donation_coins_ratio": 0.5,
+    "donation_coins_ratio": 0,
 }
 
 BASE_COSTS = {

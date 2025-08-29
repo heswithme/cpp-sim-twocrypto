@@ -8,6 +8,7 @@
 
 #include <boost/json.hpp>
 #include <boost/json/src.hpp>
+#include <boost/math/tools/roots.hpp>
 #include "twocrypto.hpp"
 #include <algorithm>
 #include <atomic>
@@ -164,29 +165,26 @@ simulate_exchange_once(const twocrypto::TwoCryptoPoolT<RealT>& pool,
     return {dy_after, fee_tokens};
 }
 
-// Root finding helper: linear-space bisection on [lo, hi] with a sign change.
+// Root finding helper: Boost's TOMS748 on [lo, hi] with a strict sign change.
+// Returns false if the bracket is invalid; otherwise writes the midpoint of the
+// final bracket to out_root and returns true.
 template <typename F>
-static inline bool lin_bisect_root(F&& f,
-                                   RealT lo,
-                                   RealT hi,
-                                   RealT Flo,
-                                   RealT Fhi,
-                                   int iters,
-                                   RealT& out_root) {
+static inline bool toms748_root(F&& f,
+                                RealT lo,
+                                RealT hi,
+                                RealT Flo,
+                                RealT Fhi,
+                                RealT& out_root,
+                                unsigned max_iters = 100) {
     if (!(hi > lo)) return false;
-    if (!(Flo * Fhi <= RealT(0))) return false;
-    RealT a = lo, b = hi;
-    for (int it = 0; it < iters; ++it) {
-        RealT m = (a + b) / RealT(2);
-        RealT Fm = f(m);
-        if (Flo * Fm <= RealT(0)) { b = m; Fhi = Fm; }
-        else { a = m; Flo = Fm; }
-        //early exit if within tolerance
-        if (std::abs(b - a) < 1e-4) {
-            break;
-        }
-    }
-    out_root = (a + b) / RealT(2);
+    if (!(Flo * Fhi < RealT(0))) return false; // require strict sign change
+
+    auto tol = boost::math::tools::eps_tolerance<RealT>(
+        std::numeric_limits<RealT>::digits10 - 3
+    );
+    boost::uintmax_t it = max_iters;
+    auto r = boost::math::tools::toms748_solve(f, lo, hi, Flo, Fhi, tol, it);
+    out_root = (r.first + r.second) / RealT(2);
     return true;
 }
 
@@ -262,7 +260,7 @@ static Decision decide_trade(
 
     if (has_root) {
         RealT root;
-        if (lin_bisect_root(residual, dx_lo, dx_hi, F_lo, F_hi, 100, root)) dx_star = std::max<RealT>(root, dx_lo);
+        if (toms748_root(residual, dx_lo, dx_hi, F_lo, F_hi, root)) dx_star = std::max<RealT>(root, dx_lo);
     } else {
         // No sign change. Two cases:
         //  * Entire interval profitable (cannot equalize within caps): pick dx_hi.
@@ -381,6 +379,9 @@ static json::object pool_state_json(const twocrypto::TwoCryptoPoolT<RealT>& p) {
     o["price_oracle"]   = to_str_1e18(p.cached_price_oracle);
     o["last_prices"]    = to_str_1e18(p.last_prices);
     o["totalSupply"]    = to_str_1e18(p.totalSupply);
+    // Donation tracking for plotting
+    o["donation_shares"]   = to_str_1e18(p.donation_shares);
+    o["donation_unlocked"] = to_str_1e18(p.donation_unlocked());
     o["timestamp"]      = p.block_timestamp;
     return o;
 }
@@ -599,61 +600,63 @@ int main(int argc, char* argv[]) {
                             // Snapshot after time update (before any donations/trades at this timestamp)
                             states.push_back(pool_state_json(pool));
                         }
-                        // Apply any due donations before trading
-                        if (donations_enabled) {
-                            while (next_donation_ts != 0 && ev.ts >= next_donation_ts) {
-                                // Use fixed per-period amounts based on initial TVL and chosen ratio
-                                RealT ps = pool.cached_price_scale; // current price for coin0-equivalent accounting
-                                RealT tvl_coin0 = pool.balances[0] + pool.balances[1] * ps;
-                                // Approximate minted share ratio by coin0-equivalent / TVL (cap precheck)
-                                RealT donate_coin0_equiv = donate_amt0_per_period + donate_amt1_per_period * ps;
-                                RealT approx_ratio = (tvl_coin0 > RealT(0)) ? (donate_coin0_equiv / tvl_coin0) : RealT(0);
-                                if (approx_ratio > pool.donation_shares_max_ratio) {
-                                    next_donation_ts += static_cast<uint64_t>(cfg.donation_frequency);
-                                    if (next_donation_ts <= ev.ts) next_donation_ts = ev.ts + 1;
-                                    continue;
-                                }
-                                if (donate_amt0_per_period > RealT(0) || donate_amt1_per_period > RealT(0)) {
-                                    RealT amt0 = donate_amt0_per_period;
-                                    RealT amt1 = donate_amt1_per_period;
-                                    try {
-                                        RealT price_scale_before = pool.cached_price_scale;
-                                        RealT minted = pool.add_liquidity({amt0, amt1}, RealT(0), true);
-                                        RealT price_scale_after = pool.cached_price_scale;
-                                        m.donations += 1;
-                                        m.donation_coin0_total += donate_coin0_equiv;
-                                        m.donation_amounts_total[0] += amt0;
-                                        m.donation_amounts_total[1] += amt1;
-                                        if (differs_rel(price_scale_after, price_scale_before)) m.n_rebalances += 1;
-                                        if (save_actions) {
-                                            json::object da;
-                                            da["type"] = "donation";
-                                            // Record both the pool timestamp (when donation executed)
-                                            // and the scheduled due time for reference
-                                            da["ts"] = ev.ts;               // actual pool timestamp
-                                            da["ts_due"] = next_donation_ts; // scheduled donation time
-                                            da["amounts"] = json::array{static_cast<double>(amt0), static_cast<double>(amt1)};
-                                            da["amounts_wei"] = json::array{to_str_1e18(amt0), to_str_1e18(amt1)};
-                                            da["minted"] = static_cast<double>(minted);
-                                            da["tvl_coin0_before"] = static_cast<double>(tvl_coin0);
-                                            da["price_scale"] = static_cast<double>(ps);
-                                            da["donation_coins_ratio"] = static_cast<double>(cfg.donation_coins_ratio);
-                                            actions.push_back(da);
-                                        }
-                                        if (save_actions) {
-                                            // Snapshot state after donation commit
-                                            states.push_back(pool_state_json(pool));
-                                        }
-                                    } catch (...) {
-                                        // donation failed (e.g., cap). Skip silently.
-                                    }
-                                }
-                                next_donation_ts += static_cast<uint64_t>(cfg.donation_frequency);
-                                if (next_donation_ts <= ev.ts) {
-                                    // avoid stuck if frequency ridiculously small
-                                    next_donation_ts = ev.ts + 1;
+                        // Apply any due donations before trading (aggregate catch-up across overdue periods)
+                        if (donations_enabled && next_donation_ts != 0 && ev.ts >= next_donation_ts) {
+                            const uint64_t freq_s = static_cast<uint64_t>(cfg.donation_frequency);
+                            const uint64_t k_due = 1 + (ev.ts - next_donation_ts) / freq_s;
+                            // Determine the largest acceptable k in [0, k_due] via dry-run on a copy (cap/slippage safe)
+                            uint64_t k_lo = 0, k_hi = k_due;
+                            while (k_lo < k_hi) {
+                                uint64_t mid = (k_lo + k_hi + 1) / 2; // bias upward
+                                auto pool_copy = pool; // copy to avoid commit on failure
+                                RealT try0 = donate_amt0_per_period * static_cast<RealT>(mid);
+                                RealT try1 = donate_amt1_per_period * static_cast<RealT>(mid);
+                                try {
+                                    (void)pool_copy.add_liquidity({try0, try1}, RealT(0), /*donation=*/true);
+                                    k_lo = mid; // success
+                                } catch (...) {
+                                    k_hi = mid - 1; // too large
                                 }
                             }
+                            if (k_lo > 0) {
+                                RealT amt0 = donate_amt0_per_period * static_cast<RealT>(k_lo);
+                                RealT amt1 = donate_amt1_per_period * static_cast<RealT>(k_lo);
+                                RealT ps = pool.cached_price_scale;
+                                RealT tvl_coin0 = pool.balances[0] + pool.balances[1] * ps;
+                                RealT coin0_equiv = amt0 + amt1 * ps;
+                                try {
+                                    RealT price_scale_before = pool.cached_price_scale;
+                                    RealT minted = pool.add_liquidity({amt0, amt1}, RealT(0), /*donation=*/true);
+                                    RealT price_scale_after = pool.cached_price_scale;
+                                    m.donations += 1;
+                                    m.donation_coin0_total += coin0_equiv;
+                                    m.donation_amounts_total[0] += amt0;
+                                    m.donation_amounts_total[1] += amt1;
+                                    if (differs_rel(price_scale_after, price_scale_before)) m.n_rebalances += 1;
+                                    if (save_actions) {
+                                        json::object da;
+                                        da["type"] = "donation";
+                                        da["ts"] = ev.ts;
+                                        da["ts_due"] = next_donation_ts; // first due timestamp in this batch
+                                        da["k_due"] = static_cast<uint64_t>(k_due);
+                                        da["k_committed"] = static_cast<uint64_t>(k_lo);
+                                        da["amounts"] = json::array{static_cast<double>(amt0), static_cast<double>(amt1)};
+                                        da["amounts_wei"] = json::array{to_str_1e18(amt0), to_str_1e18(amt1)};
+                                        da["minted"] = static_cast<double>(minted);
+                                        da["tvl_coin0_before"] = static_cast<double>(tvl_coin0);
+                                        da["price_scale"] = static_cast<double>(ps);
+                                        da["donation_coins_ratio"] = static_cast<double>(cfg.donation_coins_ratio);
+                                        actions.push_back(da);
+                                    }
+                                    if (save_actions) {
+                                        states.push_back(pool_state_json(pool));
+                                    }
+                                } catch (...) {
+                                    // Should not happen after dry-run; ignore if it does.
+                                }
+                            }
+                            // Advance schedule by the full number of consumed periods (even if partial commit)
+                            next_donation_ts += k_due * freq_s;
                         }
                         RealT pre_p_pool = pool.get_p();
                         RealT notional_cap_coin0 = std::numeric_limits<RealT>::infinity();

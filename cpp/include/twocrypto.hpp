@@ -699,6 +699,11 @@ public:
     }
 
     // ------------------------ Views ------------------------
+    // Expose unlocked donation shares (optionally protected) for observers
+    T donation_unlocked(bool donation_protection = true) const {
+        return _donation_shares(donation_protection);
+    }
+
     T get_virtual_price() const {
         return (virtual_price == Traits::ZERO()) ? Traits::PRECISION() : virtual_price;
     }
