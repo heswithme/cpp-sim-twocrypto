@@ -87,7 +87,11 @@ desktop.ini
 # Benchmark results (generated)
 python/benchmark_pool/data/results/
 python/arb_sim/run_data/
-python/arb_sim/trade_data/
+# Trade data: ignore data files, allow helper scripts
+# Ignore everything under trade_data by default
+python/arb_sim/trade_data/*
+# But keep Python scripts (fetchers, processors) versioned
+!python/arb_sim/trade_data/**/*.py
 cryptopool-simulator/
 AGENTS.md
 python/benchmark_math/test_cases.json
