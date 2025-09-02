@@ -85,7 +85,7 @@ struct Convergence<double> {
         return std::fabs(a - b) <= 1e-12 * std::max(1.0, a);
     }
 
-    static constexpr size_t MAX_IT = 128;
+    static constexpr size_t MAX_IT = 256;
 };
 
 template <>
@@ -93,7 +93,7 @@ struct Convergence<float> {
     static bool close(float a, float b) {
         return std::fabs(a - b) <= 1e-6f * std::max(1.0f, a);
     }
-    static constexpr size_t MAX_IT = 128;
+    static constexpr size_t MAX_IT = 256;
 };
 
 template <>
@@ -101,7 +101,7 @@ struct Convergence<long double> {
     static bool close(long double a, long double b) {
         return fabsl(a - b) <= 1e-12L * std::max< long double >(1.0L, a);
     }
-    static constexpr size_t MAX_IT = 192;
+    static constexpr size_t MAX_IT = 256;
 };
 
 // Common templated implementation

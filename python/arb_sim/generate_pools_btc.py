@@ -31,11 +31,11 @@ ymin = 5e-4 * 10**10
 ymax =  .1 * 10**10
 ylogspace = True
 
-xmin = 20
-xmax = 20
-ymin = int(0.0025 * 10**10)
-ymax = int(0.0025 * 10**10)
-N_GRID = 1
+# xmin = 20 * 10_000
+# xmax = 20 * 10_000
+# ymin = int(0.005 * 10**10)
+# ymax = int(0.005 * 10**10)
+# N_GRID = 1
 # X_name = "donation_apy" 
 # xmin = 0.01
 # xmax = 0.1

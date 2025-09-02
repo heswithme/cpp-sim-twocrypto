@@ -151,7 +151,6 @@ simulate_exchange_once(const twocrypto::TwoCryptoPoolT<RealT>& pool,
     RealT dy_xp = xp[j] - y_out.value; xp[j] -= dy_xp;
 
     RealT dy_tokens  = xp_to_tokens_j(pool, j, dy_xp, ps);
-    printf("dx: %f, dy_tokens: %f\n", dx, dy_tokens);
     RealT fee_pool       = dyn_fee(xp, pool.mid_fee, pool.out_fee, pool.fee_gamma);
     RealT fee_tokens = fee_pool * dy_tokens;
     return {dy_tokens - fee_tokens, fee_tokens};
@@ -432,7 +431,7 @@ static Decision decide_trade(
     RealT dx_star = dx_hi;
     if (cross) {
         RealT root;
-        if (toms748_root(residual, dx_lo, dx_hi, F_lo, F_hi, root)) dx_star = 20.956619360018614 * std::max(root, dx_lo);
+        if (toms748_root(residual, dx_lo, dx_hi, F_lo, F_hi, root)) dx_star = std::max(root, dx_lo);
     } else {
         // Quick reject if already "beyond equality" at the left edge.
         if ((i == 0 && !(F_lo < 0)) || (i == 1 && !(F_lo > 0))) return d;
@@ -441,16 +440,15 @@ static Decision decide_trade(
 
     // ----- Final profit check using a single dry simulation -----
     auto [dy_after_fee, fee_tokens] = simulate_exchange_once(pool, static_cast<size_t>(i), static_cast<size_t>(j), dx_star);
-    const RealT f_buy  = (RealT(1) - fee_cex);
-    const RealT f_sell = (RealT(1) + fee_cex);
-
+    const RealT f_sell  = (RealT(1) - fee_cex);
+    const RealT f_buy = (RealT(1) + fee_cex);
     RealT profit_coin0 = 0;
     if (i == 0) { // buy 1 on pool, sell 1 on cex
-        profit_coin0 = dy_after_fee * cex_price * f_buy - dx_star - costs.gas_coin0;
+        profit_coin0 = dy_after_fee * cex_price * f_sell - dx_star - costs.gas_coin0;
     } else {      // buy 0 on pool, sell 0 on cex
-        profit_coin0 = dy_after_fee - dx_star * cex_price * f_sell - costs.gas_coin0;
+        profit_coin0 = dy_after_fee - dx_star * cex_price * f_buy - costs.gas_coin0;
     }
-    // if (!(profit_coin0 > 0)) return d;
+    if (!(profit_coin0 > 0)) return d;
 
     d.do_trade = true;
     d.i = i; d.j = j;
@@ -982,7 +980,7 @@ int main(int argc, char* argv[]) {
                         }
 
                         // Decide and trade
-                        Decision d = decide_trade(pool, ev.p_cex, costs, notional_cap_coin0,
+                        Decision d = decide_trade_size(pool, ev.p_cex, costs, notional_cap_coin0,
                                                   static_cast<RealT>(min_swap_frac),
                                                   static_cast<RealT>(max_swap_frac));
 

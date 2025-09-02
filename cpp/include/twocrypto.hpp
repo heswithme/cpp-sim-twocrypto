@@ -502,7 +502,6 @@ public:
 
         balances[idx_i] += dx;
         balances[idx_j] -= dy_after_fee;
-
         auto xp_new = _xp(balances, price_scale);
         T D_new = Ops::newton_D(A_gamma[0], A_gamma[1], xp_new, 0);
         D = D_new;
