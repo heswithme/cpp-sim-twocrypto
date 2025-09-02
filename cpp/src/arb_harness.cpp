@@ -198,16 +198,16 @@ static Decision decide_trade(
 
     // Pool bid/ask around the marginal mid (outflow-fee model)
     const RealT one_minus_fee0 = std::max<RealT>(RealT(1) - fee_out0, RealT(1e-12));
-    const RealT p_pool_bid0    = one_minus_fee0 * p_now;     // sell 1 coin1 to pool → coin0 you get
-    const RealT p_pool_ask0    = p_now / one_minus_fee0;     // buy 1 coin1 from pool → coin0 you pay
+    const RealT p_pool_bid0    = one_minus_fee0 * p_now;     // sell 1 coin1 to pool -> coin0 you get
+    const RealT p_pool_ask0    = p_now / one_minus_fee0;     // buy 1 coin1 from pool -> coin0 you pay
 
     // CEX bid/ask (coin0 per coin1)
     const RealT p_cex_bid = (RealT(1) - fee_cex) * cex_price;    // sell 1 coin1 on CEX
     const RealT p_cex_ask = (RealT(1) + fee_cex) * cex_price;    // buy 1 coin1 on CEX
 
-    // Edges at dx→0 (coin0 per coin1)
-    const RealT edge_01 = p_cex_bid - p_pool_ask0; // >0 ⇒ 0->1 profitable at the margin
-    const RealT edge_10 = p_pool_bid0 - p_cex_ask; // >0 ⇒ 1->0 profitable at the margin
+    // Edges at dx->0 (coin0 per coin1)
+    const RealT edge_01 = p_cex_bid - p_pool_ask0; // >0 : 0->1 profitable at the margin
+    const RealT edge_10 = p_pool_bid0 - p_cex_ask; // >0 : 1->0 profitable at the margin
 
     int i = -1, j = -1;
     if (edge_01 <= 0 && edge_10 <= 0) return d;    // no profitable direction
@@ -231,8 +231,8 @@ static Decision decide_trade(
     auto residual = [&](RealT dx)->RealT {
         auto [p_new, fee_pool] = post_trade_price_and_fee(pool, static_cast<size_t>(i), static_cast<size_t>(j), dx);
         // Pool bid/ask around the marginal mid, accounting for outflow fee on the *output* side
-        const RealT p_pool_bid = (1 - fee_pool) * p_new;      // sell 1 coin1 to pool → coin0 you get
-        const RealT p_pool_ask = p_new / (1 - fee_pool);      // buy 1 coin1 from pool → coin0 you pay
+        const RealT p_pool_bid = (1 - fee_pool) * p_new;      // sell 1 coin1 to pool -> coin0 you get
+        const RealT p_pool_ask = p_new / (1 - fee_pool);      // buy 1 coin1 from pool -> coin0 you pay
 
         // CEX bid/ask (coin0 per coin1)
         const RealT p_cex_bid = (RealT(1) - fee_cex) * cex_price; // sell 1 coin1 on CEX
