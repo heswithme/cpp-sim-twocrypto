@@ -61,7 +61,7 @@ else:
 Y_vals = [int(x) for x in Y_vals]
 
 init_liq = 20_000_000 # in coin0
-DEFAULT_DATAFILE = "python/arb_sim/trade_data/btcusd/synth-1m.json"
+DEFAULT_DATAFILE = "python/arb_sim/trade_data/btcusd/train-1y-1672534920-btcusd.json"
 START_TS = _first_candle_ts(DEFAULT_DATAFILE)
 init_price = _initial_price_from_file(DEFAULT_DATAFILE)
 # -------------------- Base Templates --------------------
@@ -91,7 +91,7 @@ BASE_POOL = {
 BASE_COSTS = {
     "arb_fee_bps": 1.5,
     "gas_coin0": 0.0,
-    "use_volume_cap": False,
+    "use_volume_cap": True,
     "volume_cap_mult": 1,
 }
 

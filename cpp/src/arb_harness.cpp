@@ -980,7 +980,7 @@ int main(int argc, char* argv[]) {
                         }
 
                         // Decide and trade
-                        Decision d = decide_trade_size(pool, ev.p_cex, costs, notional_cap_coin0,
+                        Decision d = decide_trade(pool, ev.p_cex, costs, notional_cap_coin0,
                                                   static_cast<RealT>(min_swap_frac),
                                                   static_cast<RealT>(max_swap_frac));
 
