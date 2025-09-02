@@ -42,6 +42,8 @@ def main() -> int:
     for i in range(0, UP_MINUTES + 1):
         ts = t0 + (i - 1) * INTERVAL_S
         price = START_PRICE + STEP * (i)
+        if price >=100280:
+            price=100280.0
         rows.append([ts, price, price, price, price, VOLUME])
 
     # Down

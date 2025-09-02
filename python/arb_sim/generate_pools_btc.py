@@ -31,11 +31,11 @@ ymin = 5e-4 * 10**10
 ymax =  .1 * 10**10
 ylogspace = True
 
-# xmin = 20
-# xmax = 20
-# ymin = int(50 / 10_000 * 10**10)
-# ymax = int(50 / 10_000 * 10**10)
-# N_GRID = 1
+xmin = 20
+xmax = 20
+ymin = int(0.0025 * 10**10)
+ymax = int(0.0025 * 10**10)
+N_GRID = 1
 # X_name = "donation_apy" 
 # xmin = 0.01
 # xmax = 0.1
@@ -91,7 +91,7 @@ BASE_POOL = {
 BASE_COSTS = {
     "arb_fee_bps": 1.5,
     "gas_coin0": 0.0,
-    "use_volume_cap": True,
+    "use_volume_cap": False,
     "volume_cap_mult": 1,
 }
 
