@@ -186,19 +186,34 @@ static Decision decide_trade(
     Decision d{};
     if (!(cex_price > 0)) return d;
 
-    // ----- Exact fee-aware pre-filter at current state -----
-    const auto  xp_now = pool_xp_current(pool);
-    const RealT p_now  = stableswap::MathOps<RealT>::get_p(xp_now, pool.D, {pool.A, pool.gamma}) * pool.cached_price_scale;
-    const RealT fee_pool0  = dyn_fee(xp_now, pool.mid_fee, pool.out_fee, pool.fee_gamma);
-    const RealT fee_cex  = costs.arb_fee_bps / RealT(1e4);
+    // ----- Exact fee-aware pre-filter at current state (bid/ask form) -----
+    const auto  xp_now    = pool_xp_current(pool);
+    const RealT p_now = stableswap::MathOps<RealT>::get_p(xp_now, pool.D, {pool.A, pool.gamma})
+                            * pool.cached_price_scale;
 
-    // Positive edge => profitable near dx->0
-    const RealT edge_01 = (RealT(1) - fee_cex) * (RealT(1) - fee_pool0) * cex_price - p_now; // 0->1
-    const RealT edge_10 = (RealT(1) - fee_pool0) * p_now - (RealT(1) + fee_cex) * cex_price; // 1->0
+    // Pool outflow fee at current skew
+    const RealT fee_out0  = dyn_fee(xp_now, pool.mid_fee, pool.out_fee, pool.fee_gamma);
+    // Aggregator/CEX fee on notional
+    const RealT fee_cex   = costs.arb_fee_bps / RealT(1e4);
+
+    // Pool bid/ask around the marginal mid (outflow-fee model)
+    const RealT one_minus_fee0 = std::max<RealT>(RealT(1) - fee_out0, RealT(1e-12));
+    const RealT p_pool_bid0    = one_minus_fee0 * p_now;     // sell 1 coin1 to pool → coin0 you get
+    const RealT p_pool_ask0    = p_now / one_minus_fee0;     // buy 1 coin1 from pool → coin0 you pay
+
+    // CEX bid/ask (coin0 per coin1)
+    const RealT p_cex_bid = (RealT(1) - fee_cex) * cex_price;    // sell 1 coin1 on CEX
+    const RealT p_cex_ask = (RealT(1) + fee_cex) * cex_price;    // buy 1 coin1 on CEX
+
+    // Edges at dx→0 (coin0 per coin1)
+    const RealT edge_01 = p_cex_bid - p_pool_ask0; // >0 ⇒ 0->1 profitable at the margin
+    const RealT edge_10 = p_pool_bid0 - p_cex_ask; // >0 ⇒ 1->0 profitable at the margin
 
     int i = -1, j = -1;
-    if (edge_01 <= 0 && edge_10 <= 0) return d;  // no profitable direction
-    (edge_01 > edge_10) ? (i = 0, j = 1) : (i = 1, j = 0);
+    if (edge_01 <= 0 && edge_10 <= 0) return d;    // no profitable direction
+
+    // Choose the direction with the larger POSITIVE edge
+    if (edge_01 >= edge_10) { i = 0; j = 1; } else { i = 1; j = 0; }
 
     // ----- Trade bounds -----
     const RealT avail = pool.balances[static_cast<size_t>(i)];
@@ -215,9 +230,17 @@ static Decision decide_trade(
     // ----- Residual: post-trade marginal equality (pool vs cex incl. fees) -----
     auto residual = [&](RealT dx)->RealT {
         auto [p_new, fee_pool] = post_trade_price_and_fee(pool, static_cast<size_t>(i), static_cast<size_t>(j), dx);
+        // Pool bid/ask around the marginal mid, accounting for outflow fee on the *output* side
+        const RealT p_pool_bid = (1 - fee_pool) * p_new;      // sell 1 coin1 to pool → coin0 you get
+        const RealT p_pool_ask = p_new / (1 - fee_pool);      // buy 1 coin1 from pool → coin0 you pay
+
+        // CEX bid/ask (coin0 per coin1)
+        const RealT p_cex_bid = (RealT(1) - fee_cex) * cex_price; // sell 1 coin1 on CEX
+        const RealT p_cex_ask = (RealT(1) + fee_cex) * cex_price; // buy 1 coin1 on CEX
+
         return (i == 0)
-             ? (p_new - (RealT(1) - fee_pool) * (RealT(1) - fee_cex) * cex_price)                   // 0->1
-             : ((RealT(1) - fee_pool) * p_new - (RealT(1) + fee_cex) * cex_price);                 // 1->0
+             ? (p_pool_ask - p_cex_bid)                  // 0->1
+             : (p_pool_bid - p_cex_ask);                 // 1->0
     };
     RealT F_lo = residual(dx_lo), F_hi = residual(dx_hi);
     const bool cross = (F_lo * F_hi < 0);
