@@ -50,7 +50,7 @@ class ArbHarnessRunner:
         print(f"✓ Built: {self.exe_path}")
 
     def run(self, pools_json: Path, candles_path: Path, out_json_path: Path,
-            n_candles: int = 0, save_actions: bool = False,
+            n_candles: int = 0, save_actions: bool = False, events: bool = False,
             min_swap: float = 1e-12, max_swap: float = 1.0,
             threads: int = 1, dustswapfreq: int | None = None) -> Dict[str, Any]:
         print("Running arb_harness...")
@@ -59,6 +59,8 @@ class ArbHarnessRunner:
             cmd += ["--n-candles", str(n_candles)]
         if save_actions:
             cmd += ["--save-actions"]
+        if events:
+            cmd += ["--events"]
         if min_swap is not None:
             cmd += ["--min-swap", str(min_swap)]
         if max_swap is not None:
@@ -77,8 +79,8 @@ class ArbHarnessRunner:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Run C++ multi-pool arbitrage harness over candle data")
-    parser.add_argument("candles", type=str, help="Path to candles JSON (array of [ts,o,h,l,c,vol])")
+    parser = argparse.ArgumentParser(description="Run C++ multi-pool arbitrage harness over candle data or events")
+    parser.add_argument("candles", type=str, help="Path to candles JSON (array of [ts,o,h,l,c,vol]) or events JSON (with --events: [[ts,price,volume], ...])")
     parser.add_argument("--out", type=str, default=None, help="Aggregated output JSON path")
     parser.add_argument("--n-candles", type=int, default=0, help="Limit to first N candles (default: all)")
     parser.add_argument("--save-actions", action="store_true", help="Ask C++ harness to save executed trades/actions")
@@ -87,6 +89,8 @@ def main() -> int:
     parser.add_argument("-n", "--threads", type=int, default=1, help="Threads in C++ harness (default: 1)")
     parser.add_argument("--real", type=str, default="double", choices=["float", "double", "longdouble"], help="Numeric precision for C++ harness")
     parser.add_argument("--dustswapfreq", type=int, default=None, help="Seconds between dust swaps when no arb trade (cooldown)")
+    parser.add_argument("--events", action="store_true", help="Treat input file as events [[ts,price,volume]] and skip candle conversion")
+    parser.add_argument("--candle-filter", type=float, default=10.0, help="Filter candles +/- PCT (default: 10.0)")
     args = parser.parse_args()
 
     repo_root = Path(__file__).resolve().parents[2]
@@ -107,7 +111,7 @@ def main() -> int:
     out_json_path.parent.mkdir(parents=True, exist_ok=True)
     ts = datetime.now()
     raw = runner.run(pool_config_path, Path(args.candles), out_json_path,
-                     n_candles=args.n_candles, save_actions=args.save_actions,
+                     n_candles=args.n_candles, save_actions=args.save_actions, events=args.events,
                      min_swap=args.min_swap, max_swap=args.max_swap, threads=max(1, args.threads),
                      dustswapfreq=args.dustswapfreq)
 
@@ -181,6 +185,7 @@ def main() -> int:
     agg = {
         "metadata": {
             "candles_file": args.candles,
+            "input_is_events": bool(args.events),
             "threads": max(1, args.threads),
             "base_pool": base_pool,
             "grid": cfg.get("meta", {}).get("grid") if isinstance(cfg, dict) else None,

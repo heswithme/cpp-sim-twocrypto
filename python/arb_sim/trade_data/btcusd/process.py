@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # Convert raw_fetched.json into compact events: [[ts, price, volume], ...]
 # - ts: UNIX seconds from ISO8601 'time'
-# - price: raw 'price' from API
-# - volume: reference token amount (USDT here)
+# - price: coin0-per-coin1 (invert API 'price' which is coin1-per-coin0)
+# - volume: coin1 amount (WBTC here)
 
 import json
 import os
@@ -48,21 +48,46 @@ def main():
     events = []
     for r in rows:
         ts = to_ts(r.get('time'))
-        price = 1/r.get('price')
-        if ts is None or price is None:
+        api_price = r.get('price')
+        if ts is None or api_price is None:
+            continue
+        try:
+            price = 1.0 / float(api_price)
+        except Exception:
             continue
 
-        # Reference token is USDT at id 0 in this dataset
+        # Volume in coin1 (WBTC). Prefer direct coin1 fields, else infer from coin0 and price
         vol = None
         sid = r.get('sold_id')
         bid = r.get('bought_id')
-        if sid == 0:
+        if sid == 1:
             vol = r.get('tokens_sold')
-        elif bid == 0:
+        elif bid == 1:
             vol = r.get('tokens_bought')
+        elif sid == 0 and r.get('tokens_sold') is not None:
+            try:
+                vol = float(r.get('tokens_sold')) / float(price)
+            except Exception:
+                vol = None
+        elif bid == 0 and r.get('tokens_bought') is not None:
+            try:
+                vol = float(r.get('tokens_bought')) / float(price)
+            except Exception:
+                vol = None
         else:
-            # Fallbacks (rare): try USD volume, then tokens_sold
-            vol = r.get('tokens_sold_usd') or r.get('tokens_bought_usd') or r.get('tokens_sold')
+            # Fallback: try to infer from USD if both present
+            tsu = r.get('tokens_sold_usd')
+            tbu = r.get('tokens_bought_usd')
+            if tsu is not None:
+                try:
+                    vol = float(tsu) / float(price)
+                except Exception:
+                    vol = None
+            elif tbu is not None:
+                try:
+                    vol = float(tbu) / float(price)
+                except Exception:
+                    vol = None
 
         try:
             p = float(price)
@@ -82,4 +107,3 @@ def main():
 
 if __name__ == '__main__':
     raise SystemExit(main())
-

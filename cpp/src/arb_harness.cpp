@@ -129,13 +129,13 @@ post_trade_price_and_fee(const twocrypto::TwoCryptoPoolT<RealT>& pool,
     RealT dy_xp = xp[j] - y_out.value; xp[j] -= dy_xp;
 
     // dynamic fee at post-trade skew
-    const RealT f_lp = dyn_fee(xp, pool.mid_fee, pool.out_fee, pool.fee_gamma);
+    const RealT fee_pool = dyn_fee(xp, pool.mid_fee, pool.out_fee, pool.fee_gamma);
 
     // D and marginal price at post-trade state (coin0 per coin1)
     const RealT D_new = Ops::newton_D(pool.A, pool.gamma, xp, RealT(0));
     const RealT p_new = Ops::get_p(xp, D_new, {pool.A, pool.gamma}) * ps;
 
-    return {p_new, f_lp};
+    return {p_new, fee_pool};
 }
 
 static inline std::pair<RealT, RealT>
@@ -151,8 +151,8 @@ simulate_exchange_once(const twocrypto::TwoCryptoPoolT<RealT>& pool,
     RealT dy_xp = xp[j] - y_out.value; xp[j] -= dy_xp;
 
     RealT dy_tokens  = xp_to_tokens_j(pool, j, dy_xp, ps);
-    RealT f_lp       = dyn_fee(xp, pool.mid_fee, pool.out_fee, pool.fee_gamma);
-    RealT fee_tokens = f_lp * dy_tokens;
+    RealT fee_pool       = dyn_fee(xp, pool.mid_fee, pool.out_fee, pool.fee_gamma);
+    RealT fee_tokens = fee_pool * dy_tokens;
     return {dy_tokens - fee_tokens, fee_tokens};
 }
 
@@ -189,12 +189,12 @@ static Decision decide_trade(
     // ----- Exact fee-aware pre-filter at current state -----
     const auto  xp_now = pool_xp_current(pool);
     const RealT p_now  = stableswap::MathOps<RealT>::get_p(xp_now, pool.D, {pool.A, pool.gamma}) * pool.cached_price_scale;
-    const RealT f_lp0  = dyn_fee(xp_now, pool.mid_fee, pool.out_fee, pool.fee_gamma);
-    const RealT f_cex  = costs.arb_fee_bps / RealT(1e4);
+    const RealT fee_pool0  = dyn_fee(xp_now, pool.mid_fee, pool.out_fee, pool.fee_gamma);
+    const RealT fee_cex  = costs.arb_fee_bps / RealT(1e4);
 
     // Positive edge => profitable near dx->0
-    const RealT edge_01 = (RealT(1) - f_cex) * (RealT(1) - f_lp0) * cex_price - p_now; // 0->1
-    const RealT edge_10 = (RealT(1) - f_lp0) * p_now - (RealT(1) + f_cex) * cex_price; // 1->0
+    const RealT edge_01 = (RealT(1) - fee_cex) * (RealT(1) - fee_pool0) * cex_price - p_now; // 0->1
+    const RealT edge_10 = (RealT(1) - fee_pool0) * p_now - (RealT(1) + fee_cex) * cex_price; // 1->0
 
     int i = -1, j = -1;
     if (edge_01 <= 0 && edge_10 <= 0) return d;  // no profitable direction
@@ -214,10 +214,10 @@ static Decision decide_trade(
 
     // ----- Residual: post-trade marginal equality (pool vs cex incl. fees) -----
     auto residual = [&](RealT dx)->RealT {
-        auto [p_new, f_lp] = post_trade_price_and_fee(pool, static_cast<size_t>(i), static_cast<size_t>(j), dx);
+        auto [p_new, fee_pool] = post_trade_price_and_fee(pool, static_cast<size_t>(i), static_cast<size_t>(j), dx);
         return (i == 0)
-             ? (p_new - (RealT(1) - f_lp) * (RealT(1) - f_cex) * cex_price)                   // 0->1
-             : ((RealT(1) - f_lp) * p_new - (RealT(1) + f_cex) * cex_price);                 // 1->0
+             ? (p_new - (RealT(1) - fee_pool) * (RealT(1) - fee_cex) * cex_price)                   // 0->1
+             : ((RealT(1) - fee_pool) * p_new - (RealT(1) + fee_cex) * cex_price);                 // 1->0
     };
     RealT F_lo = residual(dx_lo), F_hi = residual(dx_hi);
     const bool cross = (F_lo * F_hi < 0);
@@ -235,8 +235,8 @@ static Decision decide_trade(
 
     // ----- Final profit check using a single dry simulation -----
     auto [dy_after_fee, fee_tokens] = simulate_exchange_once(pool, static_cast<size_t>(i), static_cast<size_t>(j), dx_star);
-    const RealT f_buy  = (RealT(1) - f_cex);
-    const RealT f_sell = (RealT(1) + f_cex);
+    const RealT f_buy  = (RealT(1) - fee_cex);
+    const RealT f_sell = (RealT(1) + fee_cex);
 
     RealT profit_coin0 = 0;
     if (i == 0) { // buy 1 on pool, sell 1 on cex
@@ -427,11 +427,87 @@ static std::vector<Event> gen_events(const std::vector<Candle>& cs) {
         const RealT path1 = std::abs(c.open - c.low)  + std::abs(c.high - c.close);
         const RealT path2 = std::abs(c.open - c.high) + std::abs(c.low  - c.close);
         const bool first_low = path1 < path2;
-        evs.push_back(Event{c.ts + 5,  first_low ? c.low  : c.high, c.volume/RealT(2)});
-        evs.push_back(Event{c.ts + 15, first_low ? c.high : c.low,  c.volume/RealT(2)});
+        evs.push_back(Event{c.ts - 5,  first_low ? c.low  : c.high, c.volume/RealT(2)});
+        evs.push_back(Event{c.ts + 5, first_low ? c.high : c.low,  c.volume/RealT(2)});
     }
     std::sort(evs.begin(), evs.end(), [](auto& a, auto& b){ return a.ts < b.ts; });
     return evs;
+}
+
+// Directly load events.
+// Accepts either events [[ts, price, volume], ...] or candles [[ts,o,h,l,c,v], ...].
+// For candles, we map to a single event per candle using close and volume.
+static std::vector<Event> load_events(const std::string& path, size_t max_events = 0) {
+    std::vector<Event> out; out.reserve(1024);
+    std::ifstream in(path, std::ios::binary);
+    if (!in) throw std::runtime_error("Cannot open events file: " + path);
+    std::ostringstream oss; oss << in.rdbuf();
+    const std::string s = oss.str();
+
+    json::value val = json::parse(s);
+    const json::array* arr = nullptr;
+    if (val.is_array()) {
+        arr = &val.as_array();
+    } else if (val.is_object()) {
+        const auto& o = val.as_object();
+        if (o.contains("data") && o.at("data").is_array()) arr = &o.at("data").as_array();
+        else if (o.contains("events") && o.at("events").is_array()) arr = &o.at("events").as_array();
+    }
+    if (!arr) throw std::runtime_error("Events JSON must be an array of [ts,price,vol] or object with 'data'/'events' array");
+
+    const size_t limit = (max_events ? std::min(max_events, arr->size()) : arr->size());
+    out.reserve(limit);
+
+    auto to_d = [](const json::value& v)->RealT {
+        if (v.is_double()) return static_cast<RealT>(v.as_double());
+        if (v.is_int64())  return static_cast<RealT>(v.as_int64());
+        if (v.is_uint64()) return static_cast<RealT>(v.as_uint64());
+        if (v.is_string()) return static_cast<RealT>(std::strtold(v.as_string().c_str(), nullptr));
+        return RealT(0);
+    };
+
+    for (size_t i = 0; i < limit; ++i) {
+        const auto& e = (*arr)[i];
+        if (e.is_array()) {
+            const auto& a = e.as_array();
+            if (a.size() < 3) continue;
+            uint64_t ts = 0;
+            const auto& tsv = a[0];
+            if (tsv.is_uint64()) ts = tsv.as_uint64();
+            else if (tsv.is_int64()) ts = static_cast<uint64_t>(tsv.as_int64());
+            else if (tsv.is_double()) ts = static_cast<uint64_t>(tsv.as_double());
+            else if (tsv.is_string()) ts = static_cast<uint64_t>(std::strtoll(tsv.as_string().c_str(), nullptr, 10));
+            if (ts > 10000000000ULL) ts /= 1000ULL; // ms->s guard
+
+            if (a.size() >= 6) {
+                // Candles: [ts, o, h, l, c, v] -> use close and volume
+                Event ev{ts, to_d(a[4]), to_d(a[5])};
+                out.push_back(ev);
+            } else {
+                // Events: [ts, price, volume]
+                Event ev{ts, to_d(a[1]), to_d(a[2])};
+                out.push_back(ev);
+            }
+        } else if (e.is_object()) {
+            const auto& o = e.as_object();
+            uint64_t ts = 0;
+            if (auto* v = o.if_contains("ts")) {
+                if (v->is_uint64()) ts = v->as_uint64();
+                else if (v->is_int64()) ts = static_cast<uint64_t>(v->as_int64());
+                else if (v->is_double()) ts = static_cast<uint64_t>(v->as_double());
+            }
+            if (ts > 10000000000ULL) ts /= 1000ULL;
+            RealT price = 0, vol = 0;
+            if (auto* v = o.if_contains("price")) price = to_d(*v);
+            else if (auto* v = o.if_contains("close")) price = to_d(*v);
+            else if (auto* v = o.if_contains("c")) price = to_d(*v);
+            if (auto* v = o.if_contains("volume")) vol = to_d(*v);
+            else if (auto* v = o.if_contains("v")) vol = to_d(*v);
+            if (ts && price > 0) out.push_back(Event{ts, price, vol});
+        }
+    }
+    std::sort(out.begin(), out.end(), [](auto& A, auto& B){ return A.ts < B.ts; });
+    return out;
 }
 
 // ----------------------------- Donation scheduler ----------------------------
@@ -439,8 +515,7 @@ struct DonationCfg {
     bool     enabled{false};
     uint64_t freq_s{0};
     uint64_t next_ts{0};
-    RealT    amt0_per_period{0};
-    RealT    amt1_per_period{0};
+    RealT    apy{0};              // fraction per year, e.g., 0.05
     RealT    ratio1{0.5};
 };
 
@@ -466,54 +541,72 @@ static void maybe_do_donations(
     const uint64_t k_due = 1 + (ev_ts - cfg.next_ts) / cfg.freq_s;
     uint64_t lo = 0, hi = k_due;
 
-    // Find the largest k in [0, k_due] that the pool accepts.
+    // Helper: compute donation amounts from current pool TVL (coin0-equivalent)
+    auto donation_amounts_from_state = [&](const twocrypto::TwoCryptoPoolT<RealT>& p)->std::array<RealT,2> {
+        constexpr RealT SEC_PER_YEAR = static_cast<RealT>(365.0 * 86400.0);
+        const RealT ps   = p.cached_price_scale;
+        const RealT tvl0 = p.balances[0] + p.balances[1] * ps;
+        const RealT frac = cfg.apy * static_cast<RealT>(static_cast<long double>(cfg.freq_s) / static_cast<long double>(SEC_PER_YEAR));
+        const RealT coin0_equiv_amt = tvl0 * frac;
+        const RealT amt0 = (RealT(1) - cfg.ratio1) * coin0_equiv_amt;
+        const RealT amt1 = (ps > 0) ? (cfg.ratio1 * coin0_equiv_amt / ps) : RealT(0);
+        return {amt0, amt1};
+    };
+
+    // Find the largest k in [0, k_due] that the pool accepts, simulating period-by-period amounts.
     while (lo < hi) {
         const uint64_t mid = (lo + hi + 1) / 2;
         auto trial = pool; // copy (no commit on failure)
-        const RealT try0 = cfg.amt0_per_period * static_cast<RealT>(mid);
-        const RealT try1 = cfg.amt1_per_period * static_cast<RealT>(mid);
-        try {
-            (void)trial.add_liquidity({try0, try1}, RealT(0), /*donation=*/true);
-            lo = mid; // success
-        } catch (...) {
-            hi = mid - 1;
+        bool ok = true;
+        for (uint64_t t = 0; t < mid; ++t) {
+            auto amts = donation_amounts_from_state(trial);
+            try {
+                (void)trial.add_liquidity({amts[0], amts[1]}, RealT(0), /*donation=*/true);
+            } catch (...) { ok = false; break; }
         }
+        if (ok) lo = mid; else hi = mid - 1;
     }
 
     const uint64_t k_commit = lo;
     if (k_commit > 0) {
-        const RealT amt0 = cfg.amt0_per_period * static_cast<RealT>(k_commit);
-        const RealT amt1 = cfg.amt1_per_period * static_cast<RealT>(k_commit);
-        const RealT ps   = pool.cached_price_scale;
-
-        try {
+        RealT tot0{0}, tot1{0};
+        size_t rebalances{0};
+        // Commit donations one period at a time with current-state TVL amounts
+        for (uint64_t t = 0; t < k_commit; ++t) {
+            auto amts = donation_amounts_from_state(pool);
             const RealT ps_before = pool.cached_price_scale;
-            (void)pool.add_liquidity({amt0, amt1}, RealT(0), /*donation=*/true);
-            const RealT ps_after  = pool.cached_price_scale;
-
-            m.donations += 1;
-            m.donation_amounts_total[0] += amt0;
-            m.donation_amounts_total[1] += amt1;
-            m.donation_coin0_total      += coin0_equiv(amt0, amt1, ps);
-
-            if (differs_rel(ps_after, ps_before)) m.n_rebalances += 1;
-
-            if (save_actions) {
-                json::object da;
-                da["type"]            = "donation";
-                da["ts"]              = ev_ts;
-                da["ts_first_due"]    = cfg.next_ts;
-                da["k_due"]           = static_cast<uint64_t>(k_due);
-                da["k_committed"]     = static_cast<uint64_t>(k_commit);
-                da["amounts"]         = json::array{static_cast<double>(amt0), static_cast<double>(amt1)};
-                da["amounts_wei"]     = json::array{to_str_1e18(amt0), to_str_1e18(amt1)};
-                da["price_scale"]     = static_cast<double>(ps);
-                da["donation_ratio1"] = static_cast<double>(cfg.ratio1);
-                actions.push_back(std::move(da));
-                states.push_back(pool_state_json(pool));
+            try {
+                (void)pool.add_liquidity({amts[0], amts[1]}, RealT(0), /*donation=*/true);
+            } catch (...) {
+                // Should be rare since trial passed; stop early
+                break;
             }
-        } catch (...) {
-            // Rare if dry-run succeeded; if thrown, treat as zero-commit below.
+            const RealT ps_after  = pool.cached_price_scale;
+            if (differs_rel(ps_after, ps_before)) rebalances += 1;
+            tot0 += amts[0]; tot1 += amts[1];
+            m.donation_coin0_total += coin0_equiv(amts[0], amts[1], ps_before);
+        }
+        m.donations += k_commit;
+        m.donation_amounts_total[0] += tot0;
+        m.donation_amounts_total[1] += tot1;
+        m.n_rebalances += rebalances;
+
+        if (save_actions) {
+            const RealT ps_now = pool.cached_price_scale;
+            json::object da;
+            da["type"]            = "donation";
+            da["ts"]              = ev_ts;
+            da["ts_first_due"]    = cfg.next_ts;
+            da["k_due"]           = static_cast<uint64_t>(k_due);
+            da["k_committed"]     = static_cast<uint64_t>(k_commit);
+            da["amounts"]         = json::array{static_cast<double>(tot0), static_cast<double>(tot1)};
+            da["amounts_wei"]     = json::array{to_str_1e18(tot0), to_str_1e18(tot1)};
+            da["price_scale"]     = static_cast<double>(ps_now);
+            da["donation_ratio1"] = static_cast<double>(cfg.ratio1);
+            da["apy_per_year"]     = static_cast<double>(cfg.apy);
+            da["freq_s"]           = static_cast<uint64_t>(cfg.freq_s);
+            actions.push_back(std::move(da));
+            states.push_back(pool_state_json(pool));
         }
     }
 
@@ -529,8 +622,8 @@ int main(int argc, char* argv[]) {
 
     if (argc < 4) {
         std::cerr << "Usage: " << argv[0]
-                  << " <pools.json> <candles.json> <output.json>"
-                  << " [--n-candles N] [--save-actions]"
+                  << " <pools.json> <candles_or_events.json> <output.json>"
+                  << " [--n-candles N] [--save-actions] [--events]"
                   << " [--min-swap F] [--max-swap F]"
                   << " [--threads N|-n N] [--candle-filter PCT]"
                   << " [--dustswapfreq S]\n";
@@ -544,6 +637,7 @@ int main(int argc, char* argv[]) {
 
     size_t max_candles    = 0;
     bool   save_actions   = false;
+    bool   use_events     = false;
     double min_swap_frac  = 1e-6;
     double max_swap_frac  = 1.0;
     size_t n_workers      = std::max<size_t>(1, std::thread::hardware_concurrency());
@@ -555,6 +649,7 @@ int main(int argc, char* argv[]) {
         try {
             if (arg == "--n-candles"     && i+1 < argc) max_candles       = static_cast<size_t>(std::stoll(argv[++i]));
             else if (arg == "--save-actions")           save_actions       = true;
+            else if (arg == "--events")                 use_events         = true;
             else if (arg == "--min-swap"   && i+1 < argc) min_swap_frac    = std::stod(argv[++i]);
             else if (arg == "--max-swap"   && i+1 < argc) max_swap_frac    = std::stod(argv[++i]);
             else if ((arg == "--threads" || arg == "-n") && i+1 < argc) n_workers = static_cast<size_t>(std::stoll(argv[++i]));
@@ -566,10 +661,15 @@ int main(int argc, char* argv[]) {
     try {
         using clk = std::chrono::high_resolution_clock;
 
-        // ---------- Load & eventize once ----------
+        // ---------- Load & build events once ----------
         const auto t_read0 = clk::now();
-        const auto candles = load_candles(candles_path, max_candles, candle_filter_pct / 100.0);
-        const auto events  = gen_events(candles);
+        std::vector<Event> events;
+        if (use_events) {
+            events = load_events(candles_path, max_candles);
+        } else {
+            const auto candles = load_candles(candles_path, max_candles, candle_filter_pct / 100.0);
+            events = gen_events(candles);
+        }
         const auto t_read1 = clk::now();
 
         // ---------- Read pool configs ----------
@@ -642,11 +742,8 @@ int main(int argc, char* argv[]) {
                         const uint64_t base_ts = cfg.start_ts ? cfg.start_ts : events.front().ts;
                         dcfg.next_ts = base_ts + dcfg.freq_s;
 
-                        const RealT per_period_coin0 = tvl_start * cfg.donation_frequency * cfg.donation_apy / SEC_PER_YEAR;
-                        dcfg.ratio1          = std::clamp<RealT>(cfg.donation_coins_ratio, 0, 1);
-                        const RealT r0       = RealT(1) - dcfg.ratio1;
-                        dcfg.amt0_per_period = r0 * per_period_coin0;                // token0
-                        dcfg.amt1_per_period = (ps_init > 0) ? (dcfg.ratio1 * per_period_coin0 / ps_init) : 0; // token1
+                        dcfg.apy    = cfg.donation_apy;
+                        dcfg.ratio1 = std::clamp<RealT>(cfg.donation_coins_ratio, 0, 1);
                     }
 
                     // ---- Per-job run state ----
@@ -768,26 +865,46 @@ int main(int argc, char* argv[]) {
                     const double duration_s = (t_end > t_start) ? double(t_end - t_start) : 0.0;
 
                     const RealT tvl_end = pool.balances[0] + pool.balances[1] * pool.cached_price_scale;
-                    double apy_coin0 = 0.0, apy_donation_coin0 = 0.0, apy_vp = 0.0;
+                    // Baseline: HODL initial balances valued at end price (coin0 units)
+                    const RealT v_hold_end = cfg.initial_liq[0] + cfg.initial_liq[1] * pool.cached_price_scale;
+                    double apy_coin0 = 0.0, apy_coin0_boost = 0.0, apy_vp = 0.0;
+                    double apy_coin0_raw = 0.0, apy_coin0_boost_raw = 0.0; // before baseline subtraction
 
                     if (duration_s > 0.0 && tvl_start > 0) {
                         const double exponent = SEC_PER_YEAR / duration_s;
                         const long double vp_end = static_cast<long double>(pool.get_virtual_price());
                         apy_vp  = (vp_end > 0.0) ? std::pow(static_cast<double>(vp_end), exponent) - 1.0 : -1.0;
-                        apy_coin0 = (tvl_end > 0) ? std::pow(static_cast<double>(tvl_end / tvl_start), exponent) - 1.0 : -1.0;
-                        const double tvl_end_adj = static_cast<double>(tvl_end) - static_cast<double>(m.donation_coin0_total);
-                        apy_donation_coin0 = (tvl_end_adj > 0.0)
-                                           ? std::pow(tvl_end_adj / tvl_start, exponent) - 1.0
+                        // Raw APYs against start TVL (kept for transparency)
+                        apy_coin0_raw = (tvl_end > 0) ? std::pow(static_cast<double>(tvl_end / tvl_start), exponent) - 1.0 : -1.0;
+                        const double tvl_end_adj_raw = static_cast<double>(tvl_end) - static_cast<double>(m.donation_coin0_total);
+                        apy_coin0_boost_raw = (tvl_end_adj_raw > 0.0)
+                                           ? std::pow(tvl_end_adj_raw / tvl_start, exponent) - 1.0
                                            : -1.0;
+                        // Baseline-subtracted (excess) APYs: compare to HODL valued at end price
+                        if (v_hold_end > 0) {
+                            apy_coin0 = std::pow(static_cast<double>(tvl_end / v_hold_end), exponent) - 1.0;
+                            const double tvl_end_adj = static_cast<double>(tvl_end) - static_cast<double>(m.donation_coin0_total);
+                            apy_coin0_boost = (tvl_end_adj > 0.0)
+                                               ? std::pow(tvl_end_adj / static_cast<double>(v_hold_end), exponent) - 1.0
+                                               : -1.0;
+                        } else {
+                            apy_coin0 = -1.0;
+                            apy_coin0_boost = -1.0;
+                        }
                     }
                     summary["t_start"]           = t_start;
                     summary["t_end"]             = t_end;
                     summary["duration_s"]        = duration_s;
                     summary["tvl_coin0_start"]   = static_cast<double>(tvl_start);
                     summary["tvl_coin0_end"]     = static_cast<double>(tvl_end);
+                    summary["baseline_hold_end_coin0"] = static_cast<double>(v_hold_end);
                     summary["apy"]               = apy_vp;
+                    // Baseline-subtracted APYs (excess over HODL in coin0)
                     summary["apy_coin0"]         = apy_coin0;
-                    summary["apy_donation_coin0"]= apy_donation_coin0;
+                    summary["apy_coin0_boost"]= apy_coin0_boost;
+                    // For reference, include raw (non-baseline) APYs
+                    summary["apy_coin0_raw"]         = apy_coin0_raw;
+                    summary["apy_coin0_boost_raw"]= apy_coin0_boost_raw;
 
                     json::object params;
                     params["pool"] = echo_pool;
@@ -818,7 +935,7 @@ int main(int argc, char* argv[]) {
 
         // ---------- Output ----------
         json::object meta;
-        meta["candles_file"]    = candles_path;
+        meta[ use_events ? "events_file" : "candles_file" ] = candles_path;
         meta["events"]          = static_cast<uint64_t>(events.size());
         meta["threads"]         = static_cast<uint64_t>(n_workers);
         meta["candles_read_ms"] = std::chrono::duration_cast<std::chrono::nanoseconds>(t_read1 - t_read0).count() / 1e6;
