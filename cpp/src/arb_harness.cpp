@@ -173,6 +173,188 @@ static inline bool toms748_root(F&& f,
     out_root = (r.first + r.second) / RealT(2);
     return true;
 }
+// ----------------------- Profit-maximizing trade sizing ----------------------
+static Decision decide_trade_size(
+    const twocrypto::TwoCryptoPoolT<RealT>& pool,
+    RealT cex_price,
+    const Costs& costs,
+    RealT notional_cap_coin0,
+    RealT min_swap_frac,
+    RealT max_swap_frac
+) {
+    Decision best{}; // default: do_trade=false
+    if (!(cex_price > 0)) return best;
+
+    // Aggregator/CEX fee factors
+    const RealT fee_cex  = costs.arb_fee_bps / RealT(1e4);
+    const RealT f_sell1  = (RealT(1) - fee_cex); // proceeds factor when selling coin1 on CEX
+    const RealT f_buy1   = (RealT(1) + fee_cex); // cost factor when buying coin1 on CEX
+
+    // Small guards
+    const RealT EPS_DX     = static_cast<RealT>(1e-18);
+    const RealT REL_TOL    = static_cast<RealT>(1e-9);
+    const unsigned MAX_GS_ITERS = 64;
+    const int N_COARSE     = 12; // coarse scan points per direction (log-spaced, inc. endpoints)
+
+    // Profit function for a given direction (i -> j)
+    auto profit_fn = [&](int i, int j, RealT dx)->std::pair<RealT, RealT> {
+        if (!(dx > 0)) return {RealT(0), RealT(0)};
+        auto [dy_after_fee, fee_tokens] =
+            simulate_exchange_once(pool, static_cast<size_t>(i), static_cast<size_t>(j), dx);
+
+        RealT profit_coin0 = 0;
+        if (i == 0) {
+            // Put coin0 in, receive coin1 from pool, sell coin1 on CEX
+            profit_coin0 = dy_after_fee * cex_price * f_sell1 - dx - costs.gas_coin0;
+        } else {
+            // Put coin1 in, receive coin0 from pool, buy coin1 back on CEX
+            profit_coin0 = dy_after_fee - dx * cex_price * f_buy1 - costs.gas_coin0;
+        }
+        return {profit_coin0, fee_tokens};
+    };
+
+    // Golden-section maximization on [a,c] (assumes near-unimodal in practice).
+    auto golden_section_max = [&](auto&& f, RealT a, RealT c, RealT& x_best, RealT& f_best) {
+        // Ensure proper order
+        if (!(c > a)) { x_best = a; f_best = f(a); return; }
+        const RealT invphi  = static_cast<RealT>(0.6180339887498948482L); // (sqrt(5)-1)/2
+        const RealT invphi2 = static_cast<RealT>(1) - invphi;
+
+        RealT x1 = c - invphi * (c - a);
+        RealT x2 = a + invphi * (c - a);
+        RealT f1 = f(x1), f2 = f(x2);
+
+        for (unsigned it = 0; it < MAX_GS_ITERS; ++it) {
+            // Stop when absolute interval small relative to scale
+            const RealT width = c - a;
+            const RealT scale = std::max<RealT>(RealT(1), std::max(std::abs(a), std::abs(c)));
+            if (width <= REL_TOL * scale) break;
+
+            if (f1 < f2) {
+                a = x1;
+                x1 = x2; f1 = f2;
+                x2 = a + invphi * (c - a);
+                f2 = f(x2);
+            } else {
+                c = x2;
+                x2 = x1; f2 = f1;
+                x1 = c - invphi * (c - a);
+                f1 = f(x1);
+            }
+        }
+        if (f1 > f2) { x_best = x1; f_best = f1; } else { x_best = x2; f_best = f2; }
+    };
+
+    // Build direction candidates (0->1) and (1->0), pick the globally best.
+    auto try_direction = [&](int i, int j)->Decision {
+        Decision d{};
+        const RealT avail = pool.balances[static_cast<size_t>(i)];
+        if (!(avail > 0)) return d;
+
+        // Bounds
+        RealT dx_lo = std::max(EPS_DX, avail * std::max<RealT>(RealT(1e-12), min_swap_frac));
+        RealT dx_hi = avail * max_swap_frac;
+
+        // Notional cap in coin0 units
+        if (std::isfinite(static_cast<double>(notional_cap_coin0)) && notional_cap_coin0 > 0) {
+            if (i == 0) dx_hi = std::min(dx_hi, notional_cap_coin0);
+            else        dx_hi = std::min(dx_hi, (cex_price > 0) ? notional_cap_coin0 / cex_price : dx_hi);
+        }
+        if (!(dx_hi > dx_lo)) return d;
+
+        // Quick pre-filter using current-state bid/ask to skip obviously unprofitable directions.
+        // (Keeps runtime low; we still fully maximize if it passes.)
+        const auto xp_now    = pool_xp_current(pool);
+        const RealT p_now    = stableswap::MathOps<RealT>::get_p(
+                                   xp_now, pool.D, {pool.A, pool.gamma}) * pool.cached_price_scale;
+        const RealT fee_out0 = dyn_fee(xp_now, pool.mid_fee, pool.out_fee, pool.fee_gamma);
+        const RealT one_m    = std::max<RealT>(RealT(1) - fee_out0, RealT(1e-12));
+        const RealT p_pool_bid0 = one_m * p_now;
+        const RealT p_pool_ask0 = p_now / one_m;
+        const RealT p_cex_bid   = (RealT(1) - fee_cex) * cex_price;
+        const RealT p_cex_ask   = (RealT(1) + fee_cex) * cex_price;
+        const RealT edge_01     = p_cex_bid - p_pool_ask0; // >0 suggests 0->1 profitable at margin (ignoring gas)
+        const RealT edge_10     = p_pool_bid0 - p_cex_ask; // >0 suggests 1->0 profitable at margin (ignoring gas)
+        if ((i == 0 && edge_01 <= 0) && (i == 1)) { /* fallthrough */ }
+        if ((i == 1 && edge_10 <= 0) && (i == 0)) { /* fallthrough */ }
+        // We do NOT early-return on negative edge; gas can only hurt, but we’ll still check endpoints.
+
+        // Coarse log-spaced scan to find a good bracket for the maximum
+        std::array<RealT, 1 + 12> xs{}; // capacity guard; N_COARSE<=12 default
+        std::array<RealT, 1 + 12> fs{};
+        const int K = std::max(2, N_COARSE);
+        const RealT log_lo = std::log(dx_lo);
+        const RealT log_hi = std::log(dx_hi);
+        int argmax_k = 0;
+
+        for (int k = 0; k < K; ++k) {
+            RealT t = static_cast<RealT>(k) / static_cast<RealT>(K - 1);
+            RealT x = std::exp(log_lo + t * (log_hi - log_lo));
+            auto [pi, _fee_tok] = profit_fn(i, j, x);
+            xs[k] = x; fs[k] = pi;
+            if (k == 0 || pi > fs[argmax_k]) argmax_k = k;
+        }
+
+        // If the best coarse point is negative profit, no trade in this direction.
+        if (!(fs[argmax_k] > 0)) return d;
+
+        // Try to form a unimodal bracket around the coarse max; fallback to boundary if monotone.
+        RealT a = dx_lo, c = dx_hi;
+        bool have_bracket = false;
+        if (argmax_k > 0 && argmax_k < K - 1) {
+            if (fs[argmax_k] >= fs[argmax_k - 1] && fs[argmax_k] >= fs[argmax_k + 1]) {
+                a = xs[argmax_k - 1];
+                c = xs[argmax_k + 1];
+                have_bracket = true;
+            }
+        }
+        if (!have_bracket) {
+            // Monotone case: take the better boundary
+            RealT f_lo = fs[0], f_hi = fs[K - 1];
+            RealT dx_pick = (f_hi >= f_lo) ? dx_hi : dx_lo;
+            auto [pi, fee_tok] = profit_fn(i, j, dx_pick);
+            if (!(pi > 0)) return d;
+            d.do_trade = true;
+            d.i = i; d.j = j;
+            d.dx = dx_pick;
+            d.profit = pi;
+            d.fee_tokens = fee_tok;
+            d.notional_coin0 = (i == 0) ? dx_pick : dx_pick * cex_price;
+            return d;
+        }
+
+        // Refine the interior maximum with golden-section search of the true profit function.
+        auto f_scalar = [&](RealT x)->RealT {
+            auto [pi, _] = profit_fn(i, j, x);
+            return pi;
+        };
+        RealT x_best = xs[argmax_k];
+        RealT f_best = fs[argmax_k];
+        golden_section_max(f_scalar, a, c, x_best, f_best);
+
+        // Safety: clamp to [dx_lo, dx_hi]
+        if (x_best < dx_lo) x_best = dx_lo;
+        if (x_best > dx_hi) x_best = dx_hi;
+
+        auto [pi_best, fee_tok_best] = profit_fn(i, j, x_best);
+        if (!(pi_best > 0)) return d;
+
+        d.do_trade = true;
+        d.i = i; d.j = j;
+        d.dx = x_best;
+        d.profit = pi_best;
+        d.fee_tokens = fee_tok_best;
+        d.notional_coin0 = (i == 0) ? x_best : x_best * cex_price;
+        return d;
+    };
+
+    // Evaluate both directions and pick the better positive profit, if any.
+    Decision d01 = try_direction(0, 1);
+    Decision d10 = try_direction(1, 0);
+    if (d01.do_trade && (!d10.do_trade || d01.profit >= d10.profit)) return d01;
+    if (d10.do_trade) return d10;
+    return best; // no profitable trade
+}
 
 // ----------------------- Trading decision & sizing ---------------------------
 static Decision decide_trade(
@@ -799,7 +981,7 @@ int main(int argc, char* argv[]) {
                         }
 
                         // Decide and trade
-                        Decision d = decide_trade(pool, ev.p_cex, costs, notional_cap_coin0,
+                        Decision d = decide_trade_size(pool, ev.p_cex, costs, notional_cap_coin0,
                                                   static_cast<RealT>(min_swap_frac),
                                                   static_cast<RealT>(max_swap_frac));
 
