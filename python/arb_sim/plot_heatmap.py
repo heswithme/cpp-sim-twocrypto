@@ -21,6 +21,7 @@ from typing import Any, Dict, List, Tuple
 
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.ticker import FormatStrFormatter
 
 
 HERE = Path(__file__).resolve().parent
@@ -194,7 +195,7 @@ def main() -> int:
     ap.add_argument("--annot", action="store_true", help="Annotate cells with values")
     ap.add_argument("--max-xticks", type=int, default=12, help="Max X tick labels (default: 12)")
     ap.add_argument("--max-yticks", type=int, default=12, help="Max Y tick labels (default: 12)")
-    ap.add_argument("--font-size", type=int, default=18, help="Tick label font size (default: 12)")
+    ap.add_argument("--font-size", type=int, default=12, help="Tick label font size (default: 12)")
     ap.add_argument("--log-x", dest="log_x", action="store_true", help="Use log scale on X (default: disabled)", default=False)
     ap.add_argument("--no-log-x", dest="log_x", action="store_false", help="Disable log scale on X")
     ap.add_argument("--log-y", dest="log_y", action="store_true", help="Use log scale on Y (default: disabled)", default=False)
@@ -321,9 +322,31 @@ def main() -> int:
             ax.set_xlabel(xlabel, fontsize=args.font_size + 2)
             title_scale = " (%)" if sperc else (" (scaled 1e18)" if s18 else "")
             ax.set_title(f"{m}{title_scale}", fontsize=args.font_size + 4)
+
+            # Compute absolute min/max for color mapping and ticks
+            finite_vals = Z[np.isfinite(Z)]
+            if finite_vals.size:
+                zmin = float(np.min(finite_vals))
+                zmax = float(np.max(finite_vals))
+                if zmax == zmin:
+                    # Avoid degenerate clim; expand slightly
+                    eps = 1e-12 if zmax == 0 else abs(zmax) * 1e-12
+                    im.set_clim(zmin - eps, zmax + eps)
+                    tick_vals = [zmin]
+                else:
+                    im.set_clim(zmin, zmax)
+                    # Ensure min and max appear as ticks
+                    tick_vals = list(np.linspace(zmin, zmax, num=5))
+            else:
+                tick_vals = None
+
             cb = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
             cb.set_label(m + (" (%)" if sperc else ""), fontsize=args.font_size)
             cb.ax.tick_params(labelsize=args.font_size)
+            if tick_vals is not None:
+                cb.set_ticks(tick_vals)
+            # Fixed decimal formatter for colorbar ticks
+            cb.ax.yaxis.set_major_formatter(FormatStrFormatter('%g'))
             if args.annot:
                 for i in range(Z.shape[0]):
                     for j in range(Z.shape[1]):

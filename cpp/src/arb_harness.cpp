@@ -392,6 +392,7 @@ static Decision decide_trade(
     const RealT edge_10 = p_pool_bid0 - p_cex_ask; // >0 : 1->0 profitable at the margin
 
     int i = -1, j = -1;
+    // printf("cex_price: %f, edge_01: %f, edge_10: %f\n", cex_price, edge_01, edge_10);
     if (edge_01 <= 0 && edge_10 <= 0) return d;    // no profitable direction
 
     // Choose the direction with the larger POSITIVE edge
@@ -400,12 +401,12 @@ static Decision decide_trade(
     // ----- Trade bounds -----
     const RealT avail = pool.balances[static_cast<size_t>(i)];
     if (!(avail > 0)) return d;
-
     RealT dx_lo = std::max<RealT>(RealT(1e-18), avail * std::max<RealT>(RealT(1e-12), min_swap_frac));
     RealT dx_hi = avail * max_swap_frac;
     if (std::isfinite(static_cast<double>(notional_cap_coin0)) && notional_cap_coin0 > 0) {
         dx_hi = (i == 0) ? std::min(dx_hi, notional_cap_coin0)
-                         : std::min(dx_hi, (cex_price > 0) ? notional_cap_coin0 / cex_price : dx_hi);
+                         : std::min(dx_hi, notional_cap_coin0 / pool.cached_price_scale);
+
     }
     if (!(dx_hi > dx_lo)) return d;
 
@@ -437,7 +438,6 @@ static Decision decide_trade(
         if ((i == 0 && !(F_lo < 0)) || (i == 1 && !(F_lo > 0))) return d;
         dx_star = dx_hi; // all profitable until cap
     }
-
     // ----- Final profit check using a single dry simulation -----
     auto [dy_after_fee, fee_tokens] = simulate_exchange_once(pool, static_cast<size_t>(i), static_cast<size_t>(j), dx_star);
     const RealT f_sell  = (RealT(1) - fee_cex);
@@ -619,7 +619,9 @@ load_candles(const std::string& path, size_t max_candles = 0, double squeeze_fra
                 if (c.low  < min_l) c.low  = min_l;
             }
         }
-        out.push_back(c);
+        // if (c.ts < 16725367000) { //CANDLE HARDSTOP
+            out.push_back(c);
+        // }
     }
     return out;
 }
@@ -959,6 +961,9 @@ int main(int argc, char* argv[]) {
                         if (differs_rel(after, before)) m.n_rebalances += 1;
                     };
 
+                    // Metric: sum of |p_cex - price_scale| at the beginning of each event
+                    long double total_cex_diff = 0.0L;
+                    long double max_cex_diff = 0.0L;
                     const auto t_pool0 = clk::now();
                     uint64_t last_dust_ts = init_ts;
                     push_state(); // initial snapshot
@@ -966,6 +971,11 @@ int main(int argc, char* argv[]) {
                     // ---- Main event loop ----
                     for (const auto& ev : events) {
                         pool.set_block_timestamp(ev.ts);
+                        // Sample at beginning of event (pre-trade, pre-tick)
+                        total_cex_diff += static_cast<long double>(std::abs(ev.p_cex - pool.cached_price_scale));
+                        if (static_cast<long double>(std::abs(ev.p_cex - pool.cached_price_scale)) > max_cex_diff) {
+                            max_cex_diff = static_cast<long double>(std::abs(ev.p_cex - pool.cached_price_scale));
+                        }
                         push_state(); // after time update
 
                         // Donations before trading
@@ -1080,6 +1090,14 @@ int main(int argc, char* argv[]) {
                     const uint64_t t_start = events.empty() ? init_ts : events.front().ts;
                     const uint64_t t_end   = events.empty() ? init_ts : events.back().ts;
                     const double duration_s = (t_end > t_start) ? double(t_end - t_start) : 0.0;
+
+                    // Finalize time-averaged |p_cex - price_scale| (units: price)
+                    double avg_cex_diff = -1.0;
+                    if (duration_s > 0.0) {
+                        avg_cex_diff = static_cast<double>(total_cex_diff) / duration_s;
+                    }
+                    summary["avg_cex_diff"] = avg_cex_diff;
+                    summary["max_cex_diff"] = static_cast<double>(max_cex_diff);
 
                     const RealT tvl_end = pool.balances[0] + pool.balances[1] * pool.cached_price_scale;
                     // Baseline: HODL initial balances valued at end price (coin0 units)

@@ -116,6 +116,7 @@ def _build_ref_grid(ref: Dict[str, Any], x_name: str, y_name: str, xs: List[floa
         "arb_pnl_coin0": "arb_profit_coin0",
         "n_rebalances": "n_rebalances",
         "vpminusone": "vpminusone",
+        "max_cex_diff": "max_cex_diff",
     }
     ref_key = name_map.get(metric, metric)
 
@@ -250,7 +251,7 @@ def main() -> int:
         "total_notional_coin0",
         "trades",
         # "donation_coin0_total",
-        "arb_pnl_coin0",
+        "max_cex_diff",
     ]
 
     # Build first grid to define axes

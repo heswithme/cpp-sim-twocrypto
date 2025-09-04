@@ -15,6 +15,7 @@ form {tag, pool, costs}.
 import json
 from pathlib import Path
 from datetime import datetime, timezone
+import math
 import numpy as np
 from pool_helpers import _first_candle_ts, _initial_price_from_file, strify_pool
 
@@ -31,11 +32,11 @@ ymin = 5e-4 * 10**10
 ymax =  .1 * 10**10
 ylogspace = True
 
-xmin = 1 * 10_000
-xmax = xmin
-ymin = int(0.1 * 10**10)
-ymax = ymin
-N_GRID = 1
+# xmin = 8.5 * 10_000
+# xmax = xmin
+# ymin = int(0.1 * 10**10)
+# ymax = ymin
+# N_GRID = 1
 
 # X_name = "donation_apy" 
 # xmin = 0.01
@@ -62,18 +63,18 @@ else:
 # Y_vals = [int(x) for x in Y_vals]
 
 init_liq = 20_000_000 # in coin0
-# DEFAULT_DATAFILE = "python/arb_sim/trade_data/btcusd/train-1y-1672534920-btcusd.json"
-DEFAULT_DATAFILE = "python/arb_sim/trade_data/btcusd/synth-1m.json"
+DEFAULT_DATAFILE = "python/arb_sim/trade_data/btcusd/train-1y-1672534920-btcusd.json"
+# DEFAULT_DATAFILE = "python/arb_sim/trade_data/btcusd/synth-1m.json"
 
 START_TS = _first_candle_ts(DEFAULT_DATAFILE)
 init_price = _initial_price_from_file(DEFAULT_DATAFILE)
 # -------------------- Base Templates --------------------
 BASE_POOL = {
     # All values are integers in their native units
-    "initial_liquidity": [int(init_liq//2) * 10**18, int(init_liq//2 / init_price) * 10**18],
+    "initial_liquidity": [int(init_liq * 10**18/2) , int(init_liq* 10**18/2 / init_price)],
     "adjustment_step": int(1e-7 * 10**18),
     "fee_gamma": int(0.003 * 10**18),
-    "ma_time": 866,
+    "ma_time": 600/math.log(2),
     "mid_fee": int(0.003 * 10**10),
     "out_fee": int(0.003 * 10**10),
     "allowed_extra_profit": int(1e-10 * 10**18),
@@ -86,8 +87,8 @@ BASE_POOL = {
     # - donation_apy: plain fraction per year (0.05 => 5%).
     # - donation_frequency: seconds between donations.
     # - donation_coins_ratio: fraction of donation in coin1 (0=all coin0, 1=all coin1)
-    "donation_apy": 0.00,
-    "donation_frequency": int(7*86400),
+    "donation_apy": 0.1,
+    "donation_frequency": int(7*86_400),
     "donation_coins_ratio": 0,
 }
 
