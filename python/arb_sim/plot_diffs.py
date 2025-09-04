@@ -114,6 +114,8 @@ def _build_ref_grid(ref: Dict[str, Any], x_name: str, y_name: str, xs: List[floa
         "trades": "n_trades",
         "donation_coin0_total": "donation_coin0_total",
         "arb_pnl_coin0": "arb_profit_coin0",
+        "n_rebalances": "n_rebalances",
+        "vpminusone": "vpminusone",
     }
     ref_key = name_map.get(metric, metric)
 
@@ -243,8 +245,8 @@ def main() -> int:
     # Hardcoded metrics in the same order as heatmap/ref_plot_all
     metrics: List[str] = [
         "apy",
-        "apy_coin0",
-        "apy_coin0_boost",
+        "vpminusone",
+        "n_rebalances",
         "total_notional_coin0",
         "trades",
         # "donation_coin0_total",
@@ -253,7 +255,7 @@ def main() -> int:
 
     # Build first grid to define axes
     def metric_scale_percent(m: str) -> bool:
-        return ('apy' in (m or '').lower())
+        return m.lower() in {"vpminusone", "apy"}
 
     first_m = metrics[0]
     s_perc = metric_scale_percent(first_m)

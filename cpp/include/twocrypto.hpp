@@ -520,6 +520,7 @@ public:
 
         // EMA update (only update last_timestamp on this path)
         uint64_t last_ts = last_timestamp;
+        // printf("last_ts=%llu, block_timestamp=%llu\n", last_ts, block_timestamp);
         if (last_ts < block_timestamp) {
             T dt = T(block_timestamp - last_ts);
             if constexpr (std::is_same_v<T, stableswap::uint256>) {
@@ -540,9 +541,13 @@ public:
                 auto alpha = std::exp(
                     - static_cast<double>(dt) / static_cast<double>(ma_time)
                 );
+                // printf("t=%llu, dt=%g, ma_time=%g, alpha=%g\n", block_timestamp, static_cast<double>(dt), static_cast<double>(ma_time), static_cast<double>(alpha));
                 T capped = last_prices;
                 if (capped > 2 * price_scale) capped = 2 * price_scale;
+                // printf("price_oracle1=%g, capped=%g\n", static_cast<double>(price_oracle), static_cast<double>(capped));
                 price_oracle = capped * (T(1) - T(alpha)) + price_oracle * T(alpha);
+                // printf("price_oracle2=%g\n", static_cast<double>(price_oracle));
+
             }
             cached_price_oracle = price_oracle;
             last_timestamp      = block_timestamp;

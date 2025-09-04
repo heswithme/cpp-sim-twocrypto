@@ -19,10 +19,10 @@ from pathlib import Path
 # Hardcoded params (tweak here if needed)
 START_ISO = "2025-01-01T10:00:00Z"
 START_PRICE = 100_000.0
-STEP = 20.0
-UP_MINUTES = 100
-DOWN_MINUTES = 100
-INTERVAL_S = 60
+STEP = 1000.0
+UP_MINUTES = 1000
+DOWN_MINUTES = 1
+INTERVAL_S = 200
 VOLUME = 1_000_000.0
 OUT_PATH = Path(__file__).resolve().parent / "trade_data" / "btcusd" / "synth-1m.json"
 

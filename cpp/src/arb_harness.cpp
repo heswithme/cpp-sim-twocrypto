@@ -572,7 +572,7 @@ static void parse_pool_entry(const json::object& entry, PoolInit& out_pool, Cost
 
 // --------------------------- Candles & eventization --------------------------
 static std::vector<Candle>
-load_candles(const std::string& path, size_t max_candles = 0, double squeeze_frac = 0.10)
+load_candles(const std::string& path, size_t max_candles = 0, double squeeze_frac = .999)
 {
     std::vector<Candle> out; out.reserve(1024);
     std::ifstream in(path, std::ios::binary);
@@ -631,8 +631,8 @@ static std::vector<Event> gen_events(const std::vector<Candle>& cs) {
         const RealT path1 = std::abs(c.open - c.low)  + std::abs(c.high - c.close);
         const RealT path2 = std::abs(c.open - c.high) + std::abs(c.low  - c.close);
         const bool first_low = path1 < path2;
-        evs.push_back(Event{c.ts - 5,  first_low ? c.low  : c.high, c.volume/RealT(2)});
-        evs.push_back(Event{c.ts + 5, first_low ? c.high : c.low,  c.volume/RealT(2)});
+        evs.push_back(Event{c.ts ,  first_low ? c.low  : c.high, c.volume/RealT(2)});
+        evs.push_back(Event{c.ts + 10, first_low ? c.high : c.low,  c.volume/RealT(2)});
     }
     std::sort(evs.begin(), evs.end(), [](auto& a, auto& b){ return a.ts < b.ts; });
     return evs;
@@ -845,7 +845,7 @@ int main(int argc, char* argv[]) {
     double min_swap_frac  = 1e-6;
     double max_swap_frac  = 1.0;
     size_t n_workers      = std::max<size_t>(1, std::thread::hardware_concurrency());
-    double candle_filter_pct = 10.0;       // +/-10% squeeze around (O+C)/2
+    double candle_filter_pct = 99;       // +/-X% squeeze around (O+C)/2
     uint64_t dustswapfreq_s  = 3600;       // EMA update tick cadence when idle
 
     for (int i = 4; i < argc; ++i) {
@@ -960,7 +960,7 @@ int main(int argc, char* argv[]) {
                     };
 
                     const auto t_pool0 = clk::now();
-                    uint64_t last_dust_ts = 0;
+                    uint64_t last_dust_ts = init_ts;
                     push_state(); // initial snapshot
 
                     // ---- Main event loop ----
@@ -976,9 +976,8 @@ int main(int argc, char* argv[]) {
                         // Optional volume cap (coin0 notional)
                         RealT notional_cap_coin0 = std::numeric_limits<RealT>::infinity();
                         if (costs.use_volume_cap) {
-                            notional_cap_coin0 = ev.volume * ev.p_cex * costs.volume_cap_mult;
+                            notional_cap_coin0 = ev.volume * costs.volume_cap_mult;
                         }
-
                         // Decide and trade
                         Decision d = decide_trade(pool, ev.p_cex, costs, notional_cap_coin0,
                                                   static_cast<RealT>(min_swap_frac),
@@ -987,21 +986,24 @@ int main(int argc, char* argv[]) {
                         if (!d.do_trade) {
                             // Idle: opportunistic EMA/price tweak at coarse cadence
                             const bool can_tick = (dustswapfreq_s == 0) ||
-                                                  (last_dust_ts == 0) ||
-                                                  (ev.ts >= last_dust_ts + dustswapfreq_s);
+                                                  (ev.ts >= pool.last_timestamp + dustswapfreq_s);
                             if (!can_tick) continue;
                             try {
-                                const RealT ps_before = pool.cached_price_scale;
-                                const RealT p_before  = pre_p_pool;
+                                const RealT log_ps_before = pool.cached_price_scale;
+                                const RealT log_oracle_before = pool.cached_price_oracle;
                                 pool.tick();
-                                const RealT ps_after  = pool.cached_price_scale;
-                                count_rebalance(ps_before, ps_after);
+                                const RealT log_ps_after  = pool.cached_price_scale;
+                                const RealT log_oracle_after = pool.cached_price_oracle;
+                                count_rebalance(log_ps_before, log_ps_after);
                                 if (save_actions) {
                                     json::object tr;
                                     tr["type"] = "tick";
                                     tr["ts"]   = ev.ts;
                                     tr["p_cex"] = static_cast<double>(ev.p_cex);
-                                    tr["p_pool_before"] = static_cast<double>(p_before);
+                                    tr["ps_before"] = static_cast<double>(log_ps_before);
+                                    tr["psafter"] = static_cast<double>(log_ps_after);
+                                    tr["oracle_before"] = static_cast<double>(log_oracle_before);
+                                    tr["oracle_after"] = static_cast<double>(log_oracle_after);
                                     actions.push_back(std::move(tr));
                                     push_state();
                                 }
@@ -1012,11 +1014,15 @@ int main(int argc, char* argv[]) {
 
                         try {
                             const RealT ps_before = pool.cached_price_scale;
+                            const RealT oracle_before = pool.cached_price_oracle;
+                            const RealT last_ts_before = pool.last_timestamp;
                             auto res = pool.exchange((RealT)d.i, (RealT)d.j, d.dx, RealT(0));
+                            const RealT last_ts_after = pool.last_timestamp;
+                            const RealT oracle_after = pool.cached_price_oracle;
                             const RealT dy_after_fee = res[0];
                             const RealT fee_tokens   = res[1];
                             const RealT ps_after     = pool.cached_price_scale;
-
+                            const RealT p_after = pool.get_p();
                             m.trades   += 1;
                             m.notional += d.notional_coin0;
                             m.lp_fee_coin0 += (d.j == 1 ? fee_tokens * ev.p_cex : fee_tokens);
@@ -1035,6 +1041,13 @@ int main(int argc, char* argv[]) {
                                 tr["profit_coin0"] = static_cast<double>(d.profit);
                                 tr["p_cex"]        = static_cast<double>(ev.p_cex);
                                 tr["p_pool_before"]= static_cast<double>(pre_p_pool);
+                                tr["p_pool_after"] = static_cast<double>(p_after);
+                                tr["oracle_before"] = static_cast<double>(oracle_before);
+                                tr["oracle_after"] = static_cast<double>(oracle_after);
+                                tr["ps_before"] = static_cast<double>(ps_before);
+                                tr["ps_after"] = static_cast<double>(ps_after);
+                                tr["last_ts_before"] = static_cast<double>(last_ts_before);
+                                tr["last_ts_after"] = static_cast<double>(last_ts_after);
                                 actions.push_back(std::move(tr));
                                 push_state();
                             }
@@ -1109,7 +1122,8 @@ int main(int argc, char* argv[]) {
                     // For reference, include raw (non-baseline) APYs
                     summary["apy_coin0_raw"]         = apy_coin0_raw;
                     summary["apy_coin0_boost_raw"]= apy_coin0_boost_raw;
-
+                    summary["vp"]                = static_cast<double>(pool.get_virtual_price());
+                    summary["vpminusone"]        = static_cast<double>(pool.get_virtual_price() - 1.0);
                     json::object params;
                     params["pool"] = echo_pool;
                     if (!echo_costs.empty()) params["costs"] = echo_costs;

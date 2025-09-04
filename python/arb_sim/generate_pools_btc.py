@@ -31,11 +31,12 @@ ymin = 5e-4 * 10**10
 ymax =  .1 * 10**10
 ylogspace = True
 
-# xmin = 20 * 10_000
-# xmax = 20 * 10_000
-# ymin = int(0.005 * 10**10)
-# ymax = int(0.005 * 10**10)
-# N_GRID = 1
+xmin = 1 * 10_000
+xmax = xmin
+ymin = int(0.1 * 10**10)
+ymax = ymin
+N_GRID = 1
+
 # X_name = "donation_apy" 
 # xmin = 0.01
 # xmax = 0.1
@@ -58,10 +59,12 @@ else:
 
 # #optionally int-ify
 # X_vals = [int(x) for x in X_vals]
-Y_vals = [int(x) for x in Y_vals]
+# Y_vals = [int(x) for x in Y_vals]
 
 init_liq = 20_000_000 # in coin0
-DEFAULT_DATAFILE = "python/arb_sim/trade_data/btcusd/train-1y-1672534920-btcusd.json"
+# DEFAULT_DATAFILE = "python/arb_sim/trade_data/btcusd/train-1y-1672534920-btcusd.json"
+DEFAULT_DATAFILE = "python/arb_sim/trade_data/btcusd/synth-1m.json"
+
 START_TS = _first_candle_ts(DEFAULT_DATAFILE)
 init_price = _initial_price_from_file(DEFAULT_DATAFILE)
 # -------------------- Base Templates --------------------
