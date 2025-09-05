@@ -32,11 +32,11 @@ ymin = 5e-4 * 10**10
 ymax =  .1 * 10**10
 ylogspace = True
 
-# xmin = 8.5 * 10_000
-# xmax = xmin
-# ymin = int(0.1 * 10**10)
-# ymax = ymin
-# N_GRID = 1
+xmin = 15 * 10_000
+xmax = xmin
+ymin = int(0.02 * 10**10)
+ymax = ymin
+N_GRID = 1
 
 # X_name = "donation_apy" 
 # xmin = 0.01
@@ -87,9 +87,9 @@ BASE_POOL = {
     # - donation_apy: plain fraction per year (0.05 => 5%).
     # - donation_frequency: seconds between donations.
     # - donation_coins_ratio: fraction of donation in coin1 (0=all coin0, 1=all coin1)
-    "donation_apy": 0.1,
+    "donation_apy": 0.05,
     "donation_frequency": int(7*86_400),
-    "donation_coins_ratio": 0,
+    "donation_coins_ratio": 0.5,
 }
 
 BASE_COSTS = {

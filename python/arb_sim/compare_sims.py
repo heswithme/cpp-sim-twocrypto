@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-compare_sims: Align and compare action flow between arb_run JSON and trades JSONL.
+compare_sims: Align and compare action flow between new_sim (arb_run JSON) and mich_sim (trades JSONL).
 
 - Merges post-trade tweak_price into trades in JSONL (using trade_happened or same-ts heuristic).
 - Prints a single chronological flow (exchanges, then scheduled tweaks) with per-field deltas.
@@ -18,6 +18,7 @@ Usage:
 """
 
 import argparse, json, os, re
+from typing import List
 from pathlib import Path
 from collections import defaultdict
 
@@ -71,6 +72,11 @@ def load_arb_actions(path):
                 "ps_post": _f(a.get("ps_after", a.get("psafter"))),
                 "oracle_pre": _f(a.get("oracle_before")),
                 "oracle_post": _f(a.get("oracle_after")),
+                # New: virtual price and xcp_profit before/after (arb/new_sim fields)
+                "vp_pre": _f(a.get("vp_before", a.get("vp_pre"))),
+                "vp_post": _f(a.get("vp_after", a.get("vp_post"))),
+                "xcp_profit_pre": _f(a.get("xcp_profit_before", a.get("xcp_profit_pre"))),
+                "xcp_profit_post": _f(a.get("xcp_profit_after", a.get("xcp_profit_post"))),
             })
         elif a.get("type") == "tick":
             tk.append({
@@ -80,6 +86,11 @@ def load_arb_actions(path):
                 "ps_post": _f(a.get("ps_after", a.get("psafter"))),
                 "oracle_pre": _f(a.get("oracle_before")),
                 "oracle_post": _f(a.get("oracle_after")),
+                # New: virtual price and xcp_profit before/after if provided
+                "vp_pre": _f(a.get("vp_before", a.get("vp_pre"))),
+                "vp_post": _f(a.get("vp_after", a.get("vp_post"))),
+                "xcp_profit_pre": _f(a.get("xcp_profit_before", a.get("xcp_profit_pre"))),
+                "xcp_profit_post": _f(a.get("xcp_profit_after", a.get("xcp_profit_post"))),
             })
     return ex, tk
 
@@ -116,6 +127,15 @@ def load_jsonl(path):
                     ex[idx]["ps_post"] = _f(ev.get("ps_post"))
                     ex[idx]["oracle_pre"] = _f(ev.get("oracle_pre"))
                     ex[idx]["oracle_post"] = _f(ev.get("oracle_post"))
+                    # Also capture vp/xcp_profit if present, but prefer values from exchange line if already set
+                    if ex[idx].get("vp_pre") is None:
+                        ex[idx]["vp_pre"] = _f(ev.get("vp_pre", ev.get("vp_before")))
+                    if ex[idx].get("vp_post") is None:
+                        ex[idx]["vp_post"] = _f(ev.get("vp_post", ev.get("vp_after")))
+                    if ex[idx].get("xcp_profit_pre") is None:
+                        ex[idx]["xcp_profit_pre"] = _f(ev.get("xcp_profit_pre", ev.get("xcp_profit_before")))
+                    if ex[idx].get("xcp_profit_post") is None:
+                        ex[idx]["xcp_profit_post"] = _f(ev.get("xcp_profit_post", ev.get("xcp_profit_after")))
                     pending_by_ts.pop(ts, None)
                 else:
                     tk.append({
@@ -125,6 +145,11 @@ def load_jsonl(path):
                         "ps_post": _f(ev.get("ps_post")),
                         "oracle_pre": _f(ev.get("oracle_pre")),
                         "oracle_post": _f(ev.get("oracle_post")),
+                        # New: vp/xcp_profit if present on tweak
+                        "vp_pre": _f(ev.get("vp_pre", ev.get("vp_before"))),
+                        "vp_post": _f(ev.get("vp_post", ev.get("vp_after"))),
+                        "xcp_profit_pre": _f(ev.get("xcp_profit_pre", ev.get("xcp_profit_before"))),
+                        "xcp_profit_post": _f(ev.get("xcp_profit_post", ev.get("xcp_profit_after"))),
                     })
             else:
                 tk.append({
@@ -134,6 +159,11 @@ def load_jsonl(path):
                     "ps_post": _f(ev.get("ps_post")),
                     "oracle_pre": _f(ev.get("oracle_pre")),
                     "oracle_post": _f(ev.get("oracle_post")),
+                    # New: vp/xcp_profit if present on tweak
+                    "vp_pre": _f(ev.get("vp_pre", ev.get("vp_before"))),
+                    "vp_post": _f(ev.get("vp_post", ev.get("vp_after"))),
+                    "xcp_profit_pre": _f(ev.get("xcp_profit_pre", ev.get("xcp_profit_before"))),
+                    "xcp_profit_post": _f(ev.get("xcp_profit_post", ev.get("xcp_profit_after"))),
                 })
             continue
 
@@ -153,6 +183,11 @@ def load_jsonl(path):
             "spot_pre": _f(sp_pre),
             "spot_post": _f(sp_post),
             "profit": _f(ev.get("profit_coin0")),
+            # New: vp/xcp_profit if present on trade lines
+            "vp_pre": _f(ev.get("vp_pre", ev.get("vp_before"))),
+            "vp_post": _f(ev.get("vp_post", ev.get("vp_after"))),
+            "xcp_profit_pre": _f(ev.get("xcp_profit_pre", ev.get("xcp_profit_before"))),
+            "xcp_profit_post": _f(ev.get("xcp_profit_post", ev.get("xcp_profit_after"))),
         })
         pending_by_ts[ts] = len(ex) - 1
     return ex, tk
@@ -194,68 +229,95 @@ def _group_by_ts(events):
     return m
 
 
+def _format_value(name, v):
+    if v is None:
+        return "—"
+    try:
+        x = float(v)
+    except Exception:
+        return str(v)
+    if name in ("vp_pre","vp_post","xcp_profit_pre","xcp_profit_post"):
+        return f"{x:0.12f}"
+    return f"{x:0.4f}"
+
+
+def _print_table(lines, kind, event_id, a, b, metrics, rtol, atol):
+    ts_a = a.get('ts') if a else '—'
+    ts_b = b.get('ts') if b else '—'
+    lines.append(f"[{kind} #{event_id}] ts: new_sim={ts_a} mich_sim={ts_b}")
+    rows = [("new_sim", a or {}), ("mich_sim", b or {})]
+    label_w = max(len("simulator"), *(len(r[0]) for r in rows))
+    col_ws = []
+    for m in metrics:
+        w = len(m)
+        for _, row in rows:
+            w = max(w, len(_format_value(m, row.get(m))))
+        col_ws.append(w)
+    header = ["simulator".ljust(label_w)] + [metrics[i].rjust(col_ws[i]) for i in range(len(metrics))]
+    lines.append(" | ".join(header))
+    sep = ["-" * label_w] + ["-" * col_ws[i] for i in range(len(metrics))]
+    lines.append("-+-".join(sep))
+    for name, row in rows:
+        vals = [name.ljust(label_w)] + [_format_value(metrics[i], row.get(metrics[i])).rjust(col_ws[i]) for i in range(len(metrics))]
+        lines.append(" | ".join(vals))
+    # Add per-metric absolute and relative difference rows
+    abs_vals: List[str] = ["abs_diff".ljust(label_w)]
+    rel_vals: List[str] = ["rel_diff".ljust(label_w)]
+    for i, mname in enumerate(metrics):
+        av = (a or {}).get(mname)
+        bv = (b or {}).get(mname)
+        try:
+            if av is None or bv is None:
+                abs_s = rel_s = "—"
+            else:
+                fa = float(av); fb = float(bv)
+                abs_d = abs(fa - fb)
+                denom = max(abs(fa), abs(fb), 1.0)
+                rel_d = abs_d / denom
+                abs_s = f"{abs_d:.3e}"
+                rel_s = f"{rel_d:.3e}"
+        except Exception:
+            abs_s = rel_s = "—"
+        abs_vals.append(abs_s.rjust(col_ws[i]))
+        rel_vals.append(rel_s.rjust(col_ws[i]))
+    lines.append(" | ".join(abs_vals))
+    lines.append(" | ".join(rel_vals))
+
+
 def _print_exchange_event(lines, ts, event_id, a, b, rtol, atol):
+    metrics = [
+        "dx","dy","p_cex","spot_pre","spot_post","profit",
+        "ps_pre","ps_post","oracle_pre","oracle_post",
+        "vp_pre","vp_post","xcp_profit_pre","xcp_profit_post",
+    ]
     mism = 0
     if a is None or b is None:
-        # Missing counterpart
-        arb_ts = a.get('ts') if a else '—'
-        js_ts = b.get('ts') if b else '—'
-        lines.append(f"[exchange #{event_id}] ts: arb={arb_ts} jsonl={js_ts} *")
-        src = a if a is not None else b
-        side = "arb" if a is not None else "jsonl"
-        lines.append(f"  present={side}, missing={'jsonl' if side=='arb' else 'arb'}")
-        # Print available metrics for context (rebalance first)
-        if src is not None:
-            lines.append(f"  rebalance: {_rebalance_flag(src, rtol, atol)}")
-            for k in ["dx","dy","p_cex","spot_pre","spot_post","profit","ps_pre","ps_post","oracle_pre","oracle_post"]:
-                lines.append(f"  {k}: {src.get(k)}")
-        return 1  # count as mismatch
-
-    # Both present: compare and print all fields
-    ts_marker = " *" if a["ts"] != b["ts"] else ""
-    lines.append(f"[exchange #{event_id}] ts: arb={a['ts']} jsonl={b['ts']}{ts_marker}")
-    checks = [("rebalance", _rebalance_flag(a, rtol, atol), _rebalance_flag(b, rtol, atol))]
-    checks += [(k, a.get(k), b.get(k)) for k in [
-        "dx","dy","p_cex","spot_pre","spot_post","profit","ps_pre","ps_post","oracle_pre","oracle_post"
-    ]]
+        _print_table(lines, "exchange", event_id, a, b, metrics, rtol, atol)
+        return 1
     failing = False
-    for name, av, bv in checks:
-        ok = isclose(av, bv, rtol, atol)
-        if not ok:
+    for m in metrics:
+        if not isclose(a.get(m), b.get(m), rtol, atol):
             failing = True
-        star = not ok
-        prefix = "* " if star else ""
-        lines.append(f"  {prefix}{name}: arb={av} jsonl={bv} ({_delta_str(av, bv)})")
+    _print_table(lines, "exchange", event_id, a, b, metrics, rtol, atol)
     if failing:
         mism += 1
     return mism
 
 
 def _print_tick_event(lines, ts, event_id, a, b, rtol, atol):
+    metrics = [
+        "p_cex","ps_pre","ps_post","oracle_pre","oracle_post",
+        "vp_pre","vp_post","xcp_profit_pre","xcp_profit_post",
+    ]
     mism = 0
     if a is None or b is None:
-        arb_ts = a.get('ts') if a else '—'
-        js_ts = b.get('ts') if b else '—'
-        lines.append(f"[tweak #{event_id}] ts: arb={arb_ts} jsonl={js_ts} *")
-        src = a if a is not None else b
-        side = "arb" if a is not None else "jsonl"
-        lines.append(f"  present={side}, missing={'jsonl' if side=='arb' else 'arb'}")
-        if src is not None:
-            for k in ["p_cex","ps_pre","ps_post","oracle_pre","oracle_post"]:
-                lines.append(f"  {k}: {src.get(k)}")
+        _print_table(lines, "tweak", event_id, a, b, metrics, rtol, atol)
         return 1
-
-    ts_marker = " *" if a["ts"] != b["ts"] else ""
-    lines.append(f"[tweak #{event_id}] ts: arb={a['ts']} jsonl={b['ts']}{ts_marker}")
-    checks = [(k, a.get(k), b.get(k)) for k in ["p_cex","ps_pre","ps_post","oracle_pre","oracle_post"]]
     failing = False
-    for name, av, bv in checks:
-        ok = isclose(av, bv, rtol, atol)
-        if not ok:
+    for m in metrics:
+        if not isclose(a.get(m), b.get(m), rtol, atol):
             failing = True
-        star = not ok
-        prefix = "* " if star else ""
-        lines.append(f"  {prefix}{name}: arb={av} jsonl={bv} ({_delta_str(av, bv)})")
+    _print_table(lines, "tweak", event_id, a, b, metrics, rtol, atol)
     if failing:
         mism += 1
     return mism
@@ -337,10 +399,12 @@ def main():
     ap = argparse.ArgumentParser(description="Compare action flows (simplified)")
     ap.add_argument("--arb", default=None, help="Path to arb_run_*.json (default: latest)")
     ap.add_argument("--jsonl", default=None, help="Path to trades-*.jsonl (default search: ../cryptopool-simulator/trades-0.jsonl, comparison/trades-0.jsonl)")
-    ap.add_argument("--rtol", type=float, default=1e-6)
+    ap.add_argument("--rtol", type=float, default=1e-9)
     ap.add_argument("--atol", type=float, default=1e-9)
     ap.add_argument("--limit", default="30", help="N events or 'dyn' to stop at first structural timestamp difference")
     ap.add_argument("--ex-only", action="store_true", help="Only output exchange events; suppress tweak_price events")
+    ap.add_argument("--plot-price", action="store_true", help="Show price trajectories (new_sim/mich_sim price_scale and p_cex); no save")
+    ap.add_argument("--plot-stride", type=int, default=0, help="Downsample stride for plotting (0=auto ~2000 points)")
     args = ap.parse_args()
 
     root = _repo_root()
@@ -375,8 +439,8 @@ def main():
     uni_lines, uni_stats = unified_flow(arb_ex, arb_tk, jsonl_ex, jsonl_tk, args.rtol, args.atol, limit_val, dyn, ex_only=args.ex_only)
 
     print("Summary:")
-    print(f"  exchanges: arb={len(arb_ex)} jsonl={len(jsonl_ex)}")
-    print(f"  tweaks   : arb={len(arb_tk)} jsonl={len(jsonl_tk)}")
+    print(f"  exchanges: new_sim={len(arb_ex)} mich_sim={len(jsonl_ex)}")
+    print(f"  tweaks   : new_sim={len(arb_tk)} mich_sim={len(jsonl_tk)}")
     print(f"  unified  : timestamps={uni_stats['timestamps']} events_printed={uni_stats['printed']} mismatches={uni_stats['mismatches']}")
 
     if uni_lines:
@@ -384,6 +448,110 @@ def main():
         print("\n" + title)
         for line in uni_lines:
             print("  " + line)
+
+    if args.plot_price:
+        try:
+            import matplotlib.pyplot as plt
+        except Exception as e:
+            print(f"\nPlotting unavailable (matplotlib import failed): {e}")
+            return 0
+        # Determine plotting cutoff based on --limit and --limit dyn semantics
+        ts_cutoff = None
+        try:
+            a_ex_g = _group_by_ts(arb_ex)
+            a_tk_g = _group_by_ts(arb_tk)
+            b_ex_g = _group_by_ts(jsonl_ex)
+            b_tk_g = _group_by_ts(jsonl_tk)
+            all_ts = sorted(set(a_ex_g.keys()) | set(a_tk_g.keys()) | set(b_ex_g.keys()) | set(b_tk_g.keys()))
+            if dyn:
+                for ts in all_ts:
+                    la_ex = a_ex_g.get(ts, [])
+                    lb_ex = b_ex_g.get(ts, [])
+                    la_tk = a_tk_g.get(ts, [])
+                    lb_tk = b_tk_g.get(ts, [])
+                    structural_diff_ex = (len(la_ex) != len(lb_ex))
+                    structural_diff_tk = (len(la_tk) != len(lb_tk))
+                    if structural_diff_ex or (not args.ex_only and structural_diff_tk):
+                        ts_cutoff = ts
+                        break
+            elif limit_val > 0:
+                remaining = limit_val
+                for ts in all_ts:
+                    ex_n = max(len(a_ex_g.get(ts, [])), len(b_ex_g.get(ts, [])))
+                    tk_n = 0 if args.ex_only else max(len(a_tk_g.get(ts, [])), len(b_tk_g.get(ts, [])))
+                    need = ex_n + tk_n
+                    if need <= 0:
+                        continue
+                    remaining -= need
+                    ts_cutoff = ts
+                    if remaining <= 0:
+                        break
+        except Exception:
+            ts_cutoff = None
+
+        def _ps_series(ex, tk):
+            m = {}
+            for e in ex:
+                v = e.get("ps_post") if e.get("ps_post") is not None else e.get("ps_pre")
+                if v is not None:
+                    t = int(e["ts"])
+                    if ts_cutoff is None or t <= ts_cutoff:
+                        m[t] = float(v)
+            for e in tk:
+                v = e.get("ps_post") if e.get("ps_post") is not None else e.get("ps_pre")
+                if v is not None:
+                    t = int(e["ts"])
+                    if ts_cutoff is None or t <= ts_cutoff:
+                        m[t] = float(v)
+            ts_sorted = sorted(m.keys())
+            return ts_sorted, [m[t] for t in ts_sorted]
+
+        def _pcex_series(ex, tk):
+            m = {}
+            for e in ex:
+                if e.get("p_cex") is not None:
+                    t = int(e["ts"])
+                    if ts_cutoff is None or t <= ts_cutoff:
+                        m[t] = float(e["p_cex"])
+            for e in tk:
+                if e.get("p_cex") is not None:
+                    t = int(e["ts"])
+                    if ts_cutoff is None or t <= ts_cutoff:
+                        m[t] = float(e["p_cex"])
+            ts_sorted = sorted(m.keys())
+            return ts_sorted, [m[t] for t in ts_sorted]
+
+        arb_ts, arb_ps = _ps_series(arb_ex, arb_tk)
+        js_ts, js_ps   = _ps_series(jsonl_ex, jsonl_tk)
+        pc_ts, pc_vals = _pcex_series(arb_ex if arb_ex or arb_tk else jsonl_ex, arb_tk if arb_ex or arb_tk else jsonl_tk)
+
+        def _stride(ts, vs, stride):
+            if not ts:
+                return ts, vs
+            if stride <= 0:
+                # Auto target ~2000 points
+                stride = max(1, len(ts) // 2000)
+            return ts[::stride], vs[::stride]
+
+        stride = int(args.plot_stride)
+        arb_ts, arb_ps = _stride(arb_ts, arb_ps, stride)
+        js_ts, js_ps   = _stride(js_ts, js_ps, stride)
+        pc_ts, pc_vals = _stride(pc_ts, pc_vals, stride)
+
+        # Single plot for price_scale and p_cex
+        plt.figure(figsize=(10, 5))
+        if arb_ts:
+            plt.plot(arb_ts, arb_ps, label="new_sim price_scale", linewidth=1.2)
+        if js_ts:
+            plt.plot(js_ts, js_ps, label="mich_sim price_scale", linewidth=1.2)
+        if pc_ts:
+            plt.plot(pc_ts, pc_vals, label="p_cex", linewidth=1.0, alpha=0.8)
+        plt.xlabel("timestamp (s)")
+        plt.ylabel("price")
+        plt.title("Price trajectories")
+        plt.legend()
+        plt.tight_layout()
+        plt.show()
 
     return 0
 

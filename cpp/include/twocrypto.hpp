@@ -424,7 +424,6 @@ public:
             xcp_profit_a  = Traits::PRECISION();
             totalSupply  += d_token;
         }
-
         return d_token;
     }
 
@@ -520,7 +519,6 @@ public:
 
         // EMA update (only update last_timestamp on this path)
         uint64_t last_ts = last_timestamp;
-        // printf("last_ts=%llu, block_timestamp=%llu\n", last_ts, block_timestamp);
         if (last_ts < block_timestamp) {
             T dt = T(block_timestamp - last_ts);
             if constexpr (std::is_same_v<T, stableswap::uint256>) {
@@ -541,7 +539,6 @@ public:
                 auto alpha = std::exp(
                     - static_cast<double>(dt) / static_cast<double>(ma_time)
                 );
-
                 T capped = last_prices;
                 if (capped > 2 * price_scale) capped = 2 * price_scale;
 
@@ -567,7 +564,7 @@ public:
         T vp = (total_supply > NumTraits<T>::ZERO())
             ? (NumTraits<T>::PRECISION() * xcp / total_supply)
             : NumTraits<T>::PRECISION();
-
+        // printf("\ntime: %llu, vp=%10.12Lf, xcp=%10.12Lf, price_scale=%10.12Lf, D=%10.12Lf\n", block_timestamp, static_cast<double>(vp), static_cast<double>(xcp), static_cast<double>(price_scale), static_cast<double>(D));
         xcp_profit = xcp_profit + vp - old_virtual_price;
         if (trace) {
             if constexpr (std::is_same_v<T, stableswap::uint256>) {
@@ -590,6 +587,7 @@ public:
         T vp_boosted = (locked_supply > NumTraits<T>::ZERO())
             ? (NumTraits<T>::PRECISION() * xcp / locked_supply)
             : vp;
+        // printf("time: %llu, vp_boosted=%10.12Lf\n", block_timestamp, static_cast<double>(vp_boosted));
         if (trace) {
             if constexpr (std::is_same_v<T, stableswap::uint256>) {
                 std::cout << "TRACE tp_gating vp=" << vp.template convert_to<std::string>()
@@ -605,7 +603,10 @@ public:
                           << "\n";
             }
         }
-
+        // printf("\nTime: %llu\n", block_timestamp);
+        // printf("total_supply: %10.12Lf, donation_unlocked: %10.12Lf\n", static_cast<double>(total_supply), static_cast<double>(donation_unlocked));
+        // printf("xcp_profit: %10.12Lf, virtual_price: %10.12Lf\n", static_cast<double>(xcp_profit), static_cast<double>(virtual_price));
+        // printf("vp_boosted: %10.12Lf, threshold_vp: %10.12Lf, allowed_extra_profit: %10.12Lf\n", static_cast<double>(vp_boosted), static_cast<double>(threshold_vp), static_cast<double>(allowed_extra_profit));
         // Price adjustment path
         if (vp_boosted > threshold_vp + allowed_extra_profit) {
             T norm = price_oracle * NumTraits<T>::PRECISION() / price_scale;
@@ -646,15 +647,17 @@ public:
                 T goal_vp = NumTraits<T>::max(threshold_vp, vp);
                 if (new_vp < goal_vp) {
                     T tweaked_supply = (NumTraits<T>::PRECISION() * new_xcp) / goal_vp;
+                    // printf("time: %llu, tweaked_supply=%10.12Lf, total_supply=%10.12Lf\n", block_timestamp, static_cast<double>(tweaked_supply), static_cast<double>(total_supply));
                     if (tweaked_supply < total_supply) {
                         T diff      = total_supply - tweaked_supply;
                         T unlocked2 = _donation_shares();
                         burn        = (diff < unlocked2) ? diff : unlocked2;
-
+                        // printf("diff=%10.12Lf, unlocked2=%10.12Lf, burn=%10.12Lf\n", static_cast<double>(diff), static_cast<double>(unlocked2), static_cast<double>(burn));
                         if (total_supply > burn) {
                             new_vp = (
                                 NumTraits<T>::PRECISION() * new_xcp
                             ) / (total_supply - burn);
+                            // printf("time: %llu, burn=%10.12Lf, vp_boosted_before=%10.12Lf, vp_new=%10.12Lf\n", block_timestamp, static_cast<double>(burn), static_cast<double>(vp_boosted), static_cast<double>(new_vp));
                         }
                     }
                 }
@@ -680,7 +683,7 @@ public:
                     if (burn > NumTraits<T>::ZERO()) {
                         donation_shares          -= burn;
                         totalSupply              -= burn;
-                        last_donation_release_ts  = T(block_timestamp);
+                        // last_donation_release_ts  = T(block_timestamp);
                     }
                     if (trace) {
                         std::cout << "TRACE tp_commit price_scale=";
@@ -716,6 +719,15 @@ public:
             return cached_price_scale;
         }
         return last_prices;
+    }
+
+    // boosted virtual price
+    T get_vp_boosted() const {
+        T xcp = _xcp(D, cached_price_scale);
+        T donation_unlocked = _donation_shares();
+        // printf("time: %llu, xcp=%10.12Lf, donation_unlocked=%10.12Lf\n", block_timestamp, static_cast<double>(xcp), static_cast<double>(donation_unlocked));
+        T locked_supply     = totalSupply - donation_unlocked;
+        return (locked_supply == Traits::ZERO()) ? Traits::PRECISION() : (NumTraits<T>::PRECISION() * xcp / locked_supply);
     }
 
     // ------------------------ Testing helpers ------------------------

@@ -106,7 +106,9 @@ def main() -> int:
 
     # Invoke the harness once over the entire config
     out_json_path = Path(args.out) if args.out else (
-        repo_root / "python" / "arb_sim" / "run_data" / f"arb_run_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}.json"
+        # repo_root / "python" / "arb_sim" / "run_data" / f"arb_run_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}.json"
+            repo_root / "python" / "arb_sim" / "run_data" / "arb_run_1.json"
+
     )
     out_json_path.parent.mkdir(parents=True, exist_ok=True)
     ts = datetime.now()

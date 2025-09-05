@@ -52,7 +52,7 @@ def _to_float(x: Any) -> float:
             return float("nan")
 
 
-def _extract_grid(data: Dict[str, Any], metric: str, scale_percent: bool) -> Tuple[str, str, List[float], List[float], np.ndarray]:
+def _extract_grid(data: Dict[str, Any], metric: str, scale_percent: bool, scale_1e18: bool) -> Tuple[str, str, List[float], List[float], np.ndarray]:
     runs = data.get("runs", [])
     if not runs:
         raise SystemExit("No runs[] found in arb_run JSON")
@@ -81,6 +81,8 @@ def _extract_grid(data: Dict[str, Any], metric: str, scale_percent: bool) -> Tup
             z = _to_float(res.get(metric))
         if scale_percent and np.isfinite(z):
             z = z * 100.0
+        if scale_1e18 and np.isfinite(z):
+            z = z / 1e18
         if np.isfinite(xv) and np.isfinite(yv) and np.isfinite(z):
             points[(xv, yv)] = z
             xs.append(xv)
@@ -117,6 +119,9 @@ def _build_ref_grid(ref: Dict[str, Any], x_name: str, y_name: str, xs: List[floa
         "n_rebalances": "n_rebalances",
         "vpminusone": "vpminusone",
         "max_cex_diff": "max_cex_diff",
+        "avg_cex_diff": "avg_cex_diff",
+        "cex_follow_time_frac": "cex_follow_time_frac",
+        "xcp_profit": "xcp_profit",
     }
     ref_key = name_map.get(metric, metric)
 
@@ -144,6 +149,8 @@ def _build_ref_grid(ref: Dict[str, Any], x_name: str, y_name: str, xs: List[floa
             return 1e4  # new stores A with 1e4 multiplier
         if "fee" in key:
             return 1e10  # new stores fees with 1e10 multiplier
+        if "xcp_profit" in key:
+            return 1e18  # new stores xcp_profit with 1e18 multiplier
         return 1.0
 
     sx = _new_to_ref_scale(x_name)
@@ -184,6 +191,8 @@ def _axis_normalization(name: str) -> Tuple[float, str]:
     if "fee" in key:
         return 0.0, " (bps)"  # sentinel for bps
     if "liquidity" in key or "balance" in key:
+        return 1e18, " (/1e18)"
+    if "xcp_profit" in key:
         return 1e18, " (/1e18)"
     return 1.0, ""
 
@@ -245,13 +254,12 @@ def main() -> int:
 
     # Hardcoded metrics in the same order as heatmap/ref_plot_all
     metrics: List[str] = [
-        "apy",
-        "vpminusone",
+        "xcp_profit",
+        "donation_coin0_total",
         "n_rebalances",
         "total_notional_coin0",
         "trades",
-        # "donation_coin0_total",
-        "max_cex_diff",
+        "cex_follow_time_frac",
     ]
 
     # Build first grid to define axes
@@ -260,7 +268,8 @@ def main() -> int:
 
     first_m = metrics[0]
     s_perc = metric_scale_percent(first_m)
-    x_name, y_name, xs, ys, Z_new0 = _extract_grid(data, first_m, s_perc)
+    s_1e18 = first_m.lower() in {"xcp_profit"}
+    x_name, y_name, xs, ys, Z_new0 = _extract_grid(data, first_m, s_perc, s_1e18)
 
     # Figure layout
     n = len(metrics)
@@ -303,8 +312,9 @@ def main() -> int:
                 continue
             m = metrics[idx]
             s_perc = metric_scale_percent(m)
+            s_1e18 = m.lower() in {"xcp_profit"}
             # New grid uses metric names exactly as in arb_run
-            _, _, _, _, Z_new = _extract_grid(data, m, s_perc)
+            _, _, _, _, Z_new = _extract_grid(data, m, s_perc, s_1e18)
             # Ref grid aligned to xs, ys
             Z_ref = _build_ref_grid(ref, x_name, y_name, xs, ys, m, s_perc)
 

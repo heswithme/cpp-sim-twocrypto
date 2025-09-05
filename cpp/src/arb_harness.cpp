@@ -619,9 +619,9 @@ load_candles(const std::string& path, size_t max_candles = 0, double squeeze_fra
                 if (c.low  < min_l) c.low  = min_l;
             }
         }
-        // if (c.ts < 16725367000) { //CANDLE HARDSTOP
+        if (c.ts < 1672643800*10) { //CANDLE HARDSTOP
             out.push_back(c);
-        // }
+        }
     }
     return out;
 }
@@ -733,7 +733,7 @@ static inline RealT coin0_equiv(RealT amt0, RealT amt1, RealT ps) {
 // Uses a dry-run copy and binary search on the number of periods. Advances the schedule
 // by exactly the number of periods that were actually committed (never silently drops).
 template <typename ActionsArray, typename StatesArray>
-static void maybe_do_donations(
+static void make_donation(
     twocrypto::TwoCryptoPoolT<RealT>& pool,
     DonationCfg& cfg,
     uint64_t ev_ts,
@@ -744,80 +744,45 @@ static void maybe_do_donations(
 ) {
     if (!cfg.enabled || cfg.next_ts == 0 || ev_ts < cfg.next_ts) return;
 
-    const uint64_t k_due = 1 + (ev_ts - cfg.next_ts) / cfg.freq_s;
-    uint64_t lo = 0, hi = k_due;
+    // Compute one-period donation from current TVL
+    constexpr RealT SEC_PER_YEAR = static_cast<RealT>(365.0 * 86400.0);
+    const RealT ps   = pool.cached_price_scale;
+    const RealT tvl0 = pool.balances[0] + pool.balances[1] * ps;
+    const RealT frac = cfg.apy * static_cast<RealT>(static_cast<long double>(cfg.freq_s) / static_cast<long double>(SEC_PER_YEAR));
+    const RealT coin0_equiv_amt = tvl0 * frac;
+    const RealT amt0 = (RealT(1) - cfg.ratio1) * coin0_equiv_amt;
+    const RealT amt1 = (ps > 0) ? (cfg.ratio1 * coin0_equiv_amt / ps) : RealT(0);
 
-    // Helper: compute donation amounts from current pool TVL (coin0-equivalent)
-    auto donation_amounts_from_state = [&](const twocrypto::TwoCryptoPoolT<RealT>& p)->std::array<RealT,2> {
-        constexpr RealT SEC_PER_YEAR = static_cast<RealT>(365.0 * 86400.0);
-        const RealT ps   = p.cached_price_scale;
-        const RealT tvl0 = p.balances[0] + p.balances[1] * ps;
-        const RealT frac = cfg.apy * static_cast<RealT>(static_cast<long double>(cfg.freq_s) / static_cast<long double>(SEC_PER_YEAR));
-        const RealT coin0_equiv_amt = tvl0 * frac;
-        const RealT amt0 = (RealT(1) - cfg.ratio1) * coin0_equiv_amt;
-        const RealT amt1 = (ps > 0) ? (cfg.ratio1 * coin0_equiv_amt / ps) : RealT(0);
-        return {amt0, amt1};
-    };
-
-    // Find the largest k in [0, k_due] that the pool accepts, simulating period-by-period amounts.
-    while (lo < hi) {
-        const uint64_t mid = (lo + hi + 1) / 2;
-        auto trial = pool; // copy (no commit on failure)
-        bool ok = true;
-        for (uint64_t t = 0; t < mid; ++t) {
-            auto amts = donation_amounts_from_state(trial);
-            try {
-                (void)trial.add_liquidity({amts[0], amts[1]}, RealT(0), /*donation=*/true);
-            } catch (...) { ok = false; break; }
-        }
-        if (ok) lo = mid; else hi = mid - 1;
-    }
-
-    const uint64_t k_commit = lo;
-    if (k_commit > 0) {
-        RealT tot0{0}, tot1{0};
-        size_t rebalances{0};
-        // Commit donations one period at a time with current-state TVL amounts
-        for (uint64_t t = 0; t < k_commit; ++t) {
-            auto amts = donation_amounts_from_state(pool);
-            const RealT ps_before = pool.cached_price_scale;
-            try {
-                (void)pool.add_liquidity({amts[0], amts[1]}, RealT(0), /*donation=*/true);
-            } catch (...) {
-                // Should be rare since trial passed; stop early
-                break;
-            }
-            const RealT ps_after  = pool.cached_price_scale;
-            if (differs_rel(ps_after, ps_before)) rebalances += 1;
-            tot0 += amts[0]; tot1 += amts[1];
-            m.donation_coin0_total += coin0_equiv(amts[0], amts[1], ps_before);
-        }
-        m.donations += k_commit;
-        m.donation_amounts_total[0] += tot0;
-        m.donation_amounts_total[1] += tot1;
-        m.n_rebalances += rebalances;
+    const uint64_t ts_due = cfg.next_ts;
+    const RealT ps_before = pool.cached_price_scale;
+    try {
+        (void)pool.add_liquidity({amt0, amt1}, RealT(0), /*donation=*/true);
+        const RealT ps_after  = pool.cached_price_scale;
+        if (differs_rel(ps_after, ps_before)) m.n_rebalances += 1;
+        m.donations += 1;
+        m.donation_amounts_total[0] += amt0;
+        m.donation_amounts_total[1] += amt1;
+        m.donation_coin0_total += coin0_equiv(amt0, amt1, ps_before);
 
         if (save_actions) {
-            const RealT ps_now = pool.cached_price_scale;
             json::object da;
             da["type"]            = "donation";
             da["ts"]              = ev_ts;
-            da["ts_first_due"]    = cfg.next_ts;
-            da["k_due"]           = static_cast<uint64_t>(k_due);
-            da["k_committed"]     = static_cast<uint64_t>(k_commit);
-            da["amounts"]         = json::array{static_cast<double>(tot0), static_cast<double>(tot1)};
-            da["amounts_wei"]     = json::array{to_str_1e18(tot0), to_str_1e18(tot1)};
-            da["price_scale"]     = static_cast<double>(ps_now);
+            da["ts_due"]          = ts_due;
+            da["amounts"]         = json::array{static_cast<double>(amt0), static_cast<double>(amt1)};
+            da["amounts_wei"]     = json::array{to_str_1e18(amt0), to_str_1e18(amt1)};
+            da["price_scale"]     = static_cast<double>(pool.cached_price_scale);
             da["donation_ratio1"] = static_cast<double>(cfg.ratio1);
             da["apy_per_year"]     = static_cast<double>(cfg.apy);
             da["freq_s"]           = static_cast<uint64_t>(cfg.freq_s);
             actions.push_back(std::move(da));
-            states.push_back(pool_state_json(pool));
         }
+    } catch (...) {
+        // Ignore failed donation
     }
 
-    // Advance schedule by the periods we actually executed (never drop backlog).
-    cfg.next_ts += (k_commit * cfg.freq_s);
+    // Advance schedule by exactly one period (no catch-up)
+    cfg.next_ts = ts_due + cfg.freq_s;
 }
 
 } // namespace
@@ -946,7 +911,7 @@ int main(int argc, char* argv[]) {
                         dcfg.enabled = true;
                         dcfg.freq_s  = static_cast<uint64_t>(cfg.donation_frequency);
                         const uint64_t base_ts = cfg.start_ts ? cfg.start_ts : events.front().ts;
-                        dcfg.next_ts = base_ts + dcfg.freq_s;
+                        dcfg.next_ts = base_ts;
 
                         dcfg.apy    = cfg.donation_apy;
                         dcfg.ratio1 = std::clamp<RealT>(cfg.donation_coins_ratio, 0, 1);
@@ -956,7 +921,10 @@ int main(int argc, char* argv[]) {
                     Metrics m{};
                     json::array actions;
                     json::array states;
-                    auto push_state = [&]() { if (save_actions) states.push_back(pool_state_json(pool)); };
+                    // auto push_state = [&]() { if (save_actions) states.push_back(pool_state_json(pool)); };
+                    // temp do-nothing lambda
+                    auto push_state = [&]() { if (save_actions) { }; };
+
                     auto count_rebalance = [&](RealT before, RealT after){
                         if (differs_rel(after, before)) m.n_rebalances += 1;
                     };
@@ -964,6 +932,12 @@ int main(int argc, char* argv[]) {
                     // Metric: sum of |p_cex - price_scale| at the beginning of each event
                     long double total_cex_diff = 0.0L;
                     long double max_cex_diff = 0.0L;
+                    // Metric: fraction of time price_scale deviates more than 10% from p_cex
+                    const RealT FAR_THRESH = static_cast<RealT>(0.10);
+                    long double time_far_s = 0.0L;
+                    uint64_t last_ts_band = 0;
+                    bool have_band = false;
+                    bool last_far = false;
                     const auto t_pool0 = clk::now();
                     uint64_t last_dust_ts = init_ts;
                     push_state(); // initial snapshot
@@ -972,14 +946,25 @@ int main(int argc, char* argv[]) {
                     for (const auto& ev : events) {
                         pool.set_block_timestamp(ev.ts);
                         // Sample at beginning of event (pre-trade, pre-tick)
-                        total_cex_diff += static_cast<long double>(std::abs(ev.p_cex - pool.cached_price_scale));
-                        if (static_cast<long double>(std::abs(ev.p_cex - pool.cached_price_scale)) > max_cex_diff) {
-                            max_cex_diff = static_cast<long double>(std::abs(ev.p_cex - pool.cached_price_scale));
+                        const RealT cur_diff_abs = std::abs(ev.p_cex - pool.cached_price_scale);
+                        total_cex_diff += static_cast<long double>(cur_diff_abs);
+                        if (static_cast<long double>(cur_diff_abs) > max_cex_diff) max_cex_diff = static_cast<long double>(cur_diff_abs);
+                        // Accumulate time when |ps/p_cex - 1| > 10%
+                        if (have_band && ev.ts > last_ts_band && last_far) {
+                            time_far_s += static_cast<long double>(ev.ts - last_ts_band);
                         }
+                        if (ev.p_cex > 0) {
+                            const RealT rel = std::abs(pool.cached_price_scale / ev.p_cex - RealT(1));
+                            last_far = (rel > FAR_THRESH);
+                        } else {
+                            last_far = false;
+                        }
+                        last_ts_band = ev.ts;
+                        have_band = true;
                         push_state(); // after time update
 
-                        // Donations before trading
-                        maybe_do_donations(pool, dcfg, ev.ts, save_actions, actions, states, m);
+                        // Donation: single-period, based on current TVL
+                        make_donation(pool, dcfg, ev.ts, save_actions, actions, states, m);
 
                         const RealT pre_p_pool = pool.get_p();
 
@@ -1001,9 +986,13 @@ int main(int argc, char* argv[]) {
                             try {
                                 const RealT log_ps_before = pool.cached_price_scale;
                                 const RealT log_oracle_before = pool.cached_price_oracle;
+                                const RealT log_xcp_profit_before = pool.xcp_profit;
+                                const RealT log_vp_before = pool.get_vp_boosted();
                                 pool.tick();
                                 const RealT log_ps_after  = pool.cached_price_scale;
                                 const RealT log_oracle_after = pool.cached_price_oracle;
+                                const RealT log_xcp_profit_after = pool.xcp_profit;
+                                const RealT log_vp_after = pool.get_vp_boosted();
                                 count_rebalance(log_ps_before, log_ps_after);
                                 if (save_actions) {
                                     json::object tr;
@@ -1014,6 +1003,10 @@ int main(int argc, char* argv[]) {
                                     tr["psafter"] = static_cast<double>(log_ps_after);
                                     tr["oracle_before"] = static_cast<double>(log_oracle_before);
                                     tr["oracle_after"] = static_cast<double>(log_oracle_after);
+                                    tr["xcp_profit_before"] = static_cast<double>(log_xcp_profit_before);
+                                    tr["xcp_profit_after"] = static_cast<double>(log_xcp_profit_after);
+                                    tr["vp_before"] = static_cast<double>(log_vp_before);
+                                    tr["vp_after"] = static_cast<double>(log_vp_after);
                                     actions.push_back(std::move(tr));
                                     push_state();
                                 }
@@ -1026,13 +1019,20 @@ int main(int argc, char* argv[]) {
                             const RealT ps_before = pool.cached_price_scale;
                             const RealT oracle_before = pool.cached_price_oracle;
                             const RealT last_ts_before = pool.last_timestamp;
+                            const RealT lp_before = pool.last_prices;
+                            const RealT log_xcp_profit_pre = pool.xcp_profit;
+                            const RealT log_vp_pre = pool.get_vp_boosted();
                             auto res = pool.exchange((RealT)d.i, (RealT)d.j, d.dx, RealT(0));
+                            const RealT log_xcp_profit_after = pool.xcp_profit;
+                            const RealT log_vp_after = pool.get_vp_boosted();
                             const RealT last_ts_after = pool.last_timestamp;
                             const RealT oracle_after = pool.cached_price_oracle;
                             const RealT dy_after_fee = res[0];
                             const RealT fee_tokens   = res[1];
                             const RealT ps_after     = pool.cached_price_scale;
                             const RealT p_after = pool.get_p();
+                            const RealT lp_after = pool.last_prices;
+                            // printf("t: %llu, vp_boosted_before=%10.12Lf, vp_boosted_after=%10.12Lf\n", ev.ts, static_cast<double>(log_vp_pre), static_cast<double>(log_vp_after));
                             m.trades   += 1;
                             m.notional += d.notional_coin0;
                             m.lp_fee_coin0 += (d.j == 1 ? fee_tokens * ev.p_cex : fee_tokens);
@@ -1058,6 +1058,12 @@ int main(int argc, char* argv[]) {
                                 tr["ps_after"] = static_cast<double>(ps_after);
                                 tr["last_ts_before"] = static_cast<double>(last_ts_before);
                                 tr["last_ts_after"] = static_cast<double>(last_ts_after);
+                                tr["lp_before"] = static_cast<double>(lp_before);
+                                tr["lp_after"] = static_cast<double>(lp_after);
+                                tr["xcp_profit_before"] = static_cast<double>(log_xcp_profit_pre);
+                                tr["xcp_profit_after"] = static_cast<double>(log_xcp_profit_after);
+                                tr["vp_before"] = static_cast<double>(log_vp_pre);
+                                tr["vp_after"] = static_cast<double>(log_vp_after);
                                 actions.push_back(std::move(tr));
                                 push_state();
                             }
@@ -1098,6 +1104,12 @@ int main(int argc, char* argv[]) {
                     }
                     summary["avg_cex_diff"] = avg_cex_diff;
                     summary["max_cex_diff"] = static_cast<double>(max_cex_diff);
+                    // Fraction of time price_scale deviates >10% from CEX price
+                    double cex_follow_time_frac = -1.0;
+                    if (duration_s > 0.0) {
+                        cex_follow_time_frac = 1 - static_cast<double>(time_far_s) / duration_s;
+                    }
+                    summary["cex_follow_time_frac"] = cex_follow_time_frac;
 
                     const RealT tvl_end = pool.balances[0] + pool.balances[1] * pool.cached_price_scale;
                     // Baseline: HODL initial balances valued at end price (coin0 units)
@@ -1141,6 +1153,7 @@ int main(int argc, char* argv[]) {
                     summary["apy_coin0_raw"]         = apy_coin0_raw;
                     summary["apy_coin0_boost_raw"]= apy_coin0_boost_raw;
                     summary["vp"]                = static_cast<double>(pool.get_virtual_price());
+                    summary["vp_boosted"]        = static_cast<double>(pool.get_vp_boosted());
                     summary["vpminusone"]        = static_cast<double>(pool.get_virtual_price() - 1.0);
                     json::object params;
                     params["pool"] = echo_pool;
@@ -1152,7 +1165,7 @@ int main(int argc, char* argv[]) {
                     out["final_state"] = pool_state_json(pool);
                     if (save_actions) {
                         out["actions"] = actions;
-                        out["states"]  = states;
+                        // out["states"]  = states;
                     }
                     results[idx] = std::move(out);
 
