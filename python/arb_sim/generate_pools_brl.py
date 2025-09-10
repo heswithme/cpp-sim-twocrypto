@@ -17,57 +17,31 @@ from pathlib import Path
 from datetime import datetime, timezone
 import numpy as np
 from time import time
-
-
-def _first_candle_ts(path: str) -> int:
-    """Return the first candle timestamp (seconds). If millis, convert to seconds.
-
-    On failure, return current UTC seconds.
-    """
-    try:
-        with open(path, "r") as f:
-            data = json.load(f)
-        if isinstance(data, list) and data and isinstance(data[0], list) and data[0]:
-            ts = int(data[0][0])
-            if ts > 10_000_000_000:  # ms
-                ts //= 1000
-            return int(ts)
-    except Exception:
-        pass
-    return int(time())
-
-
-# -------------------- Helpers --------------------
-def strify_pool(pool: dict) -> dict:
-    """Convert pool values to strings for JSON.
-
-    - Lists are treated as integer arrays and stringified element-wise.
-    - Integers are stringified as ints.
-    - Floats are preserved as decimal strings (no int cast), e.g., donation_apy=0.05 -> "0.05".
-    """
-    out = {}
-    for k, v in pool.items():
-        if isinstance(v, list):
-            out[k] = [str(int(x)) for x in v]
-        elif isinstance(v, float):
-            out[k] = str(v)
-        else:
-            out[k] = str(int(v))
-    return out
+from pool_helpers import _first_candle_ts, _initial_price_from_file, strify_pool
+import math
 
 
 # -------------------- Grid Definition --------------------
-N_GRID = 32
+N_GRID = 16
 
 X_name = "A"  # can be changed to any pool key
-xmin = 5 * 10_000
-xmax = 1000 * 10_000
+xmin = 1 * 10_000
+xmax = 100 * 10_000
 xlogspace = True
 
 Y_name = "mid_fee"  # default second param; also applied to out_fee
-ymin = 1e-4 * 10**10
-ymax =  .05 * 10**10
+ymin = 1e-3 * 10**10
+ymax =  .01 * 10**10
 ylogspace = True
+
+
+
+xmin = 5 * 10_000
+xmax = xmin
+ymin = int(12/10_000 * 10**10)
+ymax = ymin
+N_GRID = 1
+
 
 # X_name = "donation_apy" 
 # xmin = 0.01
@@ -94,13 +68,13 @@ else:
 Y_vals = [int(x) for x in Y_vals]
 
 init_liq = 1_000_000 # in coin0
-init_price = 0.190865 #brlusd
 DEFAULT_DATAFILE = "python/arb_sim/trade_data/brlusd/brlusd-1m.json"
 START_TS = _first_candle_ts(DEFAULT_DATAFILE)
+init_price = _initial_price_from_file(DEFAULT_DATAFILE)
 # -------------------- Base Templates --------------------
 BASE_POOL = {
     # All values are integers in their native units
-    "initial_liquidity": [int(init_liq//2) * 10**18, int(init_liq//2 / init_price) * 10**18],
+    "initial_liquidity": [int(init_liq * 10**18//2), int(init_liq * 10**18//2 / init_price)],
     "A": 200 * 10_000,
     "gamma": 10**14, #unused in twocrypto
     "mid_fee": int(0.001 * 10**10),
@@ -116,13 +90,13 @@ BASE_POOL = {
     # - donation_apy: plain fraction per year (0.05 => 5%).
     # - donation_frequency: seconds between donations.
     # - donation_coins_ratio: fraction of donation in coin1 (0=all coin0, 1=all coin1)
-    "donation_apy": 0.03,
+    "donation_apy": 0.05,
     "donation_frequency": int(7*86400),
-    "donation_coins_ratio": 0,
+    "donation_coins_ratio": 0.5,
 }
 
 BASE_COSTS = {
-    "arb_fee_bps": 10.0,
+    "arb_fee_bps": 50.0,
     "gas_coin0": 0.0,
     "use_volume_cap": True,
     "volume_cap_mult": 1,
@@ -141,7 +115,7 @@ def build_grid():
             mid_fee_val = int(pool.get("mid_fee", 0))
             cur_out_val = int(pool.get("out_fee", 0))
             pool["out_fee"] = max(mid_fee_val, cur_out_val)
-            pool["out_fee"] = mid_fee_val
+            # pool["out_fee"] = mid_fee_val
             costs = dict(BASE_COSTS)
             tag_x = f"{X_name}_{xv}"
             tag_y = f"{Y_name}_{yv}"

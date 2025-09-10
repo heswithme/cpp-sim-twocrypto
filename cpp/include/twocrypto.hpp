@@ -608,7 +608,7 @@ public:
         // printf("xcp_profit: %10.12Lf, virtual_price: %10.12Lf\n", static_cast<double>(xcp_profit), static_cast<double>(virtual_price));
         // printf("vp_boosted: %10.12Lf, threshold_vp: %10.12Lf, allowed_extra_profit: %10.12Lf\n", static_cast<double>(vp_boosted), static_cast<double>(threshold_vp), static_cast<double>(allowed_extra_profit));
         // Price adjustment path
-        if (vp_boosted > threshold_vp + allowed_extra_profit) {
+        if ((vp_boosted > threshold_vp + allowed_extra_profit) && (last_ts < block_timestamp)) {
             T norm = price_oracle * NumTraits<T>::PRECISION() / price_scale;
             if (norm > NumTraits<T>::PRECISION()) {
                 norm = norm - NumTraits<T>::PRECISION();
@@ -676,14 +676,48 @@ public:
                                   << "\n";
                     }
                 }
+
+
+
+
                 if (new_vp > NumTraits<T>::PRECISION() && new_vp >= threshold_vp) {
                     D = D_new;
                     virtual_price      = new_vp;
                     cached_price_scale = p_new;
                     if (burn > NumTraits<T>::ZERO()) {
-                        donation_shares          -= burn;
-                        totalSupply              -= burn;
-                        // last_donation_release_ts  = T(block_timestamp);
+                        // Align with Vyper invariant: carry-forward timestamp upon donation burn.
+                        // We conceptually reduce the unlocked (time-based) shares proportionally
+                        // so that the available (post-protection) shares decrease by `burn`.
+                        //
+                        // Let:
+                        //   shares_unlocked     = _donation_shares(False)
+                        //   shares_available    = _donation_shares(True)
+                        //   B (burn)            = donation_shares_to_burn
+                        // Target:
+                        //   shares_available_new = shares_available - B
+                        //   shares_available = shares_unlocked * (1 - protection)
+                        // Hence:
+                        //   shares_unlocked_new = shares_unlocked - B * shares_unlocked / shares_available
+
+                        T shares_unlocked  = _donation_shares(false);
+                        T shares_available = _donation_shares(true);
+
+                        // Guard against division by zero: if burn>0, available>0 by construction
+                        T shares_unlocked_new = shares_unlocked;
+                        if (shares_available > NumTraits<T>::ZERO()) {
+                            shares_unlocked_new = shares_unlocked - (burn * shares_unlocked) / shares_available;
+                        }
+
+                        T new_total = donation_shares - burn;
+                        T new_elapsed = NumTraits<T>::ZERO();
+                        if (new_total > NumTraits<T>::ZERO() && shares_unlocked_new > NumTraits<T>::ZERO()) {
+                            new_elapsed = (shares_unlocked_new * donation_duration) / new_total;
+                        }
+
+                        // Apply burn and shift the release timestamp
+                        donation_shares = new_total;
+                        totalSupply    -= burn;
+                        last_donation_release_ts = T(block_timestamp) - new_elapsed;
                     }
                     if (trace) {
                         std::cout << "TRACE tp_commit price_scale=";

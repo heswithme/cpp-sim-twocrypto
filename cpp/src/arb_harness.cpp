@@ -619,9 +619,9 @@ load_candles(const std::string& path, size_t max_candles = 0, double squeeze_fra
                 if (c.low  < min_l) c.low  = min_l;
             }
         }
-        if (c.ts < 1672643800*10) { //CANDLE HARDSTOP
-            out.push_back(c);
-        }
+        // if (c.ts < 1672643800*10) { //CANDLE HARDSTOP
+        out.push_back(c);
+        // }
     }
     return out;
 }

@@ -174,6 +174,10 @@ class VyperPoolRunner:
         token0, token1 = tokens
         user = boa.env.generate_address()
         snapshots = []
+        total_actions = len(actions)
+        if total_actions:
+            print(f"  Actions: {total_actions}")
+        next_percent = 1  # hardcoded 1% step
         
         # Take initial snapshot after deployment
         snapshots.append(self.take_pool_snapshot(pool))
@@ -235,6 +239,14 @@ class VyperPoolRunner:
             if error:
                 snapshot["error"] = error
             snapshots.append(snapshot)
+
+            # Progress reporting every 1%
+            if total_actions:
+                done = i + 1
+                percent = int(done * 100 / total_actions)
+                if percent >= next_percent:
+                    print(f"  Progress: {percent}% ({done}/{total_actions})")
+                    next_percent = percent + 1
         
         return snapshots
     

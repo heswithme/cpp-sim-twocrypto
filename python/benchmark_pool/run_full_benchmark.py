@@ -375,6 +375,7 @@ def main():
     parser.add_argument("--save-per-pool", action="store_true", help="Keep per-pool result files (cpp/<pool>.json, vyper/<pool>.json)")
     parser.add_argument("--final-only", action="store_true", help="Only save final state per test (set SAVE_LAST_ONLY=1)")
     parser.add_argument("--snapshot-every", type=int, default=None, help="Snapshot every N actions (0=final only, 1=every, N=interval). Overrides --final-only")
+    parser.add_argument("--limit-actions", type=int, default=0, help="Use only the first N actions from the sequence (0 = no limit)")
     args = parser.parse_args()
 
     # Paths
@@ -407,11 +408,39 @@ def main():
         return 1
     sequence = sequences[0]
 
+    # Optionally limit the number of actions
+    original_actions = list(sequence.get("actions", []))
+    original_count = len(original_actions)
+    limit = max(0, int(getattr(args, "limit_actions", 0)))
+    if limit > 0 and original_count > limit:
+        seq_limited = dict(sequence)
+        seq_limited["actions"] = original_actions[:limit]
+        # Write limited sequence file into run dir and use it for this run
+        limited_seq_path = os.path.join(run_dir, "inputs_sequences_limited.json")
+        _write_json(limited_seq_path, {"sequences": [seq_limited]})
+        sequences_for_run = limited_seq_path
+        actions_used = limit
+        print(f"Limiting sequence actions: using first {limit} of {original_count}")
+    else:
+        sequences_for_run = sequences_path
+        actions_used = original_count
+
     # Save a copy of inputs in the run dir
     _write_json(os.path.join(run_dir, "inputs_pools.json"), {"pools": pools})
-    _write_json(os.path.join(run_dir, "inputs_sequences.json"), {"sequences": [sequence]})
+    # Always save the full/original sequence for reproducibility
+    _write_json(os.path.join(run_dir, "inputs_sequences_full.json"), {"sequences": [sequence]})
+    # Also save the sequence actually used (may be the same as full)
+    if sequences_for_run.endswith("inputs_sequences_limited.json"):
+        pass  # already saved above
+    else:
+        _write_json(os.path.join(run_dir, "inputs_sequences.json"), {"sequences": [sequence]})
 
     print(f"Testing {len(pools)} pools")
+    if actions_used:
+        if actions_used != original_count:
+            print(f"Sequence actions: {original_count} (using {actions_used}; progress every 1%)")
+        else:
+            print(f"Sequence actions: {actions_used} (progress logs every 1%)")
     if args.workers not in (0, 1):
         print("Note: --workers is deprecated and ignored.")
 
@@ -433,13 +462,13 @@ def main():
             os.environ["SAVE_LAST_ONLY"] = "1"
 
         # Run each side once over all pools
-        cpp_info = run_cpp_benchmark(pool_configs_path, sequences_path, run_dir)
+        cpp_info = run_cpp_benchmark(pool_configs_path, sequences_for_run, run_dir)
         cpp_time = cpp_info["time"]
 
-        cppf_info = run_cpp_double_benchmark(pool_configs_path, sequences_path, run_dir)
+        cppf_info = run_cpp_double_benchmark(pool_configs_path, sequences_for_run, run_dir)
         cppf_time = cppf_info["time"]
 
-        vy_info = run_vyper_benchmark(pool_configs_path, sequences_path, run_dir, n_py=args.n_py)
+        vy_info = run_vyper_benchmark(pool_configs_path, sequences_for_run, run_dir, n_py=args.n_py)
         vy_time = vy_info["time"]
     finally:
         # Restore env
