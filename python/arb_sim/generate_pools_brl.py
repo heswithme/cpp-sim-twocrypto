@@ -22,25 +22,26 @@ import math
 
 
 # -------------------- Grid Definition --------------------
-N_GRID = 16
+N_GRID_X = 1
+N_GRID_Y = 10
 
-X_name = "A"  # can be changed to any pool key
-xmin = 1 * 10_000
-xmax = 100 * 10_000
-xlogspace = True
+X_name = "ma_time"  # can be changed to any pool key
+# xmin = 600/math.log(2)
+# xmax = 86400*120/math.log(2)
+xlogspace = False
 
-Y_name = "mid_fee"  # default second param; also applied to out_fee
-ymin = 1e-3 * 10**10
-ymax =  .01 * 10**10
-ylogspace = True
+Y_name = "donation_apy"  # default second param; also applied to out_fee
+ymin = 0.01
+ymax =  0.1
+ylogspace = False
 
 
-
-xmin = 5 * 10_000
+xmin = int(86400*7/math.log(2))
 xmax = xmin
-ymin = int(12/10_000 * 10**10)
-ymax = ymin
-N_GRID = 1
+# ymin = 0.03
+# ymax = ymin
+# N_GRID_X = 1
+# N_GRID_Y = 1
 
 
 # X_name = "donation_apy" 
@@ -54,18 +55,18 @@ N_GRID = 1
 # ylogspace = False
 
 if xlogspace:
-    X_vals = np.logspace(np.log10(xmin), np.log10(xmax), N_GRID).round().tolist()
+    X_vals = np.logspace(np.log10(xmin), np.log10(xmax), N_GRID_X).round().tolist()
 else:
-    X_vals = np.linspace(xmin, xmax, N_GRID).tolist()
+    X_vals = np.linspace(xmin, xmax, N_GRID_X).tolist()
 
 if ylogspace:
-    Y_vals = np.logspace(np.log10(ymin), np.log10(ymax), N_GRID).round().tolist()
+    Y_vals = np.logspace(np.log10(ymin), np.log10(ymax), N_GRID_Y).round().tolist()
 else:
-    Y_vals = np.linspace(ymin, ymax, N_GRID).tolist()
+    Y_vals = np.linspace(ymin, ymax, N_GRID_Y).tolist()
 
 # #optionally int-ify
 # X_vals = [int(x) for x in X_vals]
-Y_vals = [int(x) for x in Y_vals]
+# Y_vals = [int(x) for x in Y_vals]
 
 init_liq = 1_000_000 # in coin0
 DEFAULT_DATAFILE = "python/arb_sim/trade_data/brlusd/brlusd-1m.json"
@@ -75,10 +76,10 @@ init_price = _initial_price_from_file(DEFAULT_DATAFILE)
 BASE_POOL = {
     # All values are integers in their native units
     "initial_liquidity": [int(init_liq * 10**18//2), int(init_liq * 10**18//2 / init_price)],
-    "A": 200 * 10_000,
+    "A": 50 * 10_000,
     "gamma": 10**14, #unused in twocrypto
-    "mid_fee": int(0.001 * 10**10),
-    "out_fee": int(0.002 * 10**10),
+    "mid_fee": int(1 / 10_000 * 10**10),
+    "out_fee": int(2 / 10_000 * 10**10),
     "fee_gamma": int(0.003 * 10**18),
     "allowed_extra_profit": int(1e-12 * 10**18),
     "adjustment_step": int(1e-7 * 10**18),
@@ -98,7 +99,7 @@ BASE_POOL = {
 BASE_COSTS = {
     "arb_fee_bps": 50.0,
     "gas_coin0": 0.0,
-    "use_volume_cap": True,
+    "use_volume_cap": False,
     "volume_cap_mult": 1,
 }
 

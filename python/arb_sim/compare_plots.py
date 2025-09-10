@@ -57,35 +57,52 @@ def _f(x):
         return None
 
 
-def _load_arb_series(path: Path) -> List[Tuple[int, float, float]]:
-    """Extract (ts, p_cex, price_scale) series from an arb_run_*.json file.
+def _load_arb_series(path: Path) -> Dict[str, List[Tuple[int, float, float]]]:
+    """Extract (ts, p_cex, price_scale) series from all runs in an arb_run_*.json file.
 
-    Returns a list sorted by ts, using ps_after/ps_post (fallback: ps_before) when present.
+    Returns a dict: label -> list[(ts, p_cex, ps_post)], one series per run that contains actions.
+    The label attempts to use pool name if present; otherwise falls back to an index.
     """
     data = json.loads(path.read_text())
     runs = data.get("runs", [])
     if not runs:
         raise ValueError(f"arb_run JSON has no runs[]: {path}")
-    r = [x for x in runs if x.get("actions")]
-    if not r:
-        raise ValueError(f"arb_run JSON has no runs with actions[]: {path}")
-    r = r[-1]
-    series: List[Tuple[int, float, float]] = []
-    for a in r.get("actions", []):
-        ts = a.get("ts")
-        if ts is None:
+    out: Dict[str, List[Tuple[int, float, float]]] = {}
+    for idx, r in enumerate(runs):
+        actions = r.get("actions")
+        if not actions:
             continue
-        ts = int(ts)
-        p_cex = _f(a.get("p_cex"))
-        ps_post = _f(a.get("ps_after", a.get("psafter", a.get("ps_post"))))
-        # Fallback: if post missing but pre present, record pre to show continuity
-        if ps_post is None:
-            ps_post = _f(a.get("ps_before"))
-        if p_cex is None or ps_post is None:
-            continue
-        series.append((ts, p_cex, ps_post))
-    series.sort(key=lambda t: t[0])
-    return series
+        # Build a short label: prefer pool name; else use x/y or index
+        pool_name = None
+        pool_obj = (r.get("params") or {}).get("pool") if isinstance(r.get("params"), dict) else None
+        if isinstance(pool_obj, dict):
+            pool_name = pool_obj.get("name")
+        if not pool_name:
+            xv = r.get("x_val"); yv = r.get("y_val")
+            if xv is not None and yv is not None:
+                pool_name = f"x={xv},y={yv}"
+        if not pool_name:
+            pool_name = f"run_{idx:02d}"
+        label = f"{path.name}:{pool_name}"
+
+        series: List[Tuple[int, float, float]] = []
+        for a in actions:
+            ts = a.get("ts")
+            if ts is None:
+                continue
+            ts = int(ts)
+            p_cex = _f(a.get("p_cex"))
+            ps_post = _f(a.get("ps_after", a.get("psafter", a.get("ps_post"))))
+            # Fallback: if post missing but pre present, record pre to show continuity
+            if ps_post is None:
+                ps_post = _f(a.get("ps_before"))
+            if p_cex is None or ps_post is None:
+                continue
+            series.append((ts, p_cex, ps_post))
+        series.sort(key=lambda t: t[0])
+        if series:
+            out[label] = series
+    return out
 
 
 def _parse_json_line(line: str) -> Any:
@@ -282,9 +299,9 @@ def main():
     series_by_name: Dict[str, List[Tuple[int, float, float]]] = {}
     for p in arb_files:
         try:
-            s = _load_arb_series(p)
-            if s:
-                series_by_name[p.name] = s
+            multi = _load_arb_series(p)
+            for name, s in multi.items():
+                series_by_name[name] = s
         except Exception as e:
             print(f"Warning: failed to load {p}: {e}")
     for p in trade_files:

@@ -118,8 +118,9 @@ def _build_ref_grid(ref: Dict[str, Any], x_name: str, y_name: str, xs: List[floa
         "arb_pnl_coin0": "arb_profit_coin0",
         "n_rebalances": "n_rebalances",
         "vpminusone": "vpminusone",
-        "max_cex_diff": "max_cex_diff",
-        "avg_cex_diff": "avg_cex_diff",
+        # New relative tracking metrics (bps)
+        "avg_rel_bps": "avg_rel_bps",
+        "max_rel_bps": "max_rel_bps",
         "cex_follow_time_frac": "cex_follow_time_frac",
         "xcp_profit": "xcp_profit",
     }

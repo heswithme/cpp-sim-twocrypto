@@ -146,9 +146,11 @@ def _axis_normalization(name: str) -> Tuple[float, str]:
     key = (name or "").lower()
     if name == "A" or key == "a":
         return 1e4, " (÷1e4)"
-    if "fee" in key:
+    if "fee" in key and "gamma" not in key:
         # We will compute bps directly in labels, return sentinel scale 0
         return 0.0, " (bps)"
+    if "gamma" in key:
+        return 1e18, " (/1e18)"
     if "liquidity" in key or "balance" in key:
         return 1e18, " (/1e18)"
     return 1.0, ""
@@ -157,9 +159,12 @@ def _axis_normalization(name: str) -> Tuple[float, str]:
 def _format_axis_labels(name: str, values: List[float]) -> Tuple[List[str], str]:
     scale, suffix = _axis_normalization(name)
     labels: List[str] = []
-    if scale == 0.0 and "fee" in (name or "").lower():
+    if scale == 0.0 and "fee" in (name or "").lower() and "gamma" not in name:
         # Convert 1e10-scaled fee to bps: val/1e10 * 1e4
         labels = [f"{(v / 1e10 * 1e4):.2f}" for v in values]
+        return labels, f"{name} (bps)"
+    if "gamma" in name:
+        labels = [f"{(v / 1e18):.5f}" for v in values]
         return labels, f"{name} (bps)"
     if scale != 1.0:
         labels = [f"{(v / scale):.2f}" for v in values]

@@ -67,6 +67,9 @@ struct Metrics {
     size_t donations{0};
     RealT  donation_coin0_total{0};
     std::array<RealT,2> donation_amounts_total{0,0};
+    // Size-weighted average pool fee tracking
+    RealT  fee_wsum{0};   // sum(fee_fraction * notional_coin0)
+    RealT  fee_w{0};      // sum(notional_coin0)
 };
 
 std::mutex io_mu;
@@ -929,9 +932,13 @@ int main(int argc, char* argv[]) {
                         if (differs_rel(after, before)) m.n_rebalances += 1;
                     };
 
-                    // Metric: sum of |p_cex - price_scale| at the beginning of each event
-                    long double total_cex_diff = 0.0L;
-                    long double max_cex_diff = 0.0L;
+                    // Price-follow metrics (relative): time-weighted |ps/p_cex - 1|
+                    long double sum_abs_rel_dt = 0.0L;   // sum |rel_err| * dt
+                    long double sum_dt        = 0.0L;    // sum dt
+                    long double max_rel_abs   = 0.0L;    // max |rel_err| across events
+                    RealT last_rel_abs = 0;              // |ps/p_cex - 1| at previous event
+                    uint64_t last_ts_err = 0;            // ts of previous sample
+                    bool have_err = false;
                     // Metric: fraction of time price_scale deviates more than 10% from p_cex
                     const RealT FAR_THRESH = static_cast<RealT>(0.10);
                     long double time_far_s = 0.0L;
@@ -946,9 +953,18 @@ int main(int argc, char* argv[]) {
                     for (const auto& ev : events) {
                         pool.set_block_timestamp(ev.ts);
                         // Sample at beginning of event (pre-trade, pre-tick)
-                        const RealT cur_diff_abs = std::abs(ev.p_cex - pool.cached_price_scale);
-                        total_cex_diff += static_cast<long double>(cur_diff_abs);
-                        if (static_cast<long double>(cur_diff_abs) > max_cex_diff) max_cex_diff = static_cast<long double>(cur_diff_abs);
+                        // Relative error at current sample (abs), accumulate previous segment [last_ts_err, ev.ts)
+                        RealT cur_rel_abs = RealT(0);
+                        if (ev.p_cex > 0) cur_rel_abs = std::abs(pool.cached_price_scale / ev.p_cex - RealT(1));
+                        if (have_err && ev.ts > last_ts_err) {
+                            const long double dt = static_cast<long double>(ev.ts - last_ts_err);
+                            sum_abs_rel_dt += static_cast<long double>(last_rel_abs) * dt;
+                            sum_dt         += dt;
+                        }
+                        if (static_cast<long double>(cur_rel_abs) > max_rel_abs) max_rel_abs = static_cast<long double>(cur_rel_abs);
+                        last_rel_abs = cur_rel_abs;
+                        last_ts_err  = ev.ts;
+                        have_err     = true;
                         // Accumulate time when |ps/p_cex - 1| > 10%
                         if (have_band && ev.ts > last_ts_band && last_far) {
                             time_far_s += static_cast<long double>(ev.ts - last_ts_band);
@@ -1036,6 +1052,13 @@ int main(int argc, char* argv[]) {
                             m.trades   += 1;
                             m.notional += d.notional_coin0;
                             m.lp_fee_coin0 += (d.j == 1 ? fee_tokens * ev.p_cex : fee_tokens);
+                            // Track effective dynamic pool fee (fraction), size-weighted by coin0 notional
+                            const RealT gross_dy_tokens = dy_after_fee + fee_tokens;
+                            if (gross_dy_tokens > 0 && d.notional_coin0 > 0) {
+                                const RealT fee_frac = fee_tokens / gross_dy_tokens; // between mid_fee and out_fee
+                                m.fee_wsum += fee_frac * d.notional_coin0;
+                                m.fee_w    += d.notional_coin0;
+                            }
                             m.arb_pnl_coin0 += d.profit;
                             count_rebalance(ps_before, ps_after);
 
@@ -1082,6 +1105,8 @@ int main(int argc, char* argv[]) {
                     summary["trades"]               = m.trades;
                     summary["total_notional_coin0"] = static_cast<double>(m.notional);
                     summary["lp_fee_coin0"]         = static_cast<double>(m.lp_fee_coin0);
+                    // Size-weighted average pool fee fraction across executed trades
+                    summary["avg_pool_fee"]         = (m.fee_w > 0 ? static_cast<double>(m.fee_wsum / m.fee_w) : -1.0);
                     summary["arb_pnl_coin0"]        = static_cast<double>(m.arb_pnl_coin0);
                     summary["n_rebalances"]         = m.n_rebalances;
                     summary["donations"]            = m.donations;
@@ -1098,12 +1123,13 @@ int main(int argc, char* argv[]) {
                     const double duration_s = (t_end > t_start) ? double(t_end - t_start) : 0.0;
 
                     // Finalize time-averaged |p_cex - price_scale| (units: price)
-                    double avg_cex_diff = -1.0;
-                    if (duration_s > 0.0) {
-                        avg_cex_diff = static_cast<double>(total_cex_diff) / duration_s;
+                    // Mean absolute relative deviation in bps (time-weighted)
+                    double avg_rel_bps = -1.0;
+                    if (sum_dt > 0.0L) {
+                        avg_rel_bps = 1e4 * static_cast<double>(sum_abs_rel_dt / sum_dt);
                     }
-                    summary["avg_cex_diff"] = avg_cex_diff;
-                    summary["max_cex_diff"] = static_cast<double>(max_cex_diff);
+                    summary["avg_rel_bps"] = avg_rel_bps;
+                    summary["max_rel_bps"] = static_cast<double>(1e4 * max_rel_abs);
                     // Fraction of time price_scale deviates >10% from CEX price
                     double cex_follow_time_frac = -1.0;
                     if (duration_s > 0.0) {
