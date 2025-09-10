@@ -1,6 +1,45 @@
+
 # TwoCrypto – Vyper Reference, C++ Port, Benchmarks, and Arbitrage Sim
 
 High‑performance C++ implementation of Curve’s TwoCrypto AMM with exact parity to the Vyper reference, plus math/pool benchmarks, a candle‑driven arbitrage simulator, and reproducible datasets.
+
+## Simulate Pools (Arbitrage Simulator) — Quickstart
+
+Run the high‑throughput arbitrage simulator over candle data and generate a rich run file (and optional per‑trade actions) you can later replay in the benchmark pipeline.
+
+```bash
+# 0) One‑time submodule init (for Vyper reference later)
+git submodule update --init --recursive
+
+# 1) Build the C++ arb harness (Release recommended)
+cmake -B cpp/build cpp -DCMAKE_BUILD_TYPE=Release
+cmake --build cpp/build --target arb_harness -j
+
+# 2) Create (or reuse) a pool config
+python3 python/arb_sim/generate_pools.py           # generic grid
+# or a preset variant (e.g., BRL/USD):
+# python3 python/arb_sim/generate_pools_brl.py
+
+# 3) Run the simulator on a candles file
+python3 python/arb_sim/arb_sim.py \
+  python/arb_sim/trade_data/brlusd/brlusd-1m.json \
+  -n 8 \
+  --n-candles 20000 \
+  --min-swap 1e-6 --max-swap 1.0 \
+  --save-actions      # include executed trades in the output (for replay)
+
+# Outputs go to python/arb_sim/run_data/
+#  - pool_config.json        (pool/grid used)
+#  - arb_run_<UTC>.json      (aggregated results, final_state, optional actions)
+```
+
+Key flags
+- `--n-candles N`: slice the first N candles for rapid iteration.
+- `--min-swap`, `--max-swap`: swap size range as a fraction of side balance.
+- `-n/--threads N`: number of C++ worker threads.
+- `--save-actions`: embed executed trades for slow but precise Vyper/C++ replay.
+
+See “Arbitrage Simulator” below for full details (donations, inputs/outputs, plotting).
 
 ## Overview
 
@@ -201,6 +240,9 @@ Run full benchmark (runs both C++ variants and Vyper):
 ```bash
 # C++ threads per process; Vyper worker processes
 uv run python/benchmark_pool/run_full_benchmark.py --n-cpp 8 --n-py 1
+# Optional: cap a very long sequence to the first N actions
+# (speeds up Vyper):
+# uv run python/benchmark_pool/run_full_benchmark.py --n-cpp 8 --n-py 1 --limit-actions 30000
 ```
 
 Notes:
@@ -247,6 +289,33 @@ Advanced:
   #   --pool-config python/arb_sim/run_data/pool_config.json
   # Note: by default it expects a single actions-carrying run and picks the latest arb_run_* file.
   ```
+
+## Benchmark: Vyper vs C++ (replay arb_sim actions)
+
+Start from an `arb_run_*.json` that includes actions, convert to a benchmark dataset, then run the full validation comparing C++ (integer and double) against Vyper. You can cap the sequence length to accelerate Vyper.
+
+```bash
+# 1) Run arb_sim and save actions
+python3 python/arb_sim/generate_pools.py
+python3 python/arb_sim/arb_sim.py \
+  python/arb_sim/trade_data/brlusd/brlusd-1m.json \
+  -n 8 --n-candles 20000 \
+  --min-swap 1e-12 --max-swap 1 \
+  --dustswapfreq 600 \
+  --save-actions
+
+# 2) Convert actions to benchmark inputs (writes pools.json + sequences.json)
+uv run python/benchmark_pool/arb_actions_to_sequence.py
+
+# 3) Run the full benchmark (C++ i+d + Vyper).
+#    Use --limit-actions N to shorten very long sequences.
+uv run python/benchmark_pool/run_full_benchmark.py --n-cpp 8 --n-py 1 --limit-actions 30000
+```
+
+Notes
+- Progress logs: the Vyper runner prints total actions and 1% progress increments per pool.
+- Speed tips: add `--final-only` to only snapshot the final state; keep `--n-py 1` for Vyper stability.
+- Outputs: timestamped under `python/benchmark_pool/data/results/run_<UTC>/` with combined JSON for C++ and Vyper and a summary.
 
 ## C++ Variants Benchmark (integer vs double)
 
