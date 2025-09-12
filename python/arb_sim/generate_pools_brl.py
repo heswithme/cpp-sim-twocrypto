@@ -23,22 +23,22 @@ import math
 
 # -------------------- Grid Definition --------------------
 N_GRID_X = 1
-N_GRID_Y = 10
+N_GRID_Y = 4
 
-X_name = "ma_time"  # can be changed to any pool key
-# xmin = 600/math.log(2)
-# xmax = 86400*120/math.log(2)
-xlogspace = False
+X_name = "mid_fee"  # can be changed to any pool key
+xmin = int(10 / 10_000 * 10**10)
+xmax = int(500 / 10_000 * 10**10)
+xlogspace = True
 
-Y_name = "donation_apy"  # default second param; also applied to out_fee
-ymin = 0.01
-ymax =  0.1
-ylogspace = False
+Y_name = "A"  # default second param; also applied to out_fee
+ymin = 1*10_000
+ymax =  100*10_000
+ylogspace = True
 
 
-xmin = int(86400*7/math.log(2))
-xmax = xmin
-# ymin = 0.03
+# xmin = int(86400*7/math.log(2))
+# xmax = xmin
+# ymin = 0.05
 # ymax = ymin
 # N_GRID_X = 1
 # N_GRID_Y = 1

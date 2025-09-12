@@ -141,6 +141,47 @@ post_trade_price_and_fee(const twocrypto::TwoCryptoPoolT<RealT>& pool,
     return {p_new, fee_pool};
 }
 
+// Estimate instantaneous liquidity density (d) and slippage/elasticity (r = 1/d)
+// at the current state by applying a tiny virtual trade along the invariant.
+// We perturb the quote/denominator side (coin1) by a small relative amount and
+// measure the resulting marginal price change.
+static inline bool instantaneous_dr(const twocrypto::TwoCryptoPoolT<RealT>& pool,
+                                    RealT& out_d, RealT& out_r)
+{
+    using Ops = stableswap::MathOps<RealT>;
+    const auto xp_now = pool_xp_current(pool);
+    const RealT p_now = Ops::get_p(xp_now, pool.D, {pool.A, pool.gamma}) * pool.cached_price_scale;
+    const RealT x_b   = pool.balances[1]; // quote/denominator reserve (coin1)
+    if (!(p_now > 0) || !(x_b > 0)) return false;
+
+    // Try a few increasing epsilons in case the derivative is extremely small
+    RealT eps = static_cast<RealT>(1e-6);
+    for (int attempt = 0; attempt < 3; ++attempt) {
+        const RealT dx_tokens = std::max(eps * x_b, std::numeric_limits<RealT>::min());
+        auto pr = post_trade_price_and_fee(pool, /*i=*/1, /*j=*/0, dx_tokens);
+        const RealT p_new = pr.first;
+        const RealT p_avg = (p_now + p_new) / static_cast<RealT>(2);
+        const RealT dp_abs = std::abs(p_new - p_now);
+        if (p_avg > 0 && dp_abs > 0) {
+            const RealT rel = dp_abs / p_avg;
+            const RealT d = (dx_tokens / x_b) / rel;
+            if (d > 0 && std::isfinite(static_cast<double>(d))) {
+                out_d = d;
+                out_r = static_cast<RealT>(1) / d;
+                return true;
+            }
+        }
+        eps *= static_cast<RealT>(10);
+    }
+    return false;
+}
+
+static inline RealT balance_indicator(const twocrypto::TwoCryptoPoolT<RealT>& pool) {
+    const RealT ps = pool.cached_price_scale;
+    const auto xp = pool_xp_from(pool, pool.balances, ps);
+    return 4 * xp[0] * xp[1] / ((xp[0] + xp[1])*(xp[0] + xp[1]));
+}
+
 static inline std::pair<RealT, RealT>
 simulate_exchange_once(const twocrypto::TwoCryptoPoolT<RealT>& pool,
                        size_t i, size_t j, RealT dx)
@@ -939,6 +980,12 @@ int main(int argc, char* argv[]) {
                     RealT last_rel_abs = 0;              // |ps/p_cex - 1| at previous event
                     uint64_t last_ts_err = 0;            // ts of previous sample
                     bool have_err = false;
+
+                    // Time-weighted latent slippage/liquidity density (always-on, independent of trades)
+                    long double tw_d_sum_dt = 0.0L;  // sum d * dt
+                    long double tw_r_sum_dt = 0.0L;  // sum r * dt
+                    long double tw_dt       = 0.0L;  // total dt
+                    RealT last_d_inst = 0; RealT last_r_inst = 0; uint64_t last_ts_lat = 0; bool have_lat = false;
                     // Metric: fraction of time price_scale deviates more than 10% from p_cex
                     const RealT FAR_THRESH = static_cast<RealT>(0.10);
                     long double time_far_s = 0.0L;
@@ -947,6 +994,7 @@ int main(int argc, char* argv[]) {
                     bool last_far = false;
                     const auto t_pool0 = clk::now();
                     uint64_t last_dust_ts = init_ts;
+
                     push_state(); // initial snapshot
 
                     // ---- Main event loop ----
@@ -965,6 +1013,14 @@ int main(int argc, char* argv[]) {
                         last_rel_abs = cur_rel_abs;
                         last_ts_err  = ev.ts;
                         have_err     = true;
+
+                        // Latent instantaneous metrics: accumulate previous sample over [last_ts_lat, ev.ts)
+                        if (have_lat && ev.ts > last_ts_lat) {
+                            const long double dt = static_cast<long double>(ev.ts - last_ts_lat);
+                            tw_d_sum_dt += static_cast<long double>(last_d_inst) * dt;
+                            tw_r_sum_dt += static_cast<long double>(last_r_inst) * dt;
+                            tw_dt       += dt;
+                        }
                         // Accumulate time when |ps/p_cex - 1| > 10%
                         if (have_band && ev.ts > last_ts_band && last_far) {
                             time_far_s += static_cast<long double>(ev.ts - last_ts_band);
@@ -998,8 +1054,8 @@ int main(int argc, char* argv[]) {
                             // Idle: opportunistic EMA/price tweak at coarse cadence
                             const bool can_tick = (dustswapfreq_s == 0) ||
                                                   (ev.ts >= pool.last_timestamp + dustswapfreq_s);
-                            if (!can_tick) continue;
-                            try {
+                            if (can_tick) {
+                                try {
                                 const RealT log_ps_before = pool.cached_price_scale;
                                 const RealT log_oracle_before = pool.cached_price_oracle;
                                 const RealT log_xcp_profit_before = pool.xcp_profit;
@@ -1027,7 +1083,18 @@ int main(int argc, char* argv[]) {
                                     push_state();
                                 }
                                 last_dust_ts = ev.ts;
-                            } catch (...) { /* ignore */ }
+                                // Sample instantaneous d,r after tick (state for the next interval)
+                                RealT cur_d = 0, cur_r = 0;
+                                if (instantaneous_dr(pool, cur_d, cur_r)) {
+                                    last_d_inst = cur_d;
+                                    last_r_inst = cur_r;
+                                    last_ts_lat = ev.ts;
+                                    have_lat    = true;
+                                }
+                                } catch (...) { /* ignore */ }
+                                continue;
+                            }
+                            // No trade, no tick: skip sampling to reduce cost
                             continue;
                         }
 
@@ -1048,6 +1115,11 @@ int main(int argc, char* argv[]) {
                             const RealT ps_after     = pool.cached_price_scale;
                             const RealT p_after = pool.get_p();
                             const RealT lp_after = pool.last_prices;
+
+                            // # balance indicator that goes from 10**18 (perfect pool balance) to 0 (very imbalanced, 100:1 and worse)
+                            // # N^N * (xp[0] * xp[1]) / (xp[0] + xp[1])**2
+                            // B = PRECISION * N_COINS**N_COINS * xp[0] // B * xp[1] // B
+                            
                             // printf("t: %llu, vp_boosted_before=%10.12Lf, vp_boosted_after=%10.12Lf\n", ev.ts, static_cast<double>(log_vp_pre), static_cast<double>(log_vp_after));
                             m.trades   += 1;
                             m.notional += d.notional_coin0;
@@ -1061,6 +1133,17 @@ int main(int argc, char* argv[]) {
                             }
                             m.arb_pnl_coin0 += d.profit;
                             count_rebalance(ps_before, ps_after);
+
+                            // Sample instantaneous d,r after trade (state for the next interval)
+                            {
+                                RealT cur_d = 0, cur_r = 0;
+                                if (instantaneous_dr(pool, cur_d, cur_r)) {
+                                    last_d_inst = cur_d;
+                                    last_r_inst = cur_r;
+                                    last_ts_lat = ev.ts;
+                                    have_lat    = true;
+                                }
+                            }
 
                             if (save_actions) {
                                 json::object tr;
@@ -1087,12 +1170,17 @@ int main(int argc, char* argv[]) {
                                 tr["xcp_profit_after"] = static_cast<double>(log_xcp_profit_after);
                                 tr["vp_before"] = static_cast<double>(log_vp_pre);
                                 tr["vp_after"] = static_cast<double>(log_vp_after);
+                                tr["slippage"] = static_cast<double>(last_r_inst);
+                                tr["liq_density"] = static_cast<double>(last_d_inst);
+                                tr["balance_indicator"] = static_cast<double>(balance_indicator(pool));
                                 actions.push_back(std::move(tr));
                                 push_state();
                             }
                         } catch (...) {
                             // Trade failed; ignore and continue
                         }
+
+                        // End of event: nothing to do (sampling only after trade/tick)
                     }
 
                     const auto t_pool1 = clk::now();
@@ -1115,6 +1203,22 @@ int main(int argc, char* argv[]) {
                         json::array{static_cast<double>(m.donation_amounts_total[0]),
                                     static_cast<double>(m.donation_amounts_total[1])};
                     summary["pool_exec_ms"] = pool_exec_ms;
+                    // Time-weighted latent slippage/liquidity density, normalized vs xy=k baseline
+                    // For xy=k: r = 2, d = 1/2 => tw_slippage ≈ 1, tw_liq_density ≈ 1
+                    // Interpretation:
+                    // - tw_slippage > 1 ⇒ more elastic than xy=k (more price move per unit reserve change, i.e., more slippage).
+                    // - tw_slippage < 1 ⇒ stiffer than xy=k (less slippage).
+                    // - tw_liq_density > 1 ⇒ deeper than xy=k (higher liquidity density).
+                    // - tw_liq_density < 1 ⇒ shallower than xy=k.
+                    double tw_slippage = -1.0, tw_liq_density = -1.0;
+                    if (tw_dt > 0.0L) {
+                        const long double avg_r = tw_r_sum_dt / tw_dt;
+                        const long double avg_d = tw_d_sum_dt / tw_dt;
+                        tw_slippage   = static_cast<double>(avg_r) / 2.0;
+                        tw_liq_density = static_cast<double>(avg_d) * 2.0;
+                    }
+                    summary["tw_slippage"]    = tw_slippage;
+                    summary["tw_liq_density"] = tw_liq_density;
 
                     // APY metrics
                     constexpr RealT SEC_PER_YEAR = static_cast<RealT>(365.0 * 86400.0);
