@@ -194,7 +194,7 @@ def main() -> int:
     ap.add_argument("--metric", type=str, default="virtual_price", help="Single metric for Z (default: virtual_price)")
     ap.add_argument("--metrics", type=str, default=None, help="Comma-separated list of metrics to plot side-by-side (overrides --metric)")
     ap.add_argument("--no-scale", action="store_true", help="Disable 1e18 scaling for Z")
-    ap.add_argument("--cmap", type=str, default="jet", help="Matplotlib colormap (default: viridis)")
+    ap.add_argument("--cmap", type=str, default="turbo", help="Matplotlib colormap (default: turbo)")
     ap.add_argument("--out", type=str, default=None, help="Output image path (default: run_data/heatmap_<metric>.png)")
     ap.add_argument("--show", action="store_true", help="Show interactive window")
     ap.add_argument("--annot", action="store_true", help="Annotate cells with values")
@@ -207,6 +207,7 @@ def main() -> int:
     ap.add_argument("--no-log-y", dest="log_y", action="store_false", help="Disable log scale on Y")
     ap.add_argument("--square", dest="square", action="store_true", help="Force a square plot with square cells (default)")
     ap.add_argument("--no-square", dest="square", action="store_false", help="Disable square plot; size adapts to grid")
+    ap.add_argument("--ncol", type=int, default=3, help="Number of columns for multi-metric layout (default: 3)")
     ap.set_defaults(square=True)
     args = ap.parse_args()
 
@@ -224,22 +225,18 @@ def main() -> int:
     def metric_scale_flags(m: str) -> Tuple[bool, bool]:
         mlow = (m or '').lower()
         scale_1e18 = (not args.no_scale) and m in {"virtual_price", "xcp_profit", "price_scale", "D", "totalSupply"}
-        scale_percent = mlow in {"vpminusone", "apy"}
+        scale_percent = mlow in {"vpminusone", "apy"} or "apy" in mlow
         return scale_1e18, scale_percent
 
     first_m = metrics[0]
     s18, sperc = metric_scale_flags(first_m)
     x_name, y_name, xs, ys, Z0 = _extract_grid(data, first_m, s18, sperc)
 
-    # Prepare figure with adaptive rows/cols
+    # Prepare figure with configurable columns
     n = len(metrics)
-    if n <= 3:
-        rows, cols = 1, n
-    elif n == 4:
-        rows, cols = 2, 2
-    else:
-        cols = 3
-        rows = int(np.ceil(n / cols))
+    cols = max(1, int(args.ncol))
+    cols = min(cols, n) if n > 0 else cols
+    rows = int(np.ceil(n / cols)) if n > 0 else 1
 
     if args.square:
         base = max(len(xs), len(ys))
@@ -351,7 +348,7 @@ def main() -> int:
             if tick_vals is not None:
                 cb.set_ticks(tick_vals)
             # Fixed decimal formatter for colorbar ticks
-            cb.ax.yaxis.set_major_formatter(FormatStrFormatter('%g'))
+            cb.ax.yaxis.set_major_formatter(FormatStrFormatter('%.3g'))
             if args.annot:
                 for i in range(Z.shape[0]):
                     for j in range(Z.shape[1]):

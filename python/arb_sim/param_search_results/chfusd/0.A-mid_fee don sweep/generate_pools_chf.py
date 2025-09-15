@@ -22,37 +22,19 @@ import math
 
 
 # -------------------- Grid Definition --------------------
-N_GRID_X = 4
-N_GRID_Y = 1
+N_GRID_X = 8
+N_GRID_Y = 8
 
-X_name = "donation_apy"  # can be changed to any pool key
-xmin = 0.01
-xmax = 0.07
-xlogspace = False
+X_name = "mid_fee"  # can be changed to any pool key
+xmin = int(1 / 10_000 * 10**10)
+xmax = int(100 / 10_000 * 10**10)
+xlogspace = True
 
 Y_name = "A"  # default second param; also applied to out_fee
-ymin = 50*10_000
+ymin = 1*10_000
 ymax =  100*10_000
 ylogspace = True
 
-
-# xmin = int(86400*7/math.log(2))
-# xmax = xmin
-# ymin = 0.05
-# ymax = ymin
-# N_GRID_X = 1
-# N_GRID_Y = 1
-
-
-# X_name = "donation_apy" 
-# xmin = 0.01
-# xmax = 0.1
-# xlogspace = False
-
-# Y_name = "donation_frequency"  
-# ymin = 600
-# ymax =  86400*7
-# ylogspace = False
 
 if xlogspace:
     X_vals = np.logspace(np.log10(xmin), np.log10(xmax), N_GRID_X).round().tolist()
@@ -69,7 +51,7 @@ else:
 # Y_vals = [int(x) for x in Y_vals]
 
 init_liq = 1_000_000 # in coin0
-DEFAULT_DATAFILE = "python/arb_sim/trade_data/brlusd/brlusd-1m.json"
+DEFAULT_DATAFILE = "python/arb_sim/trade_data/chfusd/chfusd-2019-2024.json"
 START_TS = _first_candle_ts(DEFAULT_DATAFILE)
 init_price = _initial_price_from_file(DEFAULT_DATAFILE)
 # -------------------- Base Templates --------------------
@@ -83,7 +65,7 @@ BASE_POOL = {
     "fee_gamma": int(0.003 * 10**18),
     "allowed_extra_profit": int(1e-12 * 10**18),
     "adjustment_step": int(1e-7 * 10**18),
-    "ma_time": 872541,#866,
+    "ma_time": 866,
     "initial_price": int(init_price * 10**18),
     "start_timestamp": START_TS,
 
@@ -91,13 +73,13 @@ BASE_POOL = {
     # - donation_apy: plain fraction per year (0.05 => 5%).
     # - donation_frequency: seconds between donations.
     # - donation_coins_ratio: fraction of donation in coin1 (0=all coin0, 1=all coin1)
-    "donation_apy": 0.03,
+    "donation_apy": 0.1,
     "donation_frequency": int(7*86400),
     "donation_coins_ratio": 0.5,
 }
 
 BASE_COSTS = {
-    "arb_fee_bps": 50.0,
+    "arb_fee_bps": 10.0,
     "gas_coin0": 0.0,
     "use_volume_cap": False,
     "volume_cap_mult": 1,
@@ -116,7 +98,7 @@ def build_grid():
             mid_fee_val = int(pool.get("mid_fee", 0))
             cur_out_val = int(pool.get("out_fee", 0))
             pool["out_fee"] = max(mid_fee_val, cur_out_val)
-            # pool["out_fee"] = mid_fee_val
+            pool["out_fee"] = mid_fee_val
             costs = dict(BASE_COSTS)
             tag_x = f"{X_name}_{xv}"
             tag_y = f"{Y_name}_{yv}"
