@@ -22,8 +22,8 @@ import math
 
 
 # -------------------- Grid Definition --------------------
-N_GRID_X = 32
-N_GRID_Y = 32
+N_GRID_X = 2
+N_GRID_Y = 2
 
 X_name = "mid_fee"  # can be changed to any pool key
 xmin = int(10 / 10_000 * 10**10)
@@ -33,6 +33,17 @@ xlogspace = False
 Y_name = "A"  # default second param; also applied to out_fee
 ymin = 40*10_000
 ymax =  200*10_000
+ylogspace = False
+
+
+X_name = "mid_fee"  # can be changed to any pool key
+xmin = int(35 / 10_000 * 10**10)
+xmax = xmin
+xlogspace = False
+
+Y_name = "A"  # default second param; also applied to out_fee
+ymin = 120*10_000
+ymax =  ymin
 ylogspace = False
 
 
