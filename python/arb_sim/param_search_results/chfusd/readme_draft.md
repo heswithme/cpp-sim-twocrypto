@@ -30,3 +30,9 @@ The first provides better price peg (lower avg_rel_bps in image 5d), while the s
 To assess off-peg risk, we plotted pool price_scale vs CEX price for these candidates, adding a contrast case (A=200, mid_fee=10 bps). Image 6.price_comparison.png shows strong detachments in the contrast case (green line diverging from CEX for weeks), so we discarded it.
 
 6a.price_comparison_clean.png shows both candidate setups track price reasonably well. The orange line (A=150, fee=75 bps) follows high-frequency CEX moves less, potentially saving rebalances. The blue line (A=120, fee=35 bps) hugs the CEX price more closely, offering slightly better tracking. The main trade-off between the two candidates is fee level (35 bps vs 75 bps), which directly affects LP profitability versus trading cost.
+
+Commands used:
+
+uv run python/arb_sim/generate_pools_chf.py && uv run python/arb_sim/arb_sim.py python/arb_sim/trade_data/chfusd/chfusd-2019-2024.json --min-swap 1e-10 --max-swap 1 --dustswapfreq 600 -n 10
+
+uv run python/arb_sim/plot_heatmap.py  --metrics apy,apy_coin0,apy_coin0_boost,xcp_profit,vp,vp_boosted,avg_pool_fee,n_rebalances,trades,total_notional_coin0,arb_pnl_coin0,tw_slippage,tw_liq_density,avg_rel_bps --ncol 5 --font-size 32
