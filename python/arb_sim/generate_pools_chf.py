@@ -22,8 +22,8 @@ import math
 
 
 # -------------------- Grid Definition --------------------
-N_GRID_X = 2
-N_GRID_Y = 2
+N_GRID_X = 32
+N_GRID_Y = 32
 
 X_name = "mid_fee"  # can be changed to any pool key
 xmin = int(10 / 10_000 * 10**10)
@@ -36,15 +36,15 @@ ymax =  200*10_000
 ylogspace = False
 
 
-X_name = "mid_fee"  # can be changed to any pool key
-xmin = int(35 / 10_000 * 10**10)
-xmax = xmin
-xlogspace = False
+# X_name = "mid_fee"  # can be changed to any pool key
+# xmin = int(35 / 10_000 * 10**10)
+# xmax = xmin
+# xlogspace = False
 
-Y_name = "A"  # default second param; also applied to out_fee
-ymin = 120*10_000
-ymax =  ymin
-ylogspace = False
+# Y_name = "A"  # default second param; also applied to out_fee
+# ymin = 120*10_000
+# ymax =  ymin
+# ylogspace = False
 
 
 if xlogspace:
@@ -76,7 +76,7 @@ BASE_POOL = {
     "fee_gamma": int(0.003 * 10**18),
     "allowed_extra_profit": int(1e-12 * 10**18),
     "adjustment_step": int(1e-7 * 10**18),
-    "ma_time": 86400 / math.log(2), #866
+    "ma_time": 866,#86400 / 24 / math.log(2), #866
     "initial_price": int(init_price * 10**18),
     "start_timestamp": START_TS,
 
