@@ -76,7 +76,7 @@ BASE_POOL = {
     "fee_gamma": int(0.003 * 10**18),
     "allowed_extra_profit": int(1e-12 * 10**18),
     "adjustment_step": int(1e-7 * 10**18),
-    "ma_time": 866,#86400 / 24 / math.log(2), #866
+    "ma_time": 86400 / 12 / math.log(2), #866
     "initial_price": int(init_price * 10**18),
     "start_timestamp": START_TS,
 

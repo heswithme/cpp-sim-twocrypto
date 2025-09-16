@@ -17,13 +17,13 @@ The key metric is time-weighted slippage (tw_slippage, lower is better). It corr
 
 Zooming into A=10–1000 and mid_fee=10–100 bps (log scale, see 3a, 3b, 3c), and further into A=50–500 (same mid_fee range, linear scale, see 4,a,b,c), we find that optimal slippage occurs near A≈100 (dark blue front on tw_slippage in image 4). The final heatmap scans A=40–200 with mid_fee=10–100 bps. Notably, we can see that MA=866 (10 min) and MA=1h introduce way more noise to the results, while Ma=1d is smooth and easier to analyze. 
 
-5a & 5b contrast region of interest for MA=10min and MA=1day. While not free from noise, MA=10min seem to provide slightly better tw_slippage, so we use MA=866 for further investigations.
+5a,b,c,d contrast region of interest for MA=10min, MA=1h, MA=12h and MA=1day. While not free from noise, lower MA values (10min, 1h) seem to provide slightly better minimal tw_slippage, whereas higher MA values (12h, 1day) have less noise and more stable regions of lower tw_slippage. Notably, MA=24h (5d) enables whole region of higher-A, lower-slippage values, so we chose MA=1d as best smooting time for now (we can optimize MA with another pass later on).
 
-From 4c->5, two candidate parameter sets emerge:
+From 5d, two candidate parameter sets emerge:
 	•	A=120, mid_fee≈35 bps
 	•	A=150, mid_fee=75 bps
 
-The first provides better price peg (lower avg_rel_bps in image 5), while the second grants higher LP APY.
+The first provides better price peg (lower avg_rel_bps in image 5d), while the second grants higher LP APY.
 
 To assess off-peg risk, we plotted pool price_scale vs CEX price for these candidates, adding a contrast case (A=200, mid_fee=10 bps). Image 6.price_comparison.png shows strong detachments in the contrast case (green line diverging from CEX for weeks), so we discarded it.
 
