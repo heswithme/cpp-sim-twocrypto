@@ -841,7 +841,8 @@ int main(int argc, char* argv[]) {
                   << " [--n-candles N] [--save-actions] [--events]"
                   << " [--min-swap F] [--max-swap F]"
                   << " [--threads N|-n N] [--candle-filter PCT]"
-                  << " [--dustswapfreq S]\n";
+                  << " [--dustswapfreq S]"
+                  << " [--userswapfreq S] [--userswapsize F] [--userswapthresh F]\n";
         return 1;
     }
 
@@ -858,6 +859,9 @@ int main(int argc, char* argv[]) {
     size_t n_workers      = std::max<size_t>(1, std::thread::hardware_concurrency());
     double candle_filter_pct = 99;       // +/-X% squeeze around (O+C)/2
     uint64_t dustswapfreq_s  = 3600;       // EMA update tick cadence when idle
+    uint64_t user_swap_freq_s = 0;         // seconds between synthetic user swaps (0=disabled)
+    double   user_swap_size_frac = 0.01;   // fraction of from-side balance per user swap
+    double   user_swap_thresh = 0.05;      // max relative deviation allowed vs CEX
 
     for (int i = 4; i < argc; ++i) {
         const std::string arg = argv[i];
@@ -870,8 +874,14 @@ int main(int argc, char* argv[]) {
             else if ((arg == "--threads" || arg == "-n") && i+1 < argc) n_workers = static_cast<size_t>(std::stoll(argv[++i]));
             else if (arg == "--candle-filter" && i+1 < argc) candle_filter_pct = std::stod(argv[++i]);
             else if (arg == "--dustswapfreq"  && i+1 < argc) dustswapfreq_s    = static_cast<uint64_t>(std::stoll(argv[++i]));
+            else if (arg == "--userswapfreq"  && i+1 < argc) user_swap_freq_s  = static_cast<uint64_t>(std::stoll(argv[++i]));
+            else if (arg == "--userswapsize"  && i+1 < argc) user_swap_size_frac = std::stod(argv[++i]);
+            else if (arg == "--userswapthresh" && i+1 < argc) user_swap_thresh = std::stod(argv[++i]);
         } catch (...) { /* ignore bad flags */ }
     }
+
+    if (user_swap_size_frac < 0) user_swap_size_frac = 0;
+    if (user_swap_thresh < 0) user_swap_thresh = 0;
 
     try {
         using clk = std::chrono::high_resolution_clock;
@@ -994,6 +1004,11 @@ int main(int argc, char* argv[]) {
                     bool last_far = false;
                     const auto t_pool0 = clk::now();
                     uint64_t last_dust_ts = init_ts;
+                    const bool user_swaps_enabled = (user_swap_freq_s > 0) && (user_swap_size_frac > 0);
+                    size_t user_next_dir = 0; // 0 -> coin0->coin1, 1 -> coin1->coin0
+                    uint64_t next_user_swap_ts = (user_swaps_enabled && !events.empty())
+                                                 ? events.front().ts + user_swap_freq_s
+                                                 : 0;
 
                     push_state(); // initial snapshot
 
@@ -1037,6 +1052,38 @@ int main(int argc, char* argv[]) {
 
                         // Donation: single-period, based on current TVL
                         make_donation(pool, dcfg, ev.ts, save_actions, actions, states, m);
+
+                        // Synthetic user swap at fixed cadence
+                        if (user_swaps_enabled && next_user_swap_ts > 0) {
+                            if (ev.ts >= next_user_swap_ts) {
+                                next_user_swap_ts += user_swap_freq_s;
+
+                                if (!(ev.p_cex > 0)) continue;
+                                const RealT spot = pool.get_p();
+                                if (!(spot > 0)) continue;
+                                const RealT rel = std::abs(spot / ev.p_cex - RealT(1));
+                                if (rel > static_cast<RealT>(user_swap_thresh)) continue;
+
+                                const size_t i_from = user_next_dir & 1;
+                                const size_t j_to   = static_cast<size_t>(i_from ^ 1);
+                                const RealT bal_from = pool.balances[i_from];
+                                if (!(bal_from > 0)) continue;
+
+                                RealT frac = static_cast<RealT>(user_swap_size_frac);
+                                if (frac > RealT(1)) frac = RealT(1);
+                                if (!(frac > RealT(0))) continue;
+                                RealT dx = bal_from * frac;
+                                if (!(dx > 0)) continue;
+
+                                try {
+                                    auto res = pool.exchange(static_cast<RealT>(i_from), static_cast<RealT>(j_to), dx, RealT(0));
+                                    RealT cur_d = 0, cur_r = 0;
+                                    user_next_dir ^= 1; // alternate direction
+                                } catch (...) {
+                                    // ignore failed user swap
+                                }
+                            }
+                        }
 
                         const RealT pre_p_pool = pool.get_p();
 

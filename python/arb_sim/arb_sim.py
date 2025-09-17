@@ -52,7 +52,9 @@ class ArbHarnessRunner:
     def run(self, pools_json: Path, candles_path: Path, out_json_path: Path,
             n_candles: int = 0, save_actions: bool = False, events: bool = False,
             min_swap: float = 1e-12, max_swap: float = 1.0,
-            threads: int = 1, dustswapfreq: int | None = None) -> Dict[str, Any]:
+            threads: int = 1, dustswapfreq: int | None = None,
+            userswapfreq: int | None = None, userswapsize: float | None = None,
+            userswapthresh: float | None = None) -> Dict[str, Any]:
         print("Running arb_harness...")
         cmd = [str(self.exe_path), str(pools_json), str(candles_path), str(out_json_path)]
         if n_candles and n_candles > 0:
@@ -69,6 +71,12 @@ class ArbHarnessRunner:
         cmd += ["--threads", str(max(1, threads))]
         if dustswapfreq is not None:
             cmd += ["--dustswapfreq", str(int(dustswapfreq))]
+        if userswapfreq is not None:
+            cmd += ["--userswapfreq", str(int(userswapfreq))]
+        if userswapsize is not None:
+            cmd += ["--userswapsize", str(userswapsize)]
+        if userswapthresh is not None:
+            cmd += ["--userswapthresh", str(userswapthresh)]
         # Stream harness stdout/stderr directly to the console for live progress
         r = subprocess.run(cmd)
         if r.returncode != 0:
@@ -91,6 +99,9 @@ def main() -> int:
     parser.add_argument("--dustswapfreq", type=int, default=None, help="Seconds between dust swaps when no arb trade (cooldown)")
     parser.add_argument("--events", action="store_true", help="Treat input file as events [[ts,price,volume]] and skip candle conversion")
     parser.add_argument("--candle-filter", type=float, default=10.0, help="Filter candles +/- PCT (default: 10.0)")
+    parser.add_argument("--userswapfreq", type=int, default=0, help="Seconds between synthetic user swaps (default: 0)")
+    parser.add_argument("--userswapsize", type=float, default=0, help="Fraction of from-side balance per user swap (default: 0)")
+    parser.add_argument("--userswapthresh", type=float, default=0, help="Max relative deviation vs CEX to allow user swap")
     args = parser.parse_args()
 
     repo_root = Path(__file__).resolve().parents[2]
@@ -115,7 +126,9 @@ def main() -> int:
     raw = runner.run(pool_config_path, Path(args.candles), out_json_path,
                      n_candles=args.n_candles, save_actions=args.save_actions, events=args.events,
                      min_swap=args.min_swap, max_swap=args.max_swap, threads=max(1, args.threads),
-                     dustswapfreq=args.dustswapfreq)
+                     dustswapfreq=args.dustswapfreq,
+                     userswapfreq=args.userswapfreq, userswapsize=args.userswapsize,
+                     userswapthresh=args.userswapthresh)
 
     runs_raw: List[Dict[str, Any]] = raw.get("runs", [])
     print(f"Time taken: {(datetime.now() - ts).total_seconds()} seconds")
