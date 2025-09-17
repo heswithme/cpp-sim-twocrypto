@@ -36,3 +36,10 @@ Commands used:
 uv run python/arb_sim/generate_pools_chf.py && uv run python/arb_sim/arb_sim.py python/arb_sim/trade_data/chfusd/chfusd-2019-2024.json --min-swap 1e-10 --max-swap 1 --dustswapfreq 600 -n 10
 
 uv run python/arb_sim/plot_heatmap.py  --metrics apy,apy_coin0,apy_coin0_boost,xcp_profit,vp,vp_boosted,avg_pool_fee,n_rebalances,trades,total_notional_coin0,arb_pnl_coin0,tw_slippage,tw_liq_density,avg_rel_bps --ncol 5 --font-size 32
+
+Update:
+A mode simulating organic volumes was added to arb_harness.cpp. User behavior is modelled as discrete swaps with given frequency in alternating directions. Example command:
+uv run python/arb_sim/generate_pools_chf.py && uv run python/arb_sim/arb_sim.py python/arb_sim/trade_data/chfusd/chfusd-2019-2024.json --min-swap 1e-10 --max-swap 1 --dustswapfreq 600 -n 10 --userswapfreq 3600 --userswapsize 0.001 --userswapthresh 0.01
+Such command will add user swapping 0.1% of pool i'th coin balance every 3600 seconds (one hour) but only if pool spot price is no more than 1% away from CEX price. Such usage can be considered as conservative approximation of real-world user behavior. For example, if pool TVL is 1M$, that would mean that each hour 500$ of coin 0 or 1 will be swapped irrespective of whether this swap could give better result on cex/fx market, but only oif price is not far from it. 
+
+7a,b demonstrate that such user behavior will significantly improve LP yields from net-zero/negative (when donations are subtracted) to 3-5% APY with best parameters. This tells that any even insignificant organic volume will disbalance the pool bringing fees, and arbitrageurs balancing the pool will bring some more fees as well. We see (from 7b) that lowest slippage can be achieved at A~=230 and mid_fee~=75bps, with ~4% LP net APY. While this result is very promising, advisable initial pool parameters are still those that don't consider any organic volume. If such volume is consistent, pool parameters can be changed by a DAO vote backed with more rigorous simulations.
