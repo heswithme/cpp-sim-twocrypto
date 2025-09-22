@@ -32,3 +32,20 @@ We run linear, two-parameter sweeps over A and ma_time with fees fixed, then rep
 
 2. linear_sweep,out>mid.png:
 In the second pass we raise the imbalanced fee to out_fee = 5 bps while keeping mid_fee = 3 bps. Results improve slightly across the relevant band, but the qualitative picture is unchanged: for A = 50 the best region still centers around ma_time=310200, with only marginal gains from the higher out fee. 
+
+# 3. fee_gamma – adjustment_step sweep
+
+We continue with a two-parameter sweep over the auxiliary knobs fee_gamma and adjustment_step at fixed core settings A = 50, mid_fee = 3 bps, out_fee = 5 bps, ma_time = 2.5·86400/ln2. The first pass is saved as 1.sweep_log.png. The x-axis scans fee_gamma on a log grid from 1e-4·1e18 to 0.5·1e18; the y-axis scans adjustment_step on a log grid from 1e-12·1e18 to 1e-3·1e18. This finetunes how the pool transitions between mid and out fees as it becomes imbalanced (fee_gamma) and how aggressively the controller updates the price scale (adjustment_step). As expected, lower fee_gamma shifts the realized fee upward toward out_fee, which raises LP APY while keeping slippage and tracking acceptable; the maps show a monotone APY improvement as fee_gamma decreases. Larger adjustment_step slightly improves price tracking (lower avg_rel_bps) at the cost of a modest increase in rebalances, which is acceptable in this fee regime. Based on these trends we zoom into the most relevant band.
+
+The refinement is recorded in 2.zoom_log.png, with fee_gamma narrowed to [0.001, 0.1]1e18 and adjustment_step to [1e-7, 1e-3]1e18, both on log axes. The lowest price deviation appears at adjustment_step ~ 5e-5 x 1e18, where avg_rel_bps forms a clean dark band without destabilizing slippage. At the same time, fee_gamma ~ 0.01 * 1e18 balances fee realization: the pool spends most of its time between the 3 bps mid fee and the 5 bps out fee, delivering higher APY than at larger fee_gamma while preserving the tracking improvements from the higher adjustment step. These settings are selected for the auxiliary layer under the issuer-mandated mid_fee = 3 bps constraint.
+
+Resulting recommended pool settings are:
+
+A= 500000 #50 * 10_000
+gamma=1000000000000000 # irrelevant
+mid_fee=3000000 # 0.0003 * 10**10
+out_fee=5000000 # 0.0005 * 10**10
+fee_gamma=10000000000000000 # 0.01 * 10**18
+allowed_extra_profit=1000000 # some small param, but should be non-zero
+adjustment_step=50000000000000 # 5e-5*1e18
+ma_exp_time=311622 #2.5d/ln(2)

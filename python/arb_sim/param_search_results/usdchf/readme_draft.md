@@ -1,5 +1,7 @@
 This file explains how we optimized parameters for the usdchf fxpair.
 
+Note: study was done for usdchf pair (price inverted from pool), but it was checked later that for chfusd pair (normal) results are the same (yearly crossvalidation contains correct pair and same patterns are seen).
+
 Idea: run backtests for refuel (donation/boost)–enabled twocrypto pools with various parameters, using historical candlestick data, and assuming arbitrageurs behave optimally — i.e., if a profitable trade exists, they will execute it with optimal size.
 
 Trade optimality depends on the pool execution price (a function of pool historical state, current liquidity, and invariant/fee parameters), the CEX price (assumed to allow infinite volume at each candle), and pool/CEX fees. If arbitrageurs can buy cheaper in the pool than on the CEX, they will, pushing the pool price up (and continuously equalizing pool and CEX prices).
