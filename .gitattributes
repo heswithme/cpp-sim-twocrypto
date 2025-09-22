@@ -1,0 +1,2 @@
+python/arb_sim/trade_data/*.json filter=lfs diff=lfs merge=lfs -text
+python/arb_sim/trade_data/**/*.json filter=lfs diff=lfs merge=lfs -text

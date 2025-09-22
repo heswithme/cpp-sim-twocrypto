@@ -89,7 +89,6 @@ python/benchmark_pool/data/results/
 python/arb_sim/run_data/
 # Trade data: ignore large/generated data, keep scripts
 # Ignore common data formats recursively
-python/arb_sim/trade_data/**/*.json
 python/arb_sim/trade_data/**/*.csv
 python/arb_sim/trade_data/**/*.ndjson
 python/arb_sim/trade_data/**/*.parquet
