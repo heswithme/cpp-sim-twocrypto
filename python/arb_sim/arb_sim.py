@@ -51,7 +51,7 @@ class ArbHarnessRunner:
 
     def run(self, pools_json: Path, candles_path: Path, out_json_path: Path,
             n_candles: int = 0, save_actions: bool = False, events: bool = False,
-            min_swap: float = 1e-12, max_swap: float = 1.0,
+            min_swap: float = 1e-10, max_swap: float = 1.0,
             threads: int = 1, dustswapfreq: int | None = None,
             userswapfreq: int | None = None, userswapsize: float | None = None,
             userswapthresh: float | None = None) -> Dict[str, Any]:
@@ -88,7 +88,8 @@ class ArbHarnessRunner:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run C++ multi-pool arbitrage harness over candle data or events")
-    parser.add_argument("candles", type=str, help="Path to candles JSON (array of [ts,o,h,l,c,vol]) or events JSON (with --events: [[ts,price,volume], ...])")
+    parser.add_argument("candles", nargs="?", default=None, type=str,
+                        help="Path to candles JSON; if omitted, use pool_config meta.datafile")
     parser.add_argument("--out", type=str, default=None, help="Aggregated output JSON path")
     parser.add_argument("--n-candles", type=int, default=0, help="Limit to first N candles (default: all)")
     parser.add_argument("--save-actions", action="store_true", help="Ask C++ harness to save executed trades/actions")
@@ -115,6 +116,24 @@ def main() -> int:
     with open(pool_config_path, 'r') as f:
         cfg = json.load(f)
 
+    def resolve_candles_path() -> Path:
+        if args.candles:
+            return Path(args.candles)
+        meta = cfg.get("meta") if isinstance(cfg, dict) else None
+        candidate = None
+        if isinstance(meta, dict):
+            candidate = meta.get("datafile")
+        if not candidate:
+            raise ValueError("Candles path not provided and meta.datafile missing in pool_config.json")
+        cand_path = Path(candidate)
+        if not cand_path.is_absolute():
+            cand_path = repo_root / cand_path
+        return cand_path
+
+    candles_path = resolve_candles_path()
+    if not candles_path.exists():
+        raise FileNotFoundError(f"Candles file not found: {candles_path}")
+
     # Invoke the harness once over the entire config
     out_json_path = Path(args.out) if args.out else (
         # repo_root / "python" / "arb_sim" / "run_data" / f"arb_run_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}.json"
@@ -123,7 +142,7 @@ def main() -> int:
     )
     out_json_path.parent.mkdir(parents=True, exist_ok=True)
     ts = datetime.now()
-    raw = runner.run(pool_config_path, Path(args.candles), out_json_path,
+    raw = runner.run(pool_config_path, candles_path, out_json_path,
                      n_candles=args.n_candles, save_actions=args.save_actions, events=args.events,
                      min_swap=args.min_swap, max_swap=args.max_swap, threads=max(1, args.threads),
                      dustswapfreq=args.dustswapfreq,
@@ -199,7 +218,7 @@ def main() -> int:
 
     agg = {
         "metadata": {
-            "candles_file": args.candles,
+            "candles_file": str(candles_path),
             "input_is_events": bool(args.events),
             "threads": max(1, args.threads),
             "base_pool": base_pool,

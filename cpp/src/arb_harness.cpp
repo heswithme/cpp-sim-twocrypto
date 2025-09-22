@@ -889,13 +889,25 @@ int main(int argc, char* argv[]) {
         // ---------- Load & build events once ----------
         const auto t_read0 = clk::now();
         std::vector<Event> events;
+        size_t n_candles_loaded = 0;
         if (use_events) {
             events = load_events(candles_path, max_candles);
         } else {
             const auto candles = load_candles(candles_path, max_candles, candle_filter_pct / 100.0);
+            n_candles_loaded = candles.size();
             events = gen_events(candles);
         }
         const auto t_read1 = clk::now();
+
+        {
+            std::lock_guard<std::mutex> lk(io_mu);
+            if (use_events) {
+                std::cout << "loaded " << events.size() << " events from " << candles_path << "\n";
+            } else {
+                std::cout << "loaded " << n_candles_loaded << " candles -> "
+                          << events.size() << " events from " << candles_path << "\n";
+            }
+        }
 
         // ---------- Read pool configs ----------
         std::ifstream in(pools_path);
@@ -1074,7 +1086,6 @@ int main(int argc, char* argv[]) {
                                 if (!(frac > RealT(0))) continue;
                                 RealT dx = bal_from * frac;
                                 if (!(dx > 0)) continue;
-
                                 try {
                                     auto res = pool.exchange(static_cast<RealT>(i_from), static_cast<RealT>(j_to), dx, RealT(0));
                                     RealT cur_d = 0, cur_r = 0;

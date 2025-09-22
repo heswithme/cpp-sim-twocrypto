@@ -26,7 +26,7 @@ N_GRID_X = 32
 N_GRID_Y = 32
 
 X_name = "mid_fee"  # can be changed to any pool key
-xmin = int(1 / 10_000 * 10**10)
+xmin = int(10 / 10_000 * 10**10)
 xmax = int(100 / 10_000 * 10**10)
 xlogspace = False
 
@@ -61,8 +61,10 @@ else:
 # X_vals = [int(x) for x in X_vals]
 # Y_vals = [int(x) for x in Y_vals]
 
-init_liq = 10_000_000 # in coin0
-DEFAULT_DATAFILE = "python/arb_sim/trade_data/chfusd/chfusd-2019-2024.json"
+init_liq = 1_000_000 # in coin0
+DEFAULT_DATAFILE = "python/arb_sim/trade_data/chfusd/chfusd-2020-2025.json"
+# DEFAULT_DATAFILE = "python/arb_sim/trade_data/chfusd/usdchf-2019-2024.json"
+
 START_TS = _first_candle_ts(DEFAULT_DATAFILE)
 init_price = _initial_price_from_file(DEFAULT_DATAFILE)
 # -------------------- Base Templates --------------------
