@@ -28,12 +28,12 @@ N_GRID_Y = 32
 X_name = "mid_fee"  # can be changed to any pool key
 xmin = int(1/10_000*10**10)
 xmax = int(100/10_000*10**10)
-xlogspace = True
+xlogspace = False
 
 Y_name = "A"  # default second param; also applied to out_fee
 ymin = 1*10_000
-ymax =  20*10_000
-ylogspace = True
+ymax =  100*10_000
+ylogspace = False
 
 
 # X_name = "fee_gamma"  
@@ -75,7 +75,7 @@ else:
 # Y_vals = [int(x) for x in Y_vals]
 
 init_liq = 1_000_000 # in coin0
-DEFAULT_DATAFILE = "python/arb_sim/trade_data/btcusd/train-1y-1672534920-btcusd.json"
+DEFAULT_DATAFILE = "python/arb_sim/trade_data/xauusd/xauusd-2020-latest.json"
 
 START_TS = _first_candle_ts(DEFAULT_DATAFILE)
 init_price = _initial_price_from_file(DEFAULT_DATAFILE)
@@ -90,7 +90,7 @@ BASE_POOL = {
     "fee_gamma": int(0.01 * 10**18),
     "allowed_extra_profit": int(1e-12 * 10**18),
     "adjustment_step": int(5e-5 * 10**18),
-    "ma_time": 866, #int(86400 / math.log(2))
+    "ma_time": int(86400 / math.log(2)), #866
     "initial_price": int(init_price * 10**18),
     "start_timestamp": START_TS,
 
@@ -104,7 +104,7 @@ BASE_POOL = {
 }
 
 BASE_COSTS = {
-    "arb_fee_bps": 1.0, # 0.25 redemption fee
+    "arb_fee_bps": 25.0, # 0.25 redemption fee
     "gas_coin0": 0.0,
     "use_volume_cap": False,
     "volume_cap_mult": 1,

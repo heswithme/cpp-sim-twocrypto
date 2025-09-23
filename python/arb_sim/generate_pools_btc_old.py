@@ -15,82 +15,71 @@ form {tag, pool, costs}.
 import json
 from pathlib import Path
 from datetime import datetime, timezone
-import numpy as np
-from time import time
-from pool_helpers import _first_candle_ts, _initial_price_from_file, strify_pool
 import math
-
+import numpy as np
+from pool_helpers import _first_candle_ts, _initial_price_from_file, strify_pool
 
 # -------------------- Grid Definition --------------------
-N_GRID_X = 32
-N_GRID_Y = 32
+N_GRID = 8
 
-X_name = "mid_fee"  # can be changed to any pool key
-xmin = int(1/10_000*10**10)
-xmax = int(100/10_000*10**10)
+X_name = "A"  # can be changed to any pool key
+xmin = 1 * 10_000
+xmax = 1000 * 10_000
 xlogspace = True
 
-Y_name = "A"  # default second param; also applied to out_fee
-ymin = 1*10_000
-ymax =  20*10_000
+Y_name = "mid_fee"  # default second param; also applied to out_fee
+ymin = int(1/10_000 * 10**10)
+ymax =  int(100/10_000 * 10**10)
 ylogspace = True
 
+# xmin = 15 * 10_000
+# xmax = xmin
+# ymin = int(0.02 * 10**10)
+# ymax = ymin
+# N_GRID = 1
 
-# X_name = "fee_gamma"  
-# xmin = int(0.001 * 10**18)
-# xmax = int(0.1 * 10**18)
-# xlogspace = True
-
-# Y_name = "adjustment_step"  
-# ymin = int(1e-7 * 10**18)
-# ymax =  int(5e-5 * 10**18)
-# ylogspace = True
-
-
-# N_GRID_X = 1
-# N_GRID_Y = 2
-
-# X_name = "mid_fee"  # can be changed to any pool key
-# xmin = int(50/10_000*10**10)
-# xmax = int(100/10_000*10**10)
+# X_name = "donation_apy" 
+# xmin = 0.01
+# xmax = 0.1
 # xlogspace = False
 
-# Y_name = "A"  # default second param; also applied to out_fee
-# ymin = 10*10_000
-# ymax =  70*10_000
+# Y_name = "donation_frequency"  
+# ymin = 600
+# ymax =  86400*7
 # ylogspace = False
 
 if xlogspace:
-    X_vals = np.logspace(np.log10(xmin), np.log10(xmax), N_GRID_X).round().tolist()
+    X_vals = np.logspace(np.log10(xmin), np.log10(xmax), N_GRID).round().tolist()
 else:
-    X_vals = np.linspace(xmin, xmax, N_GRID_X).tolist()
+    X_vals = np.linspace(xmin, xmax, N_GRID).tolist()
 
 if ylogspace:
-    Y_vals = np.logspace(np.log10(ymin), np.log10(ymax), N_GRID_Y).round().tolist()
+    Y_vals = np.logspace(np.log10(ymin), np.log10(ymax), N_GRID).round().tolist()
 else:
-    Y_vals = np.linspace(ymin, ymax, N_GRID_Y).tolist()
+    Y_vals = np.linspace(ymin, ymax, N_GRID).tolist()
 
 # #optionally int-ify
 # X_vals = [int(x) for x in X_vals]
 # Y_vals = [int(x) for x in Y_vals]
 
-init_liq = 1_000_000 # in coin0
+init_liq = 20_000_000 # in coin0
 DEFAULT_DATAFILE = "python/arb_sim/trade_data/btcusd/train-1y-1672534920-btcusd.json"
+# DEFAULT_DATAFILE = "python/arb_sim/trade_data/btcusd/synth-1m.json"
 
 START_TS = _first_candle_ts(DEFAULT_DATAFILE)
 init_price = _initial_price_from_file(DEFAULT_DATAFILE)
 # -------------------- Base Templates --------------------
 BASE_POOL = {
     # All values are integers in their native units
-    "initial_liquidity": [int(init_liq * 10**18//2), int(init_liq * 10**18//2 / init_price)],
-    "A": 50 * 10_000,
+    "initial_liquidity": [int(init_liq * 10**18/2) , int(init_liq* 10**18/2 / init_price)],
+    "adjustment_step": int(1e-7 * 10**18),
+    "fee_gamma": int(0.003 * 10**18),
+    "ma_time": 600/math.log(2),
+    "mid_fee": int(0.003 * 10**10),
+    "out_fee": int(0.003 * 10**10),
+    "allowed_extra_profit": int(1e-10 * 10**18),
     "gamma": 10**14, #unused in twocrypto
-    "mid_fee": int(3 / 10_000 * 10**10),
-    "out_fee": int(5 / 10_000 * 10**10),
-    "fee_gamma": int(0.01 * 10**18),
-    "allowed_extra_profit": int(1e-12 * 10**18),
-    "adjustment_step": int(5e-5 * 10**18),
-    "ma_time": 866, #int(86400 / math.log(2))
+    "A": 200 * 10_000,
     "initial_price": int(init_price * 10**18),
     "start_timestamp": START_TS,
 
@@ -98,13 +87,13 @@ BASE_POOL = {
     # - donation_apy: plain fraction per year (0.05 => 5%).
     # - donation_frequency: seconds between donations.
     # - donation_coins_ratio: fraction of donation in coin1 (0=all coin0, 1=all coin1)
-    "donation_apy": 0.05,
-    "donation_frequency": int(7*86400),
+    "donation_apy": 0.02,
+    "donation_frequency": int(7*86_400),
     "donation_coins_ratio": 0.5,
 }
 
 BASE_COSTS = {
-    "arb_fee_bps": 1.0, # 0.25 redemption fee
+    "arb_fee_bps": 1.5,
     "gas_coin0": 0.0,
     "use_volume_cap": False,
     "volume_cap_mult": 1,
@@ -123,9 +112,7 @@ def build_grid():
             mid_fee_val = int(pool.get("mid_fee", 0))
             cur_out_val = int(pool.get("out_fee", 0))
             pool["out_fee"] = max(mid_fee_val, cur_out_val)
-            if X_name == "mid_fee" or Y_name == "mid_fee":
-                # if we scan over mid_fee, remove out_fee variability
-                pool["out_fee"] = mid_fee_val
+            pool["out_fee"] = mid_fee_val
             costs = dict(BASE_COSTS)
             tag_x = f"{X_name}_{xv}"
             tag_y = f"{Y_name}_{yv}"
