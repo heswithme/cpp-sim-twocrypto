@@ -7,7 +7,9 @@ import json
 import sys
 import time
 from pathlib import Path
-from typing import Iterator, List, Sequence, Tuple
+from queue import Empty, Queue
+from threading import Event, Lock, Thread
+from typing import Iterator, List, MutableMapping, Sequence, Tuple
 
 import requests
 
@@ -15,13 +17,14 @@ import requests
 # Configuration (edit these values if you need a different dataset)
 # ---------------------------------------------------------------------------
 PAIR = "BTCUSDT"  # Binance trading pair symbol
-START_YEAR = 2020  # First calendar year (inclusive)
-END_YEAR = 2024  # Last calendar year (inclusive)
+START_YEAR = 2023  # First calendar year (inclusive)
+END_YEAR = 2025  # Last calendar year (inclusive)
 START_OVERRIDE = None  # Optional explicit ISO8601 start, e.g. "2021-01-01T00:00:00Z"
 END_OVERRIDE = None  # Optional explicit ISO8601 end, e.g. "2024-06-01T00:00:00Z"
 LIMIT = 1000  # Candles per API request (max 1000)
+WORKERS = 8  # Number of concurrent requests
 RETRIES = 5  # Retry attempts per request on failure
-REQUEST_COOLDOWN = 0.05  # Seconds to pause between API calls (tune for rate limits)
+REQUEST_COOLDOWN = 0.05  # Seconds to pause between API calls per worker
 OUTPUT_FILENAME = "binance_candles.json"  # Output JSON file name
 
 # ---------------------------------------------------------------------------
@@ -96,46 +99,138 @@ def fetch_candles(session: requests.Session, start_ms: int) -> List[Sequence[obj
 def iterate_candles(start: dt.datetime, end: dt.datetime) -> Iterator[Sequence[object]]:
     start_ms = int(start.timestamp() * 1000)
     end_ms = int(end.timestamp() * 1000)
-    total_expected = (end_ms - start_ms) // INTERVAL_MS
+    est_requests = max(1, (end_ms - start_ms + (LIMIT * INTERVAL_MS) - 1) // (LIMIT * INTERVAL_MS))
     print(
         f"Fetching {INTERVAL} candles for {PAIR} from {start.isoformat()} to {end.isoformat()}"
     )
     print(
-        f"Estimated candles: ~{total_expected:,} (limit {LIMIT} per request, cooldown {REQUEST_COOLDOWN}s)"
+        f"Estimated requests: ~{est_requests:,} (limit {LIMIT} per call, {WORKERS} workers, cooldown {REQUEST_COOLDOWN}s)"
     )
 
-    session = requests.Session()
-    fetched = 0
-    while start_ms < end_ms:
-        chunk = fetch_candles(session, start_ms)
-        row_count = len(chunk)
-        if row_count == 0:
-            print(
-                f"No data returned for window starting {dt.datetime.utcfromtimestamp(start_ms / 1000)}, stopping"
-            )
-            break
+    sessions = [requests.Session() for _ in range(WORKERS)]
+    task_queue: Queue[int] = Queue()
+    task_queue.put(start_ms)
 
-        for row in chunk:
-            open_time = int(row[0])
-            if open_time >= end_ms:
-                return
-            if open_time < start_ms:
+    cutoff_lock = Lock()
+    cutoff_ms = end_ms
+    results_lock = Lock()
+    collected: MutableMapping[int, Sequence[object]] = {}
+    chunks_done = 0
+    chunks_lock = Lock()
+    stop_event = Event()
+
+    def worker(worker_id: int) -> None:
+        nonlocal cutoff_ms, chunks_done
+        session = sessions[worker_id]
+        while True:
+            if stop_event.is_set() and task_queue.empty():
+                break
+            try:
+                window_start = task_queue.get(timeout=0.2)
+            except Empty:
+                if stop_event.is_set():
+                    break
                 continue
-            fetched += 1
-            yield row
 
-        last_open = int(chunk[-1][0])
-        next_start = last_open + INTERVAL_MS
-        if next_start <= start_ms:
-            print("Received non-forward progress from Binance, aborting to avoid infinite loop")
-            break
-        start_ms = next_start
+            with cutoff_lock:
+                current_cutoff = cutoff_ms
+            if window_start >= current_cutoff:
+                task_queue.task_done()
+                continue
 
-        if REQUEST_COOLDOWN > 0:
-            time.sleep(REQUEST_COOLDOWN)
+            try:
+                chunk = fetch_candles(session, window_start)
+            except Exception as exc:  # noqa: BLE001
+                print(
+                    f"Request failed for window starting {dt.datetime.utcfromtimestamp(window_start / 1000)}: {exc}",
+                    file=sys.stderr,
+                )
+                stop_event.set()
+                task_queue.task_done()
+                break
 
-    print(f"Fetched {fetched:,} candles")
+            row_count = len(chunk)
+            with chunks_lock:
+                chunks_done += 1
+                print(
+                    f"[{chunks_done}] {PAIR} {dt.datetime.utcfromtimestamp(window_start / 1000)} → {row_count} rows"
+                )
 
+            if row_count == 0:
+                with cutoff_lock:
+                    if window_start < cutoff_ms:
+                        cutoff_ms = window_start
+                stop_event.set()
+                task_queue.task_done()
+                continue
+
+            local_last_open = int(chunk[-1][0])
+            local_next_start = local_last_open + INTERVAL_MS
+
+            with cutoff_lock:
+                if row_count < LIMIT and local_next_start < cutoff_ms:
+                    cutoff_ms = local_next_start
+                    stop_event.set()
+                current_cutoff = cutoff_ms
+
+            with results_lock:
+                for row in chunk:
+                    open_time = int(row[0])
+                    if open_time < window_start:
+                        continue
+                    if open_time >= current_cutoff or open_time >= end_ms:
+                        continue
+                    collected.setdefault(open_time, row)
+
+            if not stop_event.is_set():
+                if local_next_start < current_cutoff and local_next_start < end_ms:
+                    task_queue.put(local_next_start)
+
+            task_queue.task_done()
+            if REQUEST_COOLDOWN > 0:
+                time.sleep(REQUEST_COOLDOWN)
+
+    threads = [Thread(target=worker, args=(i,), daemon=True) for i in range(WORKERS)]
+    for thread in threads:
+        thread.start()
+
+    task_queue.join()
+    stop_event.set()
+    for thread in threads:
+        thread.join()
+
+    if not collected:
+        print("No candles fetched; aborting", file=sys.stderr)
+        return iter(() )
+
+    ordered_times = sorted(collected)
+    print(f"Fetched {len(ordered_times):,} candles")
+    return (collected[ts] for ts in ordered_times)
+
+
+def summarize_rows(rows: List[Sequence[object]], start: dt.datetime, end: dt.datetime) -> None:
+    start_ms = int(start.timestamp() * 1000)
+    end_ms = int(end.timestamp() * 1000)
+    times = [int(row[0]) for row in rows]
+    if not times:
+        return
+    first = times[0]
+    last = times[-1]
+    expected = max(0, (min(end_ms, last + INTERVAL_MS) - start_ms) // INTERVAL_MS)
+    missing = 0
+    prev = first
+    for current in times[1:]:
+        gap = current - prev
+        if gap > INTERVAL_MS:
+            missing += gap // INTERVAL_MS - 1
+        prev = current
+    print(
+        f"First candle: {dt.datetime.utcfromtimestamp(first / 1000)} | "
+        f"Last candle: {dt.datetime.utcfromtimestamp(last / 1000)}"
+    )
+    print(
+        f"Collected {len(times):,} candles (expected ≈ {expected:,}); gaps detected: {missing:,}"
+    )
 
 def transform_rows(rows: List[Sequence[object]]) -> List[List[float]]:
     transformed: List[List[float]] = []
@@ -166,8 +261,9 @@ def main() -> None:
     start, end = resolve_timerange()
     raw_rows = list(iterate_candles(start, end))
     if not raw_rows:
-        print("No candles fetched; nothing to write", file=sys.stderr)
         sys.exit(1)
+
+    summarize_rows(raw_rows, start, end)
 
     output_path = Path(__file__).resolve().parent / OUTPUT_FILENAME
     write_output(raw_rows, output_path)

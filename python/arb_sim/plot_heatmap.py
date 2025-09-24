@@ -15,6 +15,7 @@ Usage:
 from __future__ import annotations
 
 import json
+import math
 import os
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
@@ -26,6 +27,10 @@ from matplotlib.ticker import FormatStrFormatter
 
 HERE = Path(__file__).resolve().parent
 RUN_DIR = HERE / "run_data"
+
+LN2 = math.log(2)
+SECONDS_PER_HOUR = 3600.0
+MA_TIME_TO_HOURS = LN2 / SECONDS_PER_HOUR
 
 
 def _edges_from_centers(centers: List[float], log_scale: bool = False) -> np.ndarray:
@@ -87,6 +92,17 @@ def _to_float(x: Any) -> float:
             return float("nan")
 
 
+
+def _axis_transformer(name: str):
+    """Return a transformer for axis values based on the parameter name."""
+    key = (name or "").lower()
+    if "ma_time" in key:
+        def _transform(value: float) -> float:
+            return value * MA_TIME_TO_HOURS
+        return _transform
+    return lambda value: value
+
+
 def _extract_grid(data: Dict[str, Any], metric: str, scale_1e18: bool, scale_percent: bool) -> Tuple[str, str, List[float], List[float], np.ndarray]:
     runs = data.get("runs", [])
     if not runs:
@@ -96,13 +112,20 @@ def _extract_grid(data: Dict[str, Any], metric: str, scale_1e18: bool, scale_per
     x_name = runs[0].get("x_key") or data.get("metadata", {}).get("grid", {}).get("X", {}).get("name") or "X"
     y_name = runs[0].get("y_key") or data.get("metadata", {}).get("grid", {}).get("Y", {}).get("name") or "Y"
 
+    x_transform = _axis_transformer(x_name)
+    y_transform = _axis_transformer(y_name)
+
     # Collect unique axis values and z values
     points: Dict[Tuple[float, float], float] = {}
     xs: List[float] = []
     ys: List[float] = []
     for r in runs:
-        xv = _to_float(r.get("x_val")) if r.get("x_val") is not None else float("nan")
-        yv = _to_float(r.get("y_val")) if r.get("y_val") is not None else float("nan")
+        raw_x = r.get("x_val")
+        raw_y = r.get("y_val")
+        xv = _to_float(raw_x) if raw_x is not None else float("nan")
+        yv = _to_float(raw_y) if raw_y is not None else float("nan")
+        xv = x_transform(xv)
+        yv = y_transform(yv)
         fs = r.get("final_state", {})
         res = r.get("result", {})
         # Prefer final_state; fall back to result summary (for metrics like apy)
@@ -114,7 +137,7 @@ def _extract_grid(data: Dict[str, Any], metric: str, scale_1e18: bool, scale_per
             z = z / 1e18
         if scale_percent and np.isfinite(z):
             z = z * 100.0
-        if np.isfinite(xv) and np.isfinite(yv) and np.isfinite(z):
+        if math.isfinite(xv) and math.isfinite(yv) and np.isfinite(z):
             points[(xv, yv)] = z
             xs.append(xv)
             ys.append(yv)
@@ -149,6 +172,9 @@ def _axis_normalization(name: str) -> Tuple[float, str]:
     if "fee" in key and "gamma" not in key:
         # We will compute bps directly in labels, return sentinel scale 0
         return 0.0, " (bps)"
+    if "ma_time" in key:
+        suffix = "" if "hrs" in key else " (hrs)"
+        return 1.0, suffix
     if "gamma" in key:
         return 1e18, " (/1e18)"
     if "liquidity" in key or "balance" in key:
@@ -159,19 +185,26 @@ def _axis_normalization(name: str) -> Tuple[float, str]:
 def _format_axis_labels(name: str, values: List[float]) -> Tuple[List[str], str]:
     scale, suffix = _axis_normalization(name)
     labels: List[str] = []
-    if scale == 0.0 and "fee" in (name or "").lower() and "gamma" not in name:
+    key = (name or "").lower()
+    display_name = name or ""
+    if suffix and suffix not in (display_name or ""):
+        display_name = f"{display_name}{suffix}"
+    if scale == 0.0 and "fee" in key and "gamma" not in key:
         # Convert 1e10-scaled fee to bps: val/1e10 * 1e4
         labels = [f"{(v / 1e10 * 1e4):.2f}" for v in values]
         return labels, f"{name} (bps)"
-    if "gamma" in name:
+    if "ma_time" in key:
+        labels = [f"{v:.3f}" if abs(v) < 1 else f"{v:.2f}" for v in values]
+        return labels, display_name
+    if "gamma" in key:
         labels = [f"{(v / 1e18):.5f}" for v in values]
         return labels, f"{name} (bps)"
     if scale != 1.0:
         labels = [f"{(v / scale):.2f}" for v in values]
-        return labels, f"{name}{suffix}"
+        return labels, display_name
     # default
     labels = [f"{v:.2f}" for v in values]
-    return labels, name
+    return labels, display_name
 
 
 def _select_ticks(values: List[float], max_ticks: int) -> List[int]:

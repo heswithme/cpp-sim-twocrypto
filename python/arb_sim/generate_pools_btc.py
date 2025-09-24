@@ -26,20 +26,25 @@ N_GRID_X = 32
 N_GRID_Y = 32
 
 X_name = "mid_fee"  # can be changed to any pool key
-xmin = int(1/10_000*10**10)
+xmin = int(10/10_000*10**10)
 xmax = int(100/10_000*10**10)
 xlogspace = True
 
-Y_name = "A"  # default second param; also applied to out_fee
-ymin = 1*10_000
-ymax =  20*10_000
+Y_name = "A"  
+ymin = 5*10_000
+ymax =  100*10_000
 ylogspace = True
 
+# X_name = "ma_time"  
+# xmin = int(600/math.log(2))
+# xmax = int(86400/math.log(2))
+# xlogspace = False
 
-# X_name = "fee_gamma"  
-# xmin = int(0.001 * 10**18)
-# xmax = int(0.1 * 10**18)
-# xlogspace = True
+
+# X_name = "donation_coins_ratio"  
+# xmin = 0
+# xmax = 1
+# xlogspace = False
 
 # Y_name = "adjustment_step"  
 # ymin = int(1e-7 * 10**18)
@@ -74,8 +79,8 @@ else:
 # X_vals = [int(x) for x in X_vals]
 # Y_vals = [int(x) for x in Y_vals]
 
-init_liq = 1_000_000 # in coin0
-DEFAULT_DATAFILE = "python/arb_sim/trade_data/btcusd/train-1y-1672534920-btcusd.json"
+init_liq = 20_000_000 # in coin0
+DEFAULT_DATAFILE = "python/arb_sim/trade_data/btcusd/btcusdt-2025.json"
 
 START_TS = _first_candle_ts(DEFAULT_DATAFILE)
 init_price = _initial_price_from_file(DEFAULT_DATAFILE)
@@ -85,12 +90,12 @@ BASE_POOL = {
     "initial_liquidity": [int(init_liq * 10**18//2), int(init_liq * 10**18//2 / init_price)],
     "A": 50 * 10_000,
     "gamma": 10**14, #unused in twocrypto
-    "mid_fee": int(3 / 10_000 * 10**10),
-    "out_fee": int(5 / 10_000 * 10**10),
+    "mid_fee": int(100 / 10_000 * 10**10),
+    "out_fee": int(100/ 10_000 * 10**10),
     "fee_gamma": int(0.01 * 10**18),
     "allowed_extra_profit": int(1e-12 * 10**18),
     "adjustment_step": int(5e-5 * 10**18),
-    "ma_time": 866, #int(86400 / math.log(2))
+    "ma_time": int(86400 / math.log(2) / 24 * 8),
     "initial_price": int(init_price * 10**18),
     "start_timestamp": START_TS,
 
@@ -98,14 +103,14 @@ BASE_POOL = {
     # - donation_apy: plain fraction per year (0.05 => 5%).
     # - donation_frequency: seconds between donations.
     # - donation_coins_ratio: fraction of donation in coin1 (0=all coin0, 1=all coin1)
-    "donation_apy": 0.05,
+    "donation_apy": 0.0,
     "donation_frequency": int(7*86400),
     "donation_coins_ratio": 0.5,
 }
 
 BASE_COSTS = {
-    "arb_fee_bps": 1.0, # 0.25 redemption fee
-    "gas_coin0": 0.0,
+    "arb_fee_bps": 0.5, 
+    "gas_coin0": 1.0,
     "use_volume_cap": False,
     "volume_cap_mult": 1,
 }
