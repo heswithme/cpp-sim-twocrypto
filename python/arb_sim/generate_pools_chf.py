@@ -25,14 +25,19 @@ import math
 N_GRID_X = 32
 N_GRID_Y = 32
 
-X_name = "mid_fee"  # can be changed to any pool key
-xmin = int(10 / 10_000 * 10**10)
-xmax = int(100 / 10_000 * 10**10)
+# X_name = "ma_time"  # can be changed to any pool key
+# xmin = 10*60/math.log(2)
+# xmax = 2*60*60/math.log(2)
+# xlogspace = False
+
+X_name = "donation_apy"  # can be changed to any pool key
+xmin = 0.01
+xmax = 0.1
 xlogspace = False
 
 Y_name = "A"  # default second param; also applied to out_fee
-ymin = 40*10_000
-ymax =  250*10_000
+ymin = 10*10_000
+ymax =  50*10_000
 ylogspace = False
 
 
@@ -71,14 +76,14 @@ init_price = _initial_price_from_file(DEFAULT_DATAFILE)
 BASE_POOL = {
     # All values are integers in their native units
     "initial_liquidity": [int(init_liq * 10**18//2), int(init_liq * 10**18//2 / init_price)],
-    "A": 50 * 10_000,
+    "A": 32 * 10_000,
     "gamma": 10**14, #unused in twocrypto
-    "mid_fee": int(1 / 10_000 * 10**10),
-    "out_fee": int(2 / 10_000 * 10**10),
-    "fee_gamma": int(0.003 * 10**18),
+    "mid_fee": int(10 / 10_000 * 10**10),
+    "out_fee": int(20 / 10_000 * 10**10),
+    "fee_gamma": int(0.001 * 10**18),
     "allowed_extra_profit": int(1e-12 * 10**18),
     "adjustment_step": int(1e-7 * 10**18),
-    "ma_time": 86400 / math.log(2), #866
+    "ma_time": 5200, #86400 / math.log(2)
     "initial_price": int(init_price * 10**18),
     "start_timestamp": START_TS,
 
@@ -111,7 +116,7 @@ def build_grid():
             mid_fee_val = int(pool.get("mid_fee", 0))
             cur_out_val = int(pool.get("out_fee", 0))
             pool["out_fee"] = max(mid_fee_val, cur_out_val)
-            pool["out_fee"] = mid_fee_val
+            # pool["out_fee"] = mid_fee_val
             costs = dict(BASE_COSTS)
             tag_x = f"{X_name}_{xv}"
             tag_y = f"{Y_name}_{yv}"
