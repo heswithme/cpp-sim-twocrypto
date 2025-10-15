@@ -182,6 +182,14 @@ static inline RealT balance_indicator(const twocrypto::TwoCryptoPoolT<RealT>& po
     return 4 * xp[0] * xp[1] / ((xp[0] + xp[1])*(xp[0] + xp[1]));
 }
 
+
+static inline RealT true_growth(const twocrypto::TwoCryptoPoolT<RealT>& pool) {
+    const RealT ps = pool.cached_price_scale;
+    const auto xp = pool_xp_from(pool, pool.balances, ps);
+    // return sqrt(xp[0] * xp[1]);
+    return sqrt(pool.balances[0] * pool.balances[1]) ;
+}
+
 static inline std::pair<RealT, RealT>
 simulate_exchange_once(const twocrypto::TwoCryptoPoolT<RealT>& pool,
                        size_t i, size_t j, RealT dx)
@@ -1021,7 +1029,7 @@ int main(int argc, char* argv[]) {
                     uint64_t next_user_swap_ts = (user_swaps_enabled && !events.empty())
                                                  ? events.front().ts + user_swap_freq_s
                                                  : 0;
-
+                    RealT true_growth_initial = true_growth(pool);
                     push_state(); // initial snapshot
 
                     // ---- Main event loop ----
@@ -1304,9 +1312,9 @@ int main(int argc, char* argv[]) {
                     const RealT v_hold_end = cfg.initial_liq[0] + cfg.initial_liq[1] * pool.cached_price_scale;
                     double apy_coin0 = 0.0, apy_coin0_boost = 0.0, apy_vp = 0.0;
                     double apy_coin0_raw = 0.0, apy_coin0_boost_raw = 0.0; // before baseline subtraction
+                    const double exponent = SEC_PER_YEAR / duration_s;
 
                     if (duration_s > 0.0 && tvl_start > 0) {
-                        const double exponent = SEC_PER_YEAR / duration_s;
                         const long double vp_end = static_cast<long double>(pool.get_virtual_price());
                         apy_vp  = (vp_end > 0.0) ? std::pow(static_cast<double>(vp_end), exponent) - 1.0 : -1.0;
                         // Raw APYs against start TVL (kept for transparency)
@@ -1340,9 +1348,15 @@ int main(int argc, char* argv[]) {
                     // For reference, include raw (non-baseline) APYs
                     summary["apy_coin0_raw"]         = apy_coin0_raw;
                     summary["apy_coin0_boost_raw"]= apy_coin0_boost_raw;
-                    summary["vp"]                = static_cast<double>(pool.get_virtual_price());
-                    summary["vp_boosted"]        = static_cast<double>(pool.get_vp_boosted());
+                    RealT vp_boosted = static_cast<double>(pool.get_vp_boosted());
+                    RealT vp = static_cast<double>(pool.get_virtual_price());
+                    summary["vp"]                = vp;
+                    summary["vp_boosted"]        = vp_boosted;
                     summary["vpminusone"]        = static_cast<double>(pool.get_virtual_price() - 1.0);
+                    summary["true_growth"]       = static_cast<double>(true_growth(pool) / true_growth_initial);
+                    summary["apy_geom_mean"] = static_cast<double>(std::pow(true_growth(pool) / true_growth_initial, exponent) - 1.0);
+                    summary["apy_geom_mean_net"] = static_cast<double>(std::pow(true_growth(pool) / true_growth_initial, exponent) - 1.0) - dcfg.apy;
+
                     json::object params;
                     params["pool"] = echo_pool;
                     if (!echo_costs.empty()) params["costs"] = echo_costs;

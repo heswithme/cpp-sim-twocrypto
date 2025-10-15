@@ -198,7 +198,7 @@ def _format_axis_labels(name: str, values: List[float]) -> Tuple[List[str], str]
         return labels, display_name
     if "gamma" in key:
         labels = [f"{(v / 1e18):.5f}" for v in values]
-        return labels, f"{name} (bps)"
+        return labels, f"{name}"
     if scale != 1.0:
         labels = [f"{(v / scale):.2f}" for v in values]
         return labels, display_name
@@ -241,6 +241,7 @@ def main() -> int:
     ap.add_argument("--square", dest="square", action="store_true", help="Force a square plot with square cells (default)")
     ap.add_argument("--no-square", dest="square", action="store_false", help="Disable square plot; size adapts to grid")
     ap.add_argument("--ncol", type=int, default=3, help="Number of columns for multi-metric layout (default: 3)")
+    ap.add_argument("--clamp", action="store_true", default=False, help="Clamp negative values to 0")
     ap.set_defaults(square=True)
     args = ap.parse_args()
 
@@ -360,6 +361,9 @@ def main() -> int:
 
             # Compute absolute min/max for color mapping and ticks
             finite_vals = Z[np.isfinite(Z)]
+            # clamp negatives in --clamp flag is used
+            if args.clamp:
+                finite_vals = np.where(finite_vals < 0, 0, finite_vals)
             if finite_vals.size:
                 zmin = float(np.min(finite_vals))
                 zmax = float(np.max(finite_vals))

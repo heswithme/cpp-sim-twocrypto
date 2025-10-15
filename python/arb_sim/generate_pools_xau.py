@@ -27,13 +27,13 @@ N_GRID_Y = 32
 
 X_name = "mid_fee"  # can be changed to any pool key
 xmin = int(1/10_000*10**10)
-xmax = int(100/10_000*10**10)
-xlogspace = False
+xmax = int(500/10_000*10**10)
+xlogspace = True
 
 Y_name = "A"  # default second param; also applied to out_fee
 ymin = 1*10_000
-ymax =  100*10_000
-ylogspace = False
+ymax =  1000*10_000
+ylogspace = True
 
 
 # X_name = "fee_gamma"  
