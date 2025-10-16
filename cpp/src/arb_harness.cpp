@@ -1016,6 +1016,21 @@ int main(int argc, char* argv[]) {
                     long double tw_r_sum_dt = 0.0L;  // sum r * dt
                     long double tw_dt       = 0.0L;  // total dt
                     RealT last_d_inst = 0; RealT last_r_inst = 0; uint64_t last_ts_lat = 0; bool have_lat = false;
+
+                    // Time-weighted real slippage probes at fixed sizes (as fraction of initial TVL, coin0 notional)
+                    // Sizes: 1%, 5%, 10% of initial TVL in coin0 units
+                    const std::array<RealT,3> probe_sizes_coin0 = {
+                        static_cast<RealT>(0.01) * tvl_start,
+                        static_cast<RealT>(0.05) * tvl_start,
+                        static_cast<RealT>(0.10) * tvl_start
+                    };
+                    std::array<long double,3> tw_real_s01_sum_dt{0.0L,0.0L,0.0L};
+                    std::array<long double,3> tw_real_s10_sum_dt{0.0L,0.0L,0.0L};
+                    std::array<long double,3> tw_real_dt{0.0L,0.0L,0.0L};
+                    std::array<RealT,3> last_real_s01{0,0,0};
+                    std::array<RealT,3> last_real_s10{0,0,0};
+                    std::array<uint64_t,3> last_ts_real{0,0,0};
+                    std::array<bool,3> have_real{false,false,false};
                     // Metric: fraction of time price_scale deviates more than 10% from p_cex
                     const RealT FAR_THRESH = static_cast<RealT>(0.10);
                     long double time_far_s = 0.0L;
@@ -1055,6 +1070,15 @@ int main(int argc, char* argv[]) {
                             tw_d_sum_dt += static_cast<long double>(last_d_inst) * dt;
                             tw_r_sum_dt += static_cast<long double>(last_r_inst) * dt;
                             tw_dt       += dt;
+                        }
+                        // Real slippage probes: accumulate previous samples for each size over [last_ts_real[k], ev.ts)
+                        for (int k = 0; k < 3; ++k) {
+                            if (have_real[k] && ev.ts > last_ts_real[k]) {
+                                const long double dt = static_cast<long double>(ev.ts - last_ts_real[k]);
+                                tw_real_s01_sum_dt[k] += static_cast<long double>(last_real_s01[k]) * dt;
+                                tw_real_s10_sum_dt[k] += static_cast<long double>(last_real_s10[k]) * dt;
+                                tw_real_dt[k] += dt;
+                            }
                         }
                         // Accumulate time when |ps/p_cex - 1| > 10%
                         if (have_band && ev.ts > last_ts_band && last_far) {
@@ -1157,6 +1181,32 @@ int main(int argc, char* argv[]) {
                                     last_ts_lat = ev.ts;
                                     have_lat    = true;
                                 }
+                                // Sample real slippage probes at fixed sizes (0->1 and 1->0) after tick
+                                if (ev.p_cex > 0) {
+                                    for (int k = 0; k < 3; ++k) {
+                                        const RealT S = probe_sizes_coin0[static_cast<size_t>(k)];
+                                        // 0 -> 1
+                                        {
+                                            auto pr = simulate_exchange_once(pool, /*i=*/0, /*j=*/1, S);
+                                            const RealT dy1 = pr.first; // coin1 after fee
+                                            const RealT ideal1 = (ev.p_cex > 0 ? S / ev.p_cex : RealT(0));
+                                            if (ideal1 > 0) {
+                                                last_real_s01[k] = static_cast<RealT>(1) - (dy1 / ideal1);
+                                            }
+                                        }
+                                        // 1 -> 0
+                                        {
+                                            const RealT dx1 = (ev.p_cex > 0 ? S / ev.p_cex : RealT(0));
+                                            auto pr = simulate_exchange_once(pool, /*i=*/1, /*j=*/0, dx1);
+                                            const RealT dy0 = pr.first; // coin0 after fee
+                                            if (S > 0) {
+                                                last_real_s10[k] = static_cast<RealT>(1) - (dy0 / S);
+                                            }
+                                        }
+                                        last_ts_real[k] = ev.ts;
+                                        have_real[k] = true;
+                                    }
+                                }
                                 } catch (...) { /* ignore */ }
                                 continue;
                             }
@@ -1246,6 +1296,33 @@ int main(int argc, char* argv[]) {
                             // Trade failed; ignore and continue
                         }
 
+                        // After a trade, sample real slippage probes for the new state
+                        if (ev.p_cex > 0) {
+                            for (int k = 0; k < 3; ++k) {
+                                const RealT S = probe_sizes_coin0[static_cast<size_t>(k)];
+                                // 0 -> 1
+                                {
+                                    auto pr = simulate_exchange_once(pool, /*i=*/0, /*j=*/1, S);
+                                    const RealT dy1 = pr.first; // coin1 after fee
+                                    const RealT ideal1 = (ev.p_cex > 0 ? S / ev.p_cex : RealT(0));
+                                    if (ideal1 > 0) {
+                                        last_real_s01[k] = static_cast<RealT>(1) - (dy1 / ideal1);
+                                    }
+                                }
+                                // 1 -> 0
+                                {
+                                    const RealT dx1 = (ev.p_cex > 0 ? S / ev.p_cex : RealT(0));
+                                    auto pr = simulate_exchange_once(pool, /*i=*/1, /*j=*/0, dx1);
+                                    const RealT dy0 = pr.first; // coin0 after fee
+                                    if (S > 0) {
+                                        last_real_s10[k] = static_cast<RealT>(1) - (dy0 / S);
+                                    }
+                                }
+                                last_ts_real[k] = ev.ts;
+                                have_real[k] = true;
+                            }
+                        }
+
                         // End of event: nothing to do (sampling only after trade/tick)
                     }
 
@@ -1285,6 +1362,34 @@ int main(int argc, char* argv[]) {
                     }
                     summary["tw_slippage"]    = tw_slippage;
                     summary["tw_liq_density"] = tw_liq_density;
+
+                    // Time-weighted real slippage probes (fraction; negative allowed)
+                    auto avg_or_neg1 = [](long double num, long double den) -> double {
+                        return den > 0.0L ? static_cast<double>(num / den) : -1.0;
+                    };
+                    // 1% of initial TVL
+                    summary["tw_real_slippage_1pct_01"] = avg_or_neg1(tw_real_s01_sum_dt[0], tw_real_dt[0]);
+                    summary["tw_real_slippage_1pct_10"] = avg_or_neg1(tw_real_s10_sum_dt[0], tw_real_dt[0]);
+                    // 5% of initial TVL
+                    summary["tw_real_slippage_5pct_01"] = avg_or_neg1(tw_real_s01_sum_dt[1], tw_real_dt[1]);
+                    summary["tw_real_slippage_5pct_10"] = avg_or_neg1(tw_real_s10_sum_dt[1], tw_real_dt[1]);
+                    // 10% of initial TVL
+                    summary["tw_real_slippage_10pct_01"] = avg_or_neg1(tw_real_s01_sum_dt[2], tw_real_dt[2]);
+                    summary["tw_real_slippage_10pct_10"] = avg_or_neg1(tw_real_s10_sum_dt[2], tw_real_dt[2]);
+
+                    // Combined (per-size) averages across directions (time-weighted)
+                    summary["tw_real_slippage_1pct"] =
+                        (tw_real_dt[0] > 0.0L)
+                          ? static_cast<double>((tw_real_s01_sum_dt[0] + tw_real_s10_sum_dt[0]) / (2.0L * tw_real_dt[0]))
+                          : -1.0;
+                    summary["tw_real_slippage_5pct"] =
+                        (tw_real_dt[1] > 0.0L)
+                          ? static_cast<double>((tw_real_s01_sum_dt[1] + tw_real_s10_sum_dt[1]) / (2.0L * tw_real_dt[1]))
+                          : -1.0;
+                    summary["tw_real_slippage_10pct"] =
+                        (tw_real_dt[2] > 0.0L)
+                          ? static_cast<double>((tw_real_s01_sum_dt[2] + tw_real_s10_sum_dt[2]) / (2.0L * tw_real_dt[2]))
+                          : -1.0;
 
                     // APY metrics
                     constexpr RealT SEC_PER_YEAR = static_cast<RealT>(365.0 * 86400.0);

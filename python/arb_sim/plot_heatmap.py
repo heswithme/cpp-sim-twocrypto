@@ -259,7 +259,7 @@ def main() -> int:
     def metric_scale_flags(m: str) -> Tuple[bool, bool]:
         mlow = (m or '').lower()
         scale_1e18 = (not args.no_scale) and m in {"virtual_price", "xcp_profit", "price_scale", "D", "totalSupply"}
-        scale_percent = mlow in {"vpminusone", "apy"} or "apy" in mlow
+        scale_percent = mlow in {"vpminusone", "apy"} or "apy" in mlow or 'tw_real_slippage' in mlow
         return scale_1e18, scale_percent
 
     first_m = metrics[0]
