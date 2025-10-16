@@ -97,7 +97,7 @@ def _initial_price_from_file(path: str) -> float:
                 return float(first[1])
         elif isinstance(first, dict):
             # Try common keys
-            for k in ("close", "c", "price"):
+            for k in ("close", "c", "price", "price_open", "price_vwap", "price_hight", "price_low"):
                 if k in first:
                     return float(first[k])
     except Exception:

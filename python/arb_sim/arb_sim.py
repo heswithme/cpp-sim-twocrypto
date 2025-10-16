@@ -14,13 +14,15 @@ from typing import Any, Dict, List
 from datetime import datetime, timezone
 
 class ArbHarnessRunner:
-    def __init__(self, repo_root: Path, real: str = "double"):
+    def __init__(self, repo_root: Path, real: str = "double", use_idr: bool = False):
         self.repo_root = Path(repo_root)
         self.cpp_dir = self.repo_root / "cpp"
         self.build_dir = self.cpp_dir / "build"
-        # Resolve binary name based on real type
+        # Resolve binary name based on real type and IDR flag
         real = (real or "double").lower()
-        if real in ("float", "f"):
+        if use_idr:
+            self.target = "arb_harness_idr"
+        elif real in ("float", "f"):
             self.target = "arb_harness_f"
         elif real in ("longdouble", "long_double", "ld", "long"):
             self.target = "arb_harness_ld"
@@ -54,7 +56,7 @@ class ArbHarnessRunner:
             min_swap: float = 1e-10, max_swap: float = 1.0,
             threads: int = 1, dustswapfreq: int | None = None,
             userswapfreq: int | None = None, userswapsize: float | None = None,
-            userswapthresh: float | None = None) -> Dict[str, Any]:
+            userswapthresh: float | None = None, use_idr: bool = False) -> Dict[str, Any]:
         print("Running arb_harness...")
         cmd = [str(self.exe_path), str(pools_json), str(candles_path), str(out_json_path)]
         if n_candles and n_candles > 0:
@@ -106,7 +108,7 @@ def main() -> int:
     args = parser.parse_args()
 
     repo_root = Path(__file__).resolve().parents[2]
-    runner = ArbHarnessRunner(repo_root, real=args.real)
+    runner = ArbHarnessRunner(repo_root, real=args.real, use_idr=args.events)
     runner.build()
 
     # Load pool_config.json
@@ -147,7 +149,7 @@ def main() -> int:
                      min_swap=args.min_swap, max_swap=args.max_swap, threads=max(1, args.threads),
                      dustswapfreq=args.dustswapfreq,
                      userswapfreq=args.userswapfreq, userswapsize=args.userswapsize,
-                     userswapthresh=args.userswapthresh)
+                     userswapthresh=args.userswapthresh, use_idr=args.events)
 
     runs_raw: List[Dict[str, Any]] = raw.get("runs", [])
     print(f"Time taken: {(datetime.now() - ts).total_seconds()} seconds")
