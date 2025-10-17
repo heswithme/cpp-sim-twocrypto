@@ -1,3 +1,4 @@
 python/arb_sim/trade_data/*.json filter=lfs diff=lfs merge=lfs -text
 python/arb_sim/trade_data/**/*.json filter=lfs diff=lfs merge=lfs -text
 python/arb_sim/trade_data/chfusd/chfusd-2020-latest.json filter=lfs diff=lfs merge=lfs -text
+python/arb_sim/trade_data/* filter=lfs diff=lfs merge=lfs -text
