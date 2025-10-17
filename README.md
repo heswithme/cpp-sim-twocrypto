@@ -168,6 +168,9 @@ python3 python/arb_sim/arb_sim.py \
   -n 4 \
   --n-candles 20000 \
   --min-swap 1e-6 --max-swap 1.0
+
+# Oneliner that includes conservative user swaps
+uv run python/arb_sim/generate_pools_try.py && uv run python/arb_sim/arb_sim.py  --dustswapfreq 600 -n 10 --userswapfreq 3600 --userswapsize 0.001 --userswapthresh 0.01
 ```
 
 Key flags:
@@ -205,7 +208,7 @@ Pool grid generator:
 Plot heatmap (two-parameter grid):
 ```bash
 # Plot virtual_price/1e18 across X vs Y grid from latest arb_run_*
-uv run python/arb_sim/plot_heatmap.py
+uv run python/arb_sim/plot_heatmap.py  --metrics apy,apy_coin0,apy_coin0_boost,xcp_profit,vp,vp_boosted,avg_pool_fee,n_rebalances,trades,total_notional_coin0,apy_geom_mean,apy_geom_mean_net,avg_rel_bps,tw_slippage,tw_liq_density,tw_real_slippage_1pct,tw_real_slippage_5pct,tw_real_slippage_10pct --ncol 5 --font-size 28 --clamp
 
 # Options:
 #   --arb <path>           # pick specific arb_run JSON

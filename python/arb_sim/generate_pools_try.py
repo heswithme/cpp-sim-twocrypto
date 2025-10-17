@@ -30,15 +30,15 @@ N_GRID_Y = 32
 # xmax = 2*60*60/math.log(2)
 # xlogspace = False
 
-# X_name = "mid_fee"  # can be changed to any pool key
-# xmin = int(10/10_000*10**10)
-# xmax = int(100/10_000*10**10)
-# xlogspace = True
+X_name = "mid_fee"  # can be changed to any pool key
+xmin = int(1/10_000*10**10)
+xmax = int(100/10_000*10**10)
+xlogspace = True
 
-X_name = "donation_apy"  # can be changed to any pool key
-xmin = 0.01
-xmax = 0.1
-xlogspace = False
+# X_name = "donation_apy"  # can be changed to any pool key
+# xmin = 0.01
+# xmax = 0.1
+# xlogspace = False
 
 Y_name = "A"  # default second param; also applied to out_fee
 ymin = 1*10_000
@@ -72,8 +72,8 @@ else:
 # Y_vals = [int(x) for x in Y_vals]
 
 init_liq = 1_000_000 # in coin0
-DEFAULT_DATAFILE = "python/arb_sim/trade_data/chfusd/chfusd-2020-2025.json"
-# DEFAULT_DATAFILE = "python/arb_sim/trade_data/chfusd/usdchf-2019-2024.json"
+DEFAULT_DATAFILE = "python/arb_sim/trade_data/tryusd/tryusd-2020-latest.json"
+
 
 START_TS = _first_candle_ts(DEFAULT_DATAFILE)
 init_price = _initial_price_from_file(DEFAULT_DATAFILE)
