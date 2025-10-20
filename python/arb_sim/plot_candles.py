@@ -23,8 +23,9 @@ import random
 import matplotlib.pyplot as plt
 from matplotlib.collections import LineCollection
 from matplotlib.patches import Rectangle
-# x-axis uses raw UNIX timestamps; no date conversion/formatting
+# x-axis uses UTC dates via matplotlib date converters
 import numpy as np
+from matplotlib import dates as mdates
 
 
 def _parse_ts(v: int | float | str) -> int:
@@ -118,6 +119,34 @@ def print_stats(ts: List[int], o: List[float], h: List[float], l: List[float], c
     if v_arr is not None:
         print(f"Volume: mean={vm:.6f} std={vs:.6f}")
 
+    # Gap analysis (>10 minutes between consecutive timestamps)
+    if n >= 2:
+        deltas_s = np.diff(ts_arr)
+        gap_mask = deltas_s > 600  # strictly greater than 10 minutes
+        gap_sizes_min = deltas_s[gap_mask] / 60.0
+        gap_idx = np.nonzero(gap_mask)[0]  # index i means gap between i and i+1
+        gap_count = int(gap_sizes_min.size)
+        print("\n--- Gap Analysis (>10 min) ---")
+        print(f"Gaps: count={gap_count}")
+        if gap_count > 0:
+            g_mean = float(np.mean(gap_sizes_min))
+            g_std = float(np.std(gap_sizes_min, ddof=0))
+            g_max = float(np.max(gap_sizes_min))
+            print(f"Gap size (min): mean={g_mean:.2f} std={g_std:.2f} max={g_max:.2f}")
+            # Top 5 largest gaps with their time positions
+            order = np.argsort(-gap_sizes_min)  # descending
+            top_k = min(5, gap_count)
+            print("Top gaps:")
+            for rank in range(top_k):
+                gi = int(order[rank])
+                i = int(gap_idx[gi])
+                start_ts = float(ts_arr[i])
+                end_ts = float(ts_arr[i + 1])
+                start_h = datetime.utcfromtimestamp(start_ts).strftime('%Y-%m-%d %H:%M:%S UTC')
+                end_h = datetime.utcfromtimestamp(end_ts).strftime('%Y-%m-%d %H:%M:%S UTC')
+                size_min = float(gap_sizes_min[gi])
+                print(f"  #{rank+1}: {start_h} -> {end_h} | +{size_min:.2f} min")
+
     # Random examples per parameter
     k = min(k_examples, n)
     idxs = random.sample(range(n), k)
@@ -152,15 +181,19 @@ def plot_candles(ts: List[int], o: List[float], h: List[float], l: List[float], 
         ts = ts[::stride]; o = o[::stride]; h = h[::stride]; l = l[::stride]; c = c[::stride]; v = v[::stride]
         n = len(ts)
 
-    # X as raw UNIX timestamps (seconds)
-    x = [float(t) for t in ts]
+    # X axis as matplotlib date numbers (days since 0001-01-01)
+    x_sec = np.asarray(ts, dtype=np.float64)
+    epoch_days = mdates.date2num(datetime(1970, 1, 1))
+    x = x_sec / 86400.0 + epoch_days  # convert POSIX seconds to matplotlib date units (days)
 
-    fig = plt.figure(figsize=(14, 7))
-    ax = fig.add_subplot(2, 1, 1)
-    ax_vol = fig.add_subplot(2, 1, 2, sharex=ax)
+    fig, ax = plt.subplots(figsize=(14, 7))
 
-    # Common x width (in seconds) for bars
-    width = (x[1] - x[0]) * 0.6 if n > 1 else 1.0
+    # Common width based on original seconds, then convert to days
+    if n > 1:
+        width_sec = (x_sec[1] - x_sec[0]) * 0.6
+    else:
+        width_sec = 60.0  # default ~1 minute if only one point
+    width_days = float(width_sec) / 86400.0
 
     if use_candles:
         # Wicks via LineCollection (vectorized)
@@ -175,7 +208,7 @@ def plot_candles(ts: List[int], o: List[float], h: List[float], l: List[float], 
             height = abs(ci - oi)
             if height == 0:
                 height = 1e-12
-            rect = Rectangle((xi - width / 2, y0), width, height,
+            rect = Rectangle((xi - width_days / 2, y0), width_days, height,
                              facecolor=(0.1, 0.7, 0.1, 0.8) if up else (0.8, 0.2, 0.2, 0.8),
                              edgecolor='black', linewidth=0.2)
             bodies.append(rect)
@@ -192,16 +225,20 @@ def plot_candles(ts: List[int], o: List[float], h: List[float], l: List[float], 
         ax.plot(x, c, color='tab:blue', linewidth=0.8)
         ax.set_ylabel("Close")
 
-    # Volume (bar chart, color by up/down)
-    colors = [(0.1, 0.7, 0.1, 0.5) if ci >= oi else (0.8, 0.2, 0.2, 0.5) for oi, ci in zip(o, c)]
-    ax_vol.bar(x, v, width=width, color=colors, align='center', linewidth=0)
-    ax_vol.set_ylabel("Volume")
-
     # Formatting
     ax.grid(True, linestyle=':', alpha=0.3)
-    ax_vol.grid(True, linestyle=':', alpha=0.3)
-    # Keep numeric timestamp axis; no date formatting
+    # Date formatting on x-axis (UTC) — uniform 30 labels from start to end
+    formatter = mdates.DateFormatter('%d-%m-%Y %H:%M', tz=timezone.utc)
+    ax.xaxis.set_major_formatter(formatter)
+    if n > 1:
+        xticks = np.linspace(float(x[0]), float(x[-1]), 30)
+    else:
+        xticks = [float(x[0])]
+    ax.set_xticks(xticks)
     ax.set_title(title)
+
+    # Auto-rotate date labels for readability
+    fig.autofmt_xdate()
 
     plt.tight_layout()
     if save:
