@@ -25,6 +25,21 @@ import math
 N_GRID_X = 32
 N_GRID_Y = 32
 
+#1. A-mid_fee log 
+
+FEE_EQUALIZE = True
+
+X_name = "mid_fee"  # can be changed to any pool key
+xmin = int(1/10_000*10**10)
+xmax = int(100/10_000*10**10)
+xlogspace = True
+
+Y_name = "A"  
+ymin = 1*10_000
+ymax =  200*10_000
+ylogspace = True
+
+
 # X_name = "ma_time"  # can be changed to any pool key
 # xmin = 10*60/math.log(2)
 # xmax = 12*60*60/math.log(2)
@@ -41,16 +56,16 @@ N_GRID_Y = 32
 # xlogspace = False
 
 
-X_name = "fee_gamma"  
-xmin = int(1e-5 * 10**18)
-xmax = int(0.03 * 10**18)
-xlogspace = True
+# X_name = "fee_gamma"  
+# xmin = int(1e-5 * 10**18)
+# xmax = int(0.03 * 10**18)
+# xlogspace = True
 
 
-Y_name = "A"  
-ymin = 10*10_000
-ymax =  50*10_000
-ylogspace = False
+# Y_name = "A"  
+# ymin = 10*10_000
+# ymax =  50*10_000
+# ylogspace = False
 
 
 # X_name = "mid_fee"  # can be changed to any pool key
@@ -78,15 +93,15 @@ else:
 # X_vals = [int(x) for x in X_vals]
 # Y_vals = [int(x) for x in Y_vals]
 
-DEFAULT_DATAFILE = "python/arb_sim/trade_data/eurjpy/eurjpy-20200101-20250901.json"
+DEFAULT_DATAFILE = "python/arb_sim/trade_data/usdphp/usdphp-1m.flipped.json"
 
 
 START_TS = _first_candle_ts(DEFAULT_DATAFILE)
 init_price = _initial_price_from_file(DEFAULT_DATAFILE)
 init_liq = 1_000_000 * 10**18 # in coin0
 
-FEE_EQUALIZE = False
-INVERT_LIQ = True
+# FEE_EQUALIZE = True
+INVERT_LIQ = False
 
 if INVERT_LIQ:
     #inverse if necessary (make it coin1)
