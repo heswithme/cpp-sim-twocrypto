@@ -30,14 +30,14 @@ N_GRID_Y = 32
 FEE_EQUALIZE = True
 
 X_name = "mid_fee"  # can be changed to any pool key
-xmin = int(1/10_000*10**10)
-xmax = int(100/10_000*10**10)
-xlogspace = True
+xmin = int(10/10_000*10**10)
+xmax = int(80/10_000*10**10)
+xlogspace = False
 
 Y_name = "A"  
-ymin = 1*10_000
-ymax =  200*10_000
-ylogspace = True
+ymin = 10*10_000
+ymax =  80*10_000
+ylogspace = False
 
 
 # X_name = "ma_time"  # can be changed to any pool key
