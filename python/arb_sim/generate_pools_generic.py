@@ -27,23 +27,21 @@ N_GRID_Y = 32
 
 #1. A-mid_fee log 
 
-FEE_EQUALIZE = True
-
-X_name = "mid_fee"  # can be changed to any pool key
-xmin = int(10/10_000*10**10)
-xmax = int(80/10_000*10**10)
-xlogspace = False
+# X_name = "mid_fee"  # can be changed to any pool key
+# xmin = int(10/10_000*10**10)
+# xmax = int(80/10_000*10**10)
+# xlogspace = False
 
 Y_name = "A"  
-ymin = 10*10_000
-ymax =  80*10_000
+ymin = 5*10_000
+ymax =  30*10_000
 ylogspace = False
 
 
-# X_name = "ma_time"  # can be changed to any pool key
-# xmin = 10*60/math.log(2)
-# xmax = 12*60*60/math.log(2)
-# xlogspace = False
+X_name = "ma_time"  # can be changed to any pool key
+xmin = 10*60/math.log(2)
+xmax = 8*60*60/math.log(2)
+xlogspace = False
 
 # X_name = "mid_fee"  # can be changed to any pool key
 # xmin = int(1/10_000*10**10)
@@ -93,14 +91,14 @@ else:
 # X_vals = [int(x) for x in X_vals]
 # Y_vals = [int(x) for x in Y_vals]
 
-DEFAULT_DATAFILE = "python/arb_sim/trade_data/usdphp/usdphp-1m.flipped.json"
+DEFAULT_DATAFILE = "python/arb_sim/trade_data/tryusd/tryusd-2020-latest.json"
 
 
 START_TS = _first_candle_ts(DEFAULT_DATAFILE)
 init_price = _initial_price_from_file(DEFAULT_DATAFILE)
 init_liq = 1_000_000 * 10**18 # in coin0
 
-# FEE_EQUALIZE = True
+FEE_EQUALIZE = False
 INVERT_LIQ = False
 
 if INVERT_LIQ:
@@ -113,8 +111,8 @@ BASE_POOL = {
     "initial_liquidity": [int(init_liq * 10**18//2), int(init_liq * 10**18//2 / init_price)],
     "A": 32 * 10_000,
     "gamma": 10**14, #unused in twocrypto
-    "mid_fee": int(10 / 10_000 * 10**10),
-    "out_fee": int(20 / 10_000 * 10**10),
+    "mid_fee": int(5 / 10_000 * 10**10),
+    "out_fee": int(10 / 10_000 * 10**10),
     "fee_gamma": int(0.0001 * 10**18),
     "allowed_extra_profit": int(1e-12 * 10**18),
     "adjustment_step": int(1e-7 * 10**18),
