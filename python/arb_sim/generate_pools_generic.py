@@ -20,7 +20,7 @@ from time import time
 from pool_helpers import _first_candle_ts, _initial_price_from_file, strify_pool
 import math
 
-
+FEE_EQUALIZE = False
 # -------------------- Grid Definition --------------------
 N_GRID_X = 32
 N_GRID_Y = 32
@@ -28,19 +28,20 @@ N_GRID_Y = 32
 #1. A-mid_fee log 
 
 # X_name = "mid_fee"  # can be changed to any pool key
-# xmin = int(10/10_000*10**10)
-# xmax = int(80/10_000*10**10)
-# xlogspace = False
+# xmin = int(1/10_000*10**10)
+# xmax = int(100/10_000*10**10)
+# xlogspace = True
+# FEE_EQUALIZE = True
 
-Y_name = "A"  
-ymin = 5*10_000
-ymax =  30*10_000
-ylogspace = False
+# Y_name = "A"  
+# ymin = 1*10_000
+# ymax =  200*10_000
+# ylogspace = True
 
 
 X_name = "ma_time"  # can be changed to any pool key
 xmin = 10*60/math.log(2)
-xmax = 8*60*60/math.log(2)
+xmax = 24*60*60/math.log(2)
 xlogspace = False
 
 # X_name = "mid_fee"  # can be changed to any pool key
@@ -60,10 +61,10 @@ xlogspace = False
 # xlogspace = True
 
 
-# Y_name = "A"  
-# ymin = 10*10_000
-# ymax =  50*10_000
-# ylogspace = False
+Y_name = "A"  
+ymin = 10*10_000
+ymax =  50*10_000
+ylogspace = False
 
 
 # X_name = "mid_fee"  # can be changed to any pool key
@@ -91,16 +92,15 @@ else:
 # X_vals = [int(x) for x in X_vals]
 # Y_vals = [int(x) for x in Y_vals]
 
-DEFAULT_DATAFILE = "python/arb_sim/trade_data/tryusd/tryusd-2020-latest.json"
+DEFAULT_DATAFILE = "python/arb_sim/trade_data/brlusd/brlusd-1m.json"
 
 
 START_TS = _first_candle_ts(DEFAULT_DATAFILE)
 init_price = _initial_price_from_file(DEFAULT_DATAFILE)
 init_liq = 1_000_000 * 10**18 # in coin0
 
-FEE_EQUALIZE = False
-INVERT_LIQ = False
 
+INVERT_LIQ = False
 if INVERT_LIQ:
     #inverse if necessary (make it coin1)
     init_liq *= init_price
@@ -130,7 +130,7 @@ BASE_POOL = {
 }
 
 BASE_COSTS = {
-    "arb_fee_bps": 10.0,
+    "arb_fee_bps": 50.0,
     "gas_coin0": 0.0,
     "use_volume_cap": False,
     "volume_cap_mult": 1,
