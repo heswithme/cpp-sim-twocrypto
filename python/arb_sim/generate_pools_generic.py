@@ -57,13 +57,13 @@ xlogspace = False
 
 # X_name = "fee_gamma"  
 # xmin = int(1e-5 * 10**18)
-# xmax = int(0.03 * 10**18)
+# xmax = int(0.1 * 10**18)
 # xlogspace = True
 
 
 Y_name = "A"  
-ymin = 10*10_000
-ymax =  50*10_000
+ymin = 1*10_000
+ymax =  20*10_000
 ylogspace = False
 
 
@@ -92,7 +92,7 @@ else:
 # X_vals = [int(x) for x in X_vals]
 # Y_vals = [int(x) for x in Y_vals]
 
-DEFAULT_DATAFILE = "python/arb_sim/trade_data/brlusd/brlusd-1m.json"
+DEFAULT_DATAFILE = "python/arb_sim/trade_data/usdngn/ngnusd-1m.json"
 
 
 START_TS = _first_candle_ts(DEFAULT_DATAFILE)
@@ -113,10 +113,10 @@ BASE_POOL = {
     "gamma": 10**14, #unused in twocrypto
     "mid_fee": int(5 / 10_000 * 10**10),
     "out_fee": int(10 / 10_000 * 10**10),
-    "fee_gamma": int(0.0001 * 10**18),
+    "fee_gamma": int(0.001 * 10**18),
     "allowed_extra_profit": int(1e-12 * 10**18),
     "adjustment_step": int(1e-7 * 10**18),
-    "ma_time": 866, #int(7*86400 / math.log(2)), #5200,
+    "ma_time": int(86400 / math.log(2)), #5200,
     "initial_price": int(init_price * 10**18),
     "start_timestamp": START_TS,
 
@@ -130,7 +130,7 @@ BASE_POOL = {
 }
 
 BASE_COSTS = {
-    "arb_fee_bps": 50.0,
+    "arb_fee_bps": 15.0,
     "gas_coin0": 0.0,
     "use_volume_cap": False,
     "volume_cap_mult": 1,

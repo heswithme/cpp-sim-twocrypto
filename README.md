@@ -219,6 +219,76 @@ uv run python/arb_sim/plot_heatmap.py  --metrics apy,apy_coin0,apy_coin0_boost,x
 #   --annot                # overlay numeric values on cells
 ```
 
+# Trading Data Processing
+
+This folder contains small utilities for preparing and inspecting OHLCV time series used by the arbitrage simulator and other experiments.
+
+Typical flow:
+
+1) Convert a raw CSV to JSON (dataset‑specific converter)
+2) Visualize to sanity‑check data and spot bad tails/gaps
+3) Cut a time window to focus analysis
+4) Filter extreme noise/wicks
+5) Optionally invert the price series
+
+All steps write a new file next to the input using predictable suffixes so you can chain operations.
+
+Format
+- JSON rows: `[timestamp, open, high, low, close, volume]`
+- `timestamp` in UNIX seconds (ints). If your source uses ms, divide by 1000.
+
+Example workflow (USD/NGN)
+
+```
+# 1) Convert CSV → JSON (dataset‑specific; writes usdngn-1m.raw.json)
+uv run python/arb_sim/trade_data/usdngn/csv_to_json.py
+
+# 2) Plot to verify structure and tail quality (dynamic stride)
+uv run python/arb_sim/plot_candles.py \
+  --file python/arb_sim/trade_data/usdngn/usdngn-1m.raw.json
+
+# 3) Cut a time window (accepts YYYY-MM-DD, YYYYMMDD, DDMMYYYY, or unix seconds)
+uv run python/arb_sim/trade_data/process_series.py \
+  python/arb_sim/trade_data/usdngn/usdngn-1m.raw.json \
+  --cut --start 01082023 --end 01012025
+# → python/arb_sim/trade_data/usdngn/usdngn-1m.raw.cut.json
+
+# 4) Filter obvious outliers/wicks (3-sigma rules; see below)
+uv run python/arb_sim/trade_data/process_series.py \
+  python/arb_sim/trade_data/usdngn/usdngn-1m.raw.cut.json \
+  --filter
+# → python/arb_sim/trade_data/usdngn/usdngn-1m.raw.cut.filtered.json
+
+# 5) Optional: invert prices (x → 1/x)
+uv run python/arb_sim/trade_data/process_series.py \
+  python/arb_sim/trade_data/usdngn/usdngn-1m.raw.cut.filtered.json \
+  --flip
+# → python/arb_sim/trade_data/usdngn/usdngn-1m.raw.cut.filtered.flipped.json
+```
+
+Filters (in `python/arb_sim/trade_data/process_series.py`)
+- Candle height 3σ: absolute length `max(OHLC) − min(OHLC)` must be ≤ mean + 3×std.
+- 7‑day MA deviation 3σ: trailing 7‑day time‑based moving average of Close; relative deviation `|C − MA| / MA` must be ≤ mean + 3×std.
+- C→O distance 3σ: absolute difference `|C − O|` must be ≤ mean + 3×std.
+- A candle is kept only if it passes all three.
+
+Notes
+- Cutting and filtering preserve directory and modify only the stem with suffixes: `.cut.json`, `.filtered.json`, `.flipped.json`.
+- `--start/--end` accept `YYYY-MM-DD`, `YYYYMMDD`, `DDMMYYYY`, or unix seconds.
+- Plotting uses `python/arb_sim/plot_candles.py` and dynamically strides large series.
+
+From notebooks (importable)
+
+```
+from pathlib import Path
+from arb_sim.trade_data.process_series import op_cut, op_filter, op_flip
+
+op_cut(Path("python/arb_sim/trade_data/usdngn/usdngn-1m.raw.json"), "01082023", "01012025")
+op_filter(Path("python/arb_sim/trade_data/usdngn/usdngn-1m.raw.cut.json"))
+op_flip(Path("python/arb_sim/trade_data/usdngn/usdngn-1m.raw.cut.filtered.json"))
+```
+
+
 ## Math Benchmarks (C++ vs Vyper)
 
 ```bash
