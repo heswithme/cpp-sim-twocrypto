@@ -25,9 +25,9 @@ FEE_EQUALIZE = False
 N_GRID_X = 32
 N_GRID_Y = 32
 
-#1. A-mid_fee log 
+# 1. A-mid_fee log 
 
-# X_name = "mid_fee"  # can be changed to any pool key
+# X_name = "mid_fee"  
 # xmin = int(1/10_000*10**10)
 # xmax = int(100/10_000*10**10)
 # xlogspace = True
@@ -39,17 +39,62 @@ N_GRID_Y = 32
 # ylogspace = True
 
 
-X_name = "ma_time"  # can be changed to any pool key
+# 2. A-mid_fee zoom_lin
+
+# X_name = "mid_fee"  
+# xmin = int(10/10_000*10**10)
+# xmax = int(50/10_000*10**10)
+# xlogspace = False
+# FEE_EQUALIZE = True
+
+# Y_name = "A"  
+# ymin = 1*10_000
+# ymax =  50*10_000
+# ylogspace = False
+
+# # 3. mid_fee-out_fee 
+# X_name = "mid_fee"  
+# xmin = int(1/10_000*10**10)
+# xmax = int(100/10_000*10**10)
+# xlogspace = False
+
+# Y_name = "out_fee"  
+# ymin = int(1/10_000*10**10)
+# ymax = int(100/10_000*10**10)
+# ylogspace = False
+
+# 4. out_fee-fee_gamma
+
+# X_name = "fee_gamma"  
+# xmin = int(1e-6 * 10**18)
+# xmax = int(0.1 * 10**18)
+# xlogspace = True
+
+# Y_name = "out_fee"  
+# ymin = int(10/10_000*10**10)
+# ymax = int(100/10_000*10**10)
+# ylogspace = False
+
+
+# 5. A-ma_time
+
+X_name = "ma_time"  
 xmin = 10*60/math.log(2)
 xmax = 24*60*60/math.log(2)
 xlogspace = False
 
-# X_name = "mid_fee"  # can be changed to any pool key
+Y_name = "A"  
+ymin = 1*10_000
+ymax =  50*10_000
+ylogspace = False
+
+
+# X_name = "mid_fee"  
 # xmin = int(1/10_000*10**10)
 # xmax = int(100/10_000*10**10)
 # xlogspace = True
 
-# X_name = "donation_apy"  # can be changed to any pool key
+# X_name = "donation_apy"  
 # xmin = 0.01
 # xmax = 0.1
 # xlogspace = False
@@ -61,13 +106,13 @@ xlogspace = False
 # xlogspace = True
 
 
-Y_name = "A"  
-ymin = 1*10_000
-ymax =  20*10_000
-ylogspace = False
+# Y_name = "A"  
+# ymin = 1*10_000
+# ymax =  100*10_000
+# ylogspace = False
 
 
-# X_name = "mid_fee"  # can be changed to any pool key
+# X_name = "mid_fee"  
 # xmin = int(35 / 10_000 * 10**10)
 # xmax = xmin
 # xlogspace = False
@@ -92,7 +137,7 @@ else:
 # X_vals = [int(x) for x in X_vals]
 # Y_vals = [int(x) for x in Y_vals]
 
-DEFAULT_DATAFILE = "python/arb_sim/trade_data/usdngn/ngnusd-1m.json"
+DEFAULT_DATAFILE = "python/arb_sim/trade_data/idrusd/idrusd-1m.json"
 
 
 START_TS = _first_candle_ts(DEFAULT_DATAFILE)
@@ -109,14 +154,14 @@ if INVERT_LIQ:
 BASE_POOL = {
     # All values are integers in their native units
     "initial_liquidity": [int(init_liq * 10**18//2), int(init_liq * 10**18//2 / init_price)],
-    "A": 32 * 10_000,
+    "A": 20 * 10_000,
     "gamma": 10**14, #unused in twocrypto
     "mid_fee": int(5 / 10_000 * 10**10),
-    "out_fee": int(10 / 10_000 * 10**10),
+    "out_fee": int(50 / 10_000 * 10**10),
     "fee_gamma": int(0.001 * 10**18),
     "allowed_extra_profit": int(1e-12 * 10**18),
     "adjustment_step": int(1e-7 * 10**18),
-    "ma_time": int(86400 / math.log(2)), #5200,
+    "ma_time": 866,#int(86400 / math.log(2)), #5200,
     "initial_price": int(init_price * 10**18),
     "start_timestamp": START_TS,
 
@@ -130,7 +175,7 @@ BASE_POOL = {
 }
 
 BASE_COSTS = {
-    "arb_fee_bps": 15.0,
+    "arb_fee_bps": 75.0,
     "gas_coin0": 0.0,
     "use_volume_cap": False,
     "volume_cap_mult": 1,
@@ -149,7 +194,8 @@ def build_grid():
             mid_fee_val = int(pool.get("mid_fee", 0))
             cur_out_val = int(pool.get("out_fee", 0))
             # pool["out_fee"] = max(mid_fee_val, cur_out_val)
-            pool["out_fee"] = mid_fee_val if FEE_EQUALIZE else max(mid_fee_val, cur_out_val)
+            pool["mid_fee"] = int(mid_fee_val)
+            pool["out_fee"] = mid_fee_val if FEE_EQUALIZE else max(mid_fee_val, cur_out_val) + 1
             costs = dict(BASE_COSTS)
             tag_x = f"{X_name}_{xv}"
             tag_y = f"{Y_name}_{yv}"
