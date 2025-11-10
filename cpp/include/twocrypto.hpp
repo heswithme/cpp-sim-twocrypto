@@ -106,6 +106,7 @@ public:
     T allowed_extra_profit = Traits::ZERO();
     T adjustment_step = Traits::ZERO();
     T ma_time = Traits::ONE();
+    T step_scale = T(5);
 
     // Profit tracking
     T xcp_profit = Traits::PRECISION();
@@ -141,7 +142,8 @@ public:
         const T& _allowed_extra_profit,
         const T& _adjustment_step,
         const T& _ma_time,
-        const T& initial_price
+        const T& initial_price,
+        const T& _step_scale
     ) {
         precisions = _precisions;
         A = _A; gamma = _gamma;
@@ -149,6 +151,7 @@ public:
         allowed_extra_profit = _allowed_extra_profit;
         adjustment_step = _adjustment_step;
         ma_time = _ma_time;
+        step_scale = (_step_scale > Traits::ZERO()) ? _step_scale : T(5);
 
         cached_price_scale = initial_price;
         cached_price_oracle = initial_price;
@@ -616,7 +619,11 @@ public:
                 norm = NumTraits<T>::PRECISION() - norm;
             }
 
-            T step = NumTraits<T>::max(adjustment_step, norm / 5);
+            T divisor = step_scale;
+            if (divisor <= Traits::ZERO()) {
+                divisor = T(5);
+            }
+            T step = NumTraits<T>::max(adjustment_step, norm / divisor);
             if (trace) {
                 if constexpr (std::is_same_v<T, stableswap::uint256>) {
                     std::cout << "TRACE tp_norm norm=" << norm.template convert_to<std::string>()

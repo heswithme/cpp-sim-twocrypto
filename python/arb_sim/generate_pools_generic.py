@@ -22,21 +22,26 @@ import math
 
 FEE_EQUALIZE = False
 # -------------------- Grid Definition --------------------
-N_GRID_X = 32
-N_GRID_Y = 32
+N_GRID_X = 16
+N_GRID_Y = 16
 
 # 1. A-mid_fee log 
 
-# X_name = "mid_fee"  
-# xmin = int(1/10_000*10**10)
-# xmax = int(100/10_000*10**10)
-# xlogspace = True
-# FEE_EQUALIZE = True
+X_name = "mid_fee"  
+xmin = int(1/10_000*10**10)
+xmax = int(100/10_000*10**10)
+xlogspace = True
+FEE_EQUALIZE = True
 
 # Y_name = "A"  
 # ymin = 1*10_000
 # ymax =  200*10_000
 # ylogspace = True
+
+Y_name = "step_scale"  
+ymin = 1
+ymax =  100
+ylogspace = True
 
 
 # 2. A-mid_fee zoom_lin
@@ -78,15 +83,15 @@ N_GRID_Y = 32
 
 # 5. A-ma_time
 
-X_name = "ma_time"  
-xmin = 10*60/math.log(2)
-xmax = 24*60*60/math.log(2)
-xlogspace = False
+# X_name = "ma_time"  
+# xmin = 10*60/math.log(2)
+# xmax = 24*60*60/math.log(2)
+# xlogspace = False
 
-Y_name = "A"  
-ymin = 1*10_000
-ymax =  50*10_000
-ylogspace = False
+# Y_name = "A"  
+# ymin = 1*10_000
+# ymax =  50*10_000
+# ylogspace = False
 
 
 # X_name = "mid_fee"  
@@ -134,10 +139,10 @@ else:
     Y_vals = np.linspace(ymin, ymax, N_GRID_Y).tolist()
 
 # #optionally int-ify
-# X_vals = [int(x) for x in X_vals]
-# Y_vals = [int(x) for x in Y_vals]
+X_vals = [int(x) for x in X_vals]
+Y_vals = [int(x) for x in Y_vals]
 
-DEFAULT_DATAFILE = "python/arb_sim/trade_data/idrusd/idrusd-1m.json"
+DEFAULT_DATAFILE = "python/arb_sim/trade_data/btcusd/btc-2023-2025.json"
 
 
 START_TS = _first_candle_ts(DEFAULT_DATAFILE)
@@ -154,7 +159,7 @@ if INVERT_LIQ:
 BASE_POOL = {
     # All values are integers in their native units
     "initial_liquidity": [int(init_liq * 10**18//2), int(init_liq * 10**18//2 / init_price)],
-    "A": 20 * 10_000,
+    "A": 10 * 10_000,
     "gamma": 10**14, #unused in twocrypto
     "mid_fee": int(5 / 10_000 * 10**10),
     "out_fee": int(50 / 10_000 * 10**10),
@@ -164,6 +169,8 @@ BASE_POOL = {
     "ma_time": 866,#int(86400 / math.log(2)), #5200,
     "initial_price": int(init_price * 10**18),
     "start_timestamp": START_TS,
+    # Step scale for price adjustment
+    "step_scale": 5,
 
     # Donations (harness-only):
     # - donation_apy: plain fraction per year (0.05 => 5%).
@@ -175,7 +182,7 @@ BASE_POOL = {
 }
 
 BASE_COSTS = {
-    "arb_fee_bps": 75.0,
+    "arb_fee_bps": 5.0,
     "gas_coin0": 0.0,
     "use_volume_cap": False,
     "volume_cap_mult": 1,

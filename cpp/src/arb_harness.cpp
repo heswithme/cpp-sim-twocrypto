@@ -574,6 +574,7 @@ struct PoolInit {
     RealT adj_step{static_cast<RealT>(1e-3)};
     RealT ma_time{static_cast<RealT>(600.0)};
     RealT initial_price{static_cast<RealT>(1.0)};
+    RealT step_scale{static_cast<RealT>(5.0)};
     std::array<RealT,2> initial_liq{static_cast<RealT>(1e6), static_cast<RealT>(1e6)};
     uint64_t start_ts{0};
     // Donation controls (plain units)
@@ -603,6 +604,7 @@ static void parse_pool_entry(const json::object& entry, PoolInit& out_pool, Cost
     if (auto* v = pool.if_contains("ma_time")) out_pool.ma_time = parse_plain_real(*v);
     if (auto* v = pool.if_contains("initial_price")) out_pool.initial_price = parse_scaled_1e18(*v);
     if (auto* v = pool.if_contains("start_timestamp")) out_pool.start_ts = static_cast<uint64_t>(parse_plain_real(*v));
+    if (auto* v = pool.if_contains("step_scale")) out_pool.step_scale = parse_plain_real(*v);
     if (auto* v = pool.if_contains("donation_apy")) out_pool.donation_apy = parse_plain_real(*v);
     if (auto* v = pool.if_contains("donation_frequency")) out_pool.donation_frequency = parse_plain_real(*v);
     if (auto* v = pool.if_contains("donation_coins_ratio")) {
@@ -967,7 +969,7 @@ int main(int argc, char* argv[]) {
                     using Pool = twocrypto::TwoCryptoPoolT<RealT>;
                     Pool pool({cfg.precisions[0], cfg.precisions[1]}, cfg.A, cfg.gamma,
                               cfg.mid_fee, cfg.out_fee, cfg.fee_gamma,
-                              cfg.allowed_extra, cfg.adj_step, cfg.ma_time, cfg.initial_price);
+                              cfg.allowed_extra, cfg.adj_step, cfg.ma_time, cfg.initial_price, cfg.step_scale);
 
                     // Align EMA baseline before any liquidity
                     uint64_t init_ts = cfg.start_ts ? cfg.start_ts : (events.empty() ? 0 : events.front().ts);
