@@ -369,7 +369,7 @@ def main() -> int:
             "totalSupply",
         }
         scale_percent = (
-            mlow in {"vpminusone", "apy"} or "apy" in mlow or "tw_real_slippage" in mlow
+            mlow in {"vpminusone", "apy"} or "apy" in mlow or "tw_real_slippage" in mlow or "geom_mean" in mlow
         )
         return scale_1e18, scale_percent
 

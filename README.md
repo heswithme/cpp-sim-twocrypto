@@ -217,7 +217,12 @@ uv run python/arb_sim/plot_heatmap.py  --metrics apy,apy_coin0,apy_coin0_boost,x
 #   --out <file.png>       # output image path (default saved under run_data)
 #   --show                 # open a window instead of just saving
 #   --annot                # overlay numeric values on cells
+
+Oneliner:
+uv run python/arb_sim/generate_pools_generic.py && uv run python/arb_sim/arb_sim.py  --dustswapfreq 600 --apy-period-days 1 --apy-period-cap 50 -n 10 && uv run python/arb_sim/plot_heatmap.py  --metrics apy,tw_capped_apy,tw_capped_apy_net,xcp_profit,vp,avg_pool_fee,tw_avg_pool_fee,n_rebalances,trades,total_notional_coin0,tw_apy_geom_mean,tw_apy_geom_mean_net,avg_rel_bps,tw_slippage,tw_liq_density,apy_geom_mean,apy_geom_mean_net,tw_real_slippage_1pct,tw_real_slippage_5pct,tw_real_slippage_10pct --ncol 5
+
 ```
+
 
 # Trading Data Processing
 

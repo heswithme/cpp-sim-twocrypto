@@ -1064,6 +1064,10 @@ int main(int argc, char* argv[]) {
                     RealT lb_win_start = lb_prev;
                     long double apy_win_wsum = 0.0L;
                     long double apy_win_w    = 0.0L;
+                    RealT tg_prev = true_growth(pool);
+                    RealT tg_win_start = tg_prev;
+                    long double tg_win_wsum = 0.0L;
+                    long double tg_win_w    = 0.0L;
                     uint64_t last_ts_any = win_start_ts;
                     const double SEC_PER_YEAR_D = 365.0 * 86400.0;
                     push_state(); // initial snapshot
@@ -1075,6 +1079,7 @@ int main(int argc, char* argv[]) {
                         if (apy_period_s > 0 && ev.ts >= win_end_ts) {
                             const uint64_t dt_w = ev.ts > win_start_ts ? (ev.ts - win_start_ts) : 0ULL;
                             if (dt_w > 0) {
+                                const long double dt_ld = static_cast<long double>(dt_w);
                                 const RealT g = (lb_win_start > static_cast<RealT>(0))
                                                 ? (lb_prev / lb_win_start)
                                                 : static_cast<RealT>(1);
@@ -1082,12 +1087,22 @@ int main(int argc, char* argv[]) {
                                     std::pow(static_cast<double>(g), SEC_PER_YEAR_D / static_cast<double>(dt_w)) - 1.0);
                                 const RealT cap = static_cast<RealT>(apy_period_cap_pct) / static_cast<RealT>(100);
                                 if (apy_w > cap) apy_w = cap;
-                                apy_win_wsum += static_cast<long double>(apy_w) * static_cast<long double>(dt_w);
-                                apy_win_w    += static_cast<long double>(dt_w);
+                                apy_win_wsum += static_cast<long double>(apy_w) * dt_ld;
+                                apy_win_w    += dt_ld;
+
+                                const RealT tg_ratio = (tg_win_start > static_cast<RealT>(0))
+                                                       ? (tg_prev / tg_win_start)
+                                                       : static_cast<RealT>(1);
+                                RealT gm_w = static_cast<RealT>(
+                                    std::pow(static_cast<double>(tg_ratio), SEC_PER_YEAR_D / static_cast<double>(dt_w)) - 1.0);
+                                if (gm_w > cap) gm_w = cap;
+                                tg_win_wsum += static_cast<long double>(gm_w) * dt_ld;
+                                tg_win_w    += dt_ld;
                             }
                             win_start_ts = ev.ts;
                             win_end_ts   = win_start_ts + apy_period_s;
                             lb_win_start = lb_prev;
+                            tg_win_start = tg_prev;
                         }
                         last_ts_any = ev.ts;
 
@@ -1379,6 +1394,7 @@ int main(int argc, char* argv[]) {
                         }
 
                         lb_prev = (pool.xcp_profit + static_cast<RealT>(1)) / static_cast<RealT>(2);
+                        tg_prev = true_growth(pool);
 
                         // End of event: nothing to do (sampling only after trade/tick)
                     }
@@ -1386,14 +1402,23 @@ int main(int argc, char* argv[]) {
                     if (apy_period_s > 0 && last_ts_any > win_start_ts) {
                         const uint64_t dt_w = last_ts_any - win_start_ts;
                         if (dt_w > 0) {
+                            const long double dt_ld = static_cast<long double>(dt_w);
                             const long double g = (lb_win_start > static_cast<long double>(0))
                                             ? (lb_prev / lb_win_start)
                                             : static_cast<long double>(1);
-                            long double apy_w = std::pow(g, SEC_PER_YEAR_D / static_cast<long double>(dt_w)) - 1.0;
+                            long double apy_w = std::pow(g, SEC_PER_YEAR_D / dt_ld) - 1.0;
                             const long double cap = static_cast<long double>(apy_period_cap_pct) / static_cast<long double>(100);
                             if (apy_w > cap) apy_w = cap;
-                            apy_win_wsum += apy_w * static_cast<long double>(dt_w);
-                            apy_win_w    += static_cast<long double>(dt_w);
+                            apy_win_wsum += apy_w * dt_ld;
+                            apy_win_w    += dt_ld;
+
+                            const long double tg_ratio = (tg_win_start > static_cast<RealT>(0))
+                                                          ? (static_cast<long double>(tg_prev) / static_cast<long double>(tg_win_start))
+                                                          : static_cast<long double>(1);
+                            long double gm_w = std::pow(tg_ratio, SEC_PER_YEAR_D / dt_ld) - 1.0;
+                            if (gm_w > cap) gm_w = cap;
+                            tg_win_wsum += gm_w * dt_ld;
+                            tg_win_w    += dt_ld;
                         }
                     }
 
@@ -1489,6 +1514,12 @@ int main(int argc, char* argv[]) {
                     }
                     summary["tw_capped_apy"] = tw_capped_apy;
                     summary["tw_capped_apy_net"] = (tw_capped_apy >= 0.0 ? tw_capped_apy - static_cast<double>(dcfg.apy) : -1.0);
+                    double tw_geom_mean = -1.0;
+                    if (tg_win_w > 0.0L) {
+                        tw_geom_mean = static_cast<double>(tg_win_wsum / tg_win_w);
+                    }
+                    summary["tw_apy_geom_mean"] = tw_geom_mean;
+                    summary["tw_apy_geom_mean_net"] = tw_geom_mean - static_cast<double>(dcfg.apy);
 
                     const RealT tvl_end = pool.balances[0] + pool.balances[1] * pool.cached_price_scale;
                     // Baseline: HODL initial balances valued at end price (coin0 units)
