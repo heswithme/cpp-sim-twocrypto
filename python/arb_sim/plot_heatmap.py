@@ -12,6 +12,7 @@ Usage:
   uv run python/arb_sim/plot_heatmap.py --out heat.png   # save to file
   uv run python/arb_sim/plot_heatmap.py --show           # display window
 """
+
 from __future__ import annotations
 
 import json
@@ -69,6 +70,7 @@ def _edges_from_centers(centers: List[float], log_scale: bool = False) -> np.nda
         last = c[-1] + (c[-1] - mids[-1])
         return np.concatenate([[first], mids, [last]])
 
+
 def _latest_arb_run() -> Path:
     files = sorted([p for p in RUN_DIR.glob("arb_run_*.json")])
     if not files:
@@ -92,25 +94,36 @@ def _to_float(x: Any) -> float:
             return float("nan")
 
 
-
 def _axis_transformer(name: str):
     """Return a transformer for axis values based on the parameter name."""
     key = (name or "").lower()
     if "ma_time" in key:
+
         def _transform(value: float) -> float:
             return value * MA_TIME_TO_HOURS
+
         return _transform
     return lambda value: value
 
 
-def _extract_grid(data: Dict[str, Any], metric: str, scale_1e18: bool, scale_percent: bool) -> Tuple[str, str, List[float], List[float], np.ndarray]:
+def _extract_grid(
+    data: Dict[str, Any], metric: str, scale_1e18: bool, scale_percent: bool
+) -> Tuple[str, str, List[float], List[float], np.ndarray]:
     runs = data.get("runs", [])
     if not runs:
         raise SystemExit("No runs[] found in arb_run JSON")
 
     # Determine axis names
-    x_name = runs[0].get("x_key") or data.get("metadata", {}).get("grid", {}).get("X", {}).get("name") or "X"
-    y_name = runs[0].get("y_key") or data.get("metadata", {}).get("grid", {}).get("Y", {}).get("name") or "Y"
+    x_name = (
+        runs[0].get("x_key")
+        or data.get("metadata", {}).get("grid", {}).get("X", {}).get("name")
+        or "X"
+    )
+    y_name = (
+        runs[0].get("y_key")
+        or data.get("metadata", {}).get("grid", {}).get("Y", {}).get("name")
+        or "Y"
+    )
 
     x_transform = _axis_transformer(x_name)
     y_transform = _axis_transformer(y_name)
@@ -143,7 +156,9 @@ def _extract_grid(data: Dict[str, Any], metric: str, scale_1e18: bool, scale_per
             ys.append(yv)
 
     if not points:
-        raise SystemExit("No valid (x,y,z) points found in runs; ensure x_val/y_val and final_state exist.")
+        raise SystemExit(
+            "No valid (x,y,z) points found in runs; ensure x_val/y_val and final_state exist."
+        )
 
     xs_sorted = sorted(sorted(set(xs)))
     ys_sorted = sorted(sorted(set(ys)))
@@ -207,6 +222,30 @@ def _format_axis_labels(name: str, values: List[float]) -> Tuple[List[str], str]
     return labels, display_name
 
 
+def _auto_font_size(nx: int, ny: int) -> int:
+    """Choose a tick font size based on grid resolution.
+
+    - <=4 cells → 10 pt
+    - <=8 cells → 12 pt
+    - <=16 cells → 14 pt
+    - >=32 cells → 24 pt (cap)
+    - between 16 and 32 uses linear interpolation toward 24 pt
+    """
+    grid = max(1, nx, ny)
+    if grid <= 4:
+        return 8
+    if grid <= 8:
+        return 12
+    if grid <= 16:
+        return 16
+    if grid >= 32:
+        return 24
+    span = 32 - 16
+    t = (grid - 16) / span
+    size = 12 + t * (24 - 12)
+    return int(round(size))
+
+
 def _select_ticks(values: List[float], max_ticks: int) -> List[int]:
     n = len(values)
     if n == 0:
@@ -222,26 +261,90 @@ def _select_ticks(values: List[float], max_ticks: int) -> List[int]:
 
 def main() -> int:
     import argparse
+
     ap = argparse.ArgumentParser(description="Plot heatmap(s) from arb_run grid")
-    ap.add_argument("--arb", type=str, default=None, help="Path to arb_run_*.json (default: latest)")
-    ap.add_argument("--metric", type=str, default="virtual_price", help="Single metric for Z (default: virtual_price)")
-    ap.add_argument("--metrics", type=str, default=None, help="Comma-separated list of metrics to plot side-by-side (overrides --metric)")
-    ap.add_argument("--no-scale", action="store_true", help="Disable 1e18 scaling for Z")
-    ap.add_argument("--cmap", type=str, default="turbo", help="Matplotlib colormap (default: turbo)")
-    ap.add_argument("--out", type=str, default=None, help="Output image path (default: run_data/heatmap_<metric>.png)")
+    ap.add_argument(
+        "--arb", type=str, default=None, help="Path to arb_run_*.json (default: latest)"
+    )
+    ap.add_argument(
+        "--metric",
+        type=str,
+        default="virtual_price",
+        help="Single metric for Z (default: virtual_price)",
+    )
+    ap.add_argument(
+        "--metrics",
+        type=str,
+        default=None,
+        help="Comma-separated list of metrics to plot side-by-side (overrides --metric)",
+    )
+    ap.add_argument(
+        "--no-scale", action="store_true", help="Disable 1e18 scaling for Z"
+    )
+    ap.add_argument(
+        "--cmap", type=str, default="turbo", help="Matplotlib colormap (default: turbo)"
+    )
+    ap.add_argument(
+        "--out",
+        type=str,
+        default=None,
+        help="Output image path (default: run_data/heatmap_<metric>.png)",
+    )
     ap.add_argument("--show", action="store_true", help="Show interactive window")
     ap.add_argument("--annot", action="store_true", help="Annotate cells with values")
-    ap.add_argument("--max-xticks", type=int, default=12, help="Max X tick labels (default: 12)")
-    ap.add_argument("--max-yticks", type=int, default=12, help="Max Y tick labels (default: 12)")
-    ap.add_argument("--font-size", type=int, default=12, help="Tick label font size (default: 12)")
-    ap.add_argument("--log-x", dest="log_x", action="store_true", help="Use log scale on X (default: disabled)", default=False)
-    ap.add_argument("--no-log-x", dest="log_x", action="store_false", help="Disable log scale on X")
-    ap.add_argument("--log-y", dest="log_y", action="store_true", help="Use log scale on Y (default: disabled)", default=False)
-    ap.add_argument("--no-log-y", dest="log_y", action="store_false", help="Disable log scale on Y")
-    ap.add_argument("--square", dest="square", action="store_true", help="Force a square plot with square cells (default)")
-    ap.add_argument("--no-square", dest="square", action="store_false", help="Disable square plot; size adapts to grid")
-    ap.add_argument("--ncol", type=int, default=3, help="Number of columns for multi-metric layout (default: 3)")
-    ap.add_argument("--clamp", action="store_true", default=False, help="Clamp negative values to 0")
+    ap.add_argument(
+        "--max-xticks", type=int, default=12, help="Max X tick labels (default: 12)"
+    )
+    ap.add_argument(
+        "--max-yticks", type=int, default=12, help="Max Y tick labels (default: 12)"
+    )
+    ap.add_argument(
+        "--font-size",
+        type=int,
+        default=0,
+        help="Tick label font size (default: auto)",
+    )
+    ap.add_argument(
+        "--log-x",
+        dest="log_x",
+        action="store_true",
+        help="Use log scale on X (default: disabled)",
+        default=False,
+    )
+    ap.add_argument(
+        "--no-log-x", dest="log_x", action="store_false", help="Disable log scale on X"
+    )
+    ap.add_argument(
+        "--log-y",
+        dest="log_y",
+        action="store_true",
+        help="Use log scale on Y (default: disabled)",
+        default=False,
+    )
+    ap.add_argument(
+        "--no-log-y", dest="log_y", action="store_false", help="Disable log scale on Y"
+    )
+    ap.add_argument(
+        "--square",
+        dest="square",
+        action="store_true",
+        help="Force a square plot with square cells (default)",
+    )
+    ap.add_argument(
+        "--no-square",
+        dest="square",
+        action="store_false",
+        help="Disable square plot; size adapts to grid",
+    )
+    ap.add_argument(
+        "--ncol",
+        type=int,
+        default=3,
+        help="Number of columns for multi-metric layout (default: 3)",
+    )
+    ap.add_argument(
+        "--clamp", action="store_true", default=False, help="Clamp negative values to 0"
+    )
     ap.set_defaults(square=True)
     args = ap.parse_args()
 
@@ -251,20 +354,37 @@ def main() -> int:
     # Determine metrics list
     metrics: List[str]
     if args.metrics:
-        metrics = [m.strip() for m in args.metrics.split(',') if m.strip()]
+        metrics = [m.strip() for m in args.metrics.split(",") if m.strip()]
     else:
         metrics = [args.metric]
 
     # Build first grid to define axes
     def metric_scale_flags(m: str) -> Tuple[bool, bool]:
-        mlow = (m or '').lower()
-        scale_1e18 = (not args.no_scale) and m in {"virtual_price", "xcp_profit", "price_scale", "D", "totalSupply"}
-        scale_percent = mlow in {"vpminusone", "apy"} or "apy" in mlow or 'tw_real_slippage' in mlow
+        mlow = (m or "").lower()
+        scale_1e18 = (not args.no_scale) and m in {
+            "virtual_price",
+            "xcp_profit",
+            "price_scale",
+            "D",
+            "totalSupply",
+        }
+        scale_percent = (
+            mlow in {"vpminusone", "apy"} or "apy" in mlow or "tw_real_slippage" in mlow
+        )
         return scale_1e18, scale_percent
 
     first_m = metrics[0]
     s18, sperc = metric_scale_flags(first_m)
     x_name, y_name, xs, ys, Z0 = _extract_grid(data, first_m, s18, sperc)
+
+    base_font = (
+        args.font_size if args.font_size > 0 else _auto_font_size(len(xs), len(ys))
+    )
+    tick_font = base_font
+    label_font = max(8, base_font + 2)
+    title_font = max(label_font, base_font + 4)
+    annot_font = max(6, base_font - 2)
+    colorbar_font = base_font
 
     # Prepare figure with configurable columns
     n = len(metrics)
@@ -276,12 +396,16 @@ def main() -> int:
         base = max(len(xs), len(ys))
         side = max(4.5, min(12.0, 0.35 * max(1, base)))
         fig_w, fig_h = side * cols, side * rows
-        fig, axes = plt.subplots(rows, cols, figsize=(fig_w, fig_h), constrained_layout=True)
+        fig, axes = plt.subplots(
+            rows, cols, figsize=(fig_w, fig_h), constrained_layout=True
+        )
     else:
         unit_w = max(5.5, min(12.0, 0.35 * max(1, len(xs))))
         unit_h = max(4.0, min(10.0, 0.30 * max(1, len(ys))))
         fig_w, fig_h = unit_w * cols, unit_h * rows
-        fig, axes = plt.subplots(rows, cols, figsize=(fig_w, fig_h), constrained_layout=True)
+        fig, axes = plt.subplots(
+            rows, cols, figsize=(fig_w, fig_h), constrained_layout=True
+        )
     axes = np.atleast_1d(axes).reshape(rows, cols)
 
     # Precompute tick indices and labels
@@ -298,7 +422,7 @@ def main() -> int:
         for c in range(cols):
             ax = axes[r, c]
             if idx >= n:
-                ax.axis('off')
+                ax.axis("off")
                 continue
             m = metrics[idx]
             s18, sperc = metric_scale_flags(m)
@@ -316,15 +440,15 @@ def main() -> int:
                 Yedges = _edges_from_centers(ys, log_y_flag)
                 # Use edges with pcolormesh and auto shading so
                 # (len(xs)+1, len(ys)+1) edges match C=(len(ys),len(xs))
-                im = ax.pcolormesh(Xedges, Yedges, Z, cmap=args.cmap, shading='auto')
+                im = ax.pcolormesh(Xedges, Yedges, Z, cmap=args.cmap, shading="auto")
                 if log_x_flag:
                     try:
-                        ax.set_xscale('log')
+                        ax.set_xscale("log")
                     except Exception:
                         pass
                 if log_y_flag:
                     try:
-                        ax.set_yscale('log')
+                        ax.set_yscale("log")
                     except Exception:
                         pass
                 if args.square:
@@ -332,32 +456,32 @@ def main() -> int:
                     try:
                         ax.set_box_aspect(ny / nx)
                     except Exception:
-                        ax.set_aspect('equal', adjustable='box')
+                        ax.set_aspect("equal", adjustable="box")
                 # Tick placement at data values
                 ax.set_xticks([xs[i] for i in xticks])
                 ax.set_yticks([ys[i] for i in yticks])
             else:
-                aspect = 'auto'
-                im = ax.imshow(Z, origin='lower', aspect=aspect, cmap=args.cmap)
+                aspect = "auto"
+                im = ax.imshow(Z, origin="lower", aspect=aspect, cmap=args.cmap)
                 if args.square:
                     ny, nx = Z.shape
                     try:
                         ax.set_box_aspect(ny / nx)
                     except Exception:
-                        ax.set_aspect('equal', adjustable='box')
+                        ax.set_aspect("equal", adjustable="box")
                 # Tick placement at index positions
                 ax.set_xticks(xticks)
                 ax.set_yticks(yticks)
-            ax.set_xticklabels(xlabels, rotation=45, ha="right", fontsize=args.font_size)
+            ax.set_xticklabels(xlabels, rotation=45, ha="right", fontsize=tick_font)
             # Only label y on first column
             if c == 0:
-                ax.set_yticklabels(ylabels, fontsize=args.font_size)
-                ax.set_ylabel(ylabel, fontsize=args.font_size + 2)
+                ax.set_yticklabels(ylabels, fontsize=tick_font)
+                ax.set_ylabel(ylabel, fontsize=label_font)
             else:
                 ax.set_yticklabels([])
-            ax.set_xlabel(xlabel, fontsize=args.font_size + 2)
+            ax.set_xlabel(xlabel, fontsize=label_font)
             title_scale = " (%)" if sperc else (" (scaled 1e18)" if s18 else "")
-            ax.set_title(f"{m}{title_scale}", fontsize=args.font_size + 4)
+            ax.set_title(f"{m}{title_scale}", fontsize=title_font)
 
             # Compute absolute min/max for color mapping and ticks
             finite_vals = Z[np.isfinite(Z)]
@@ -380,12 +504,12 @@ def main() -> int:
                 tick_vals = None
 
             cb = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-            cb.set_label(m + (" (%)" if sperc else ""), fontsize=args.font_size)
-            cb.ax.tick_params(labelsize=args.font_size)
+            cb.set_label(m + (" (%)" if sperc else ""), fontsize=colorbar_font)
+            cb.ax.tick_params(labelsize=tick_font)
             if tick_vals is not None:
                 cb.set_ticks(tick_vals)
             # Fixed decimal formatter for colorbar ticks
-            cb.ax.yaxis.set_major_formatter(FormatStrFormatter('%.3g'))
+            cb.ax.yaxis.set_major_formatter(FormatStrFormatter("%.3g"))
             if args.annot:
                 for i in range(Z.shape[0]):
                     for j in range(Z.shape[1]):
@@ -405,7 +529,7 @@ def main() -> int:
                             va="center",
                             ha="center",
                             color="white",
-                            fontsize=max(6, args.font_size - 2),
+                            fontsize=annot_font,
                         )
             idx += 1
 
@@ -416,9 +540,9 @@ def main() -> int:
         if len(metrics) == 1:
             out_path = RUN_DIR / f"heatmap_{metrics[0]}.png"
         else:
-            tag = "_".join(m.replace(' ', '') for m in metrics[:3])
+            tag = "_".join(m.replace(" ", "") for m in metrics[:3])
             if len(metrics) > 3:
-                tag += f"_plus{len(metrics)-3}"
+                tag += f"_plus{len(metrics) - 3}"
             out_path = RUN_DIR / f"heatmaps_{tag}.png"
     out_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_path, dpi=150)

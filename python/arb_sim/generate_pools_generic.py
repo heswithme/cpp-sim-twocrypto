@@ -22,21 +22,22 @@ import math
 
 FEE_EQUALIZE = False
 # -------------------- Grid Definition --------------------
-N_GRID_X = 32
-N_GRID_Y = 32
+GRID_SIZE = 16
+N_GRID_X = GRID_SIZE
+N_GRID_Y = GRID_SIZE
 
 # 1. A-mid_fee log 
 
-# X_name = "mid_fee"  
-# xmin = int(1/10_000*10**10)
-# xmax = int(100/10_000*10**10)
-# xlogspace = True
-# FEE_EQUALIZE = True
+X_name = "mid_fee"  
+xmin = int(1/10_000*10**10)
+xmax = int(1000/10_000*10**10)
+xlogspace = True
+FEE_EQUALIZE = True
 
-# Y_name = "A"  
-# ymin = 1*10_000
-# ymax =  200*10_000
-# ylogspace = True
+Y_name = "A"  
+ymin = 1*10_000
+ymax =  200*10_000
+ylogspace = True
 
 
 # 2. A-mid_fee zoom_lin
@@ -78,15 +79,15 @@ N_GRID_Y = 32
 
 # 5. A-ma_time
 
-X_name = "ma_time"  
-xmin = 10*60/math.log(2)
-xmax = 24*60*60/math.log(2)
-xlogspace = False
+# X_name = "ma_time"  
+# xmin = 10*60/math.log(2)
+# xmax = 24*60*60/math.log(2)
+# xlogspace = False
 
-Y_name = "A"  
-ymin = 1*10_000
-ymax =  50*10_000
-ylogspace = False
+# Y_name = "A"  
+# ymin = 1*10_000
+# ymax =  50*10_000
+# ylogspace = False
 
 
 # X_name = "mid_fee"  
@@ -137,7 +138,7 @@ else:
 # X_vals = [int(x) for x in X_vals]
 # Y_vals = [int(x) for x in Y_vals]
 
-DEFAULT_DATAFILE = "python/arb_sim/trade_data/idrusd/idrusd-1m.json"
+DEFAULT_DATAFILE = "python/arb_sim/trade_data/ethusd/ethusd-1m.json"
 
 
 START_TS = _first_candle_ts(DEFAULT_DATAFILE)

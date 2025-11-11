@@ -850,7 +850,8 @@ int main(int argc, char* argv[]) {
                   << " [--min-swap F] [--max-swap F]"
                   << " [--threads N|-n N] [--candle-filter PCT]"
                   << " [--dustswapfreq S]"
-                  << " [--userswapfreq S] [--userswapsize F] [--userswapthresh F]\n";
+                  << " [--userswapfreq S] [--userswapsize F] [--userswapthresh F]"
+                  << " [--apy-period-days D] [--apy-period-cap PCT]\n";
         return 1;
     }
 
@@ -870,6 +871,8 @@ int main(int argc, char* argv[]) {
     uint64_t user_swap_freq_s = 0;         // seconds between synthetic user swaps (0=disabled)
     double   user_swap_size_frac = 0.01;   // fraction of from-side balance per user swap
     double   user_swap_thresh = 0.05;      // max relative deviation allowed vs CEX
+    double   apy_period_days = 7.0;        // window length in days
+    int      apy_period_cap_pct = 100;     // cap per-window APY at this percent (annualized)
 
     for (int i = 4; i < argc; ++i) {
         const std::string arg = argv[i];
@@ -885,6 +888,8 @@ int main(int argc, char* argv[]) {
             else if (arg == "--userswapfreq"  && i+1 < argc) user_swap_freq_s  = static_cast<uint64_t>(std::stoll(argv[++i]));
             else if (arg == "--userswapsize"  && i+1 < argc) user_swap_size_frac = std::stod(argv[++i]);
             else if (arg == "--userswapthresh" && i+1 < argc) user_swap_thresh = std::stod(argv[++i]);
+            else if (arg == "--apy-period-days" && i+1 < argc) apy_period_days = std::stod(argv[++i]);
+            else if (arg == "--apy-period-cap"  && i+1 < argc) apy_period_cap_pct = std::stoi(argv[++i]);
         } catch (...) { /* ignore bad flags */ }
     }
 
@@ -1011,6 +1016,13 @@ int main(int argc, char* argv[]) {
                     uint64_t last_ts_err = 0;            // ts of previous sample
                     bool have_err = false;
 
+                    // Time-weighted pool fee (fraction) across time, independent of volume
+                    long double tw_fee_sum_dt = 0.0L;
+                    long double tw_fee_dt     = 0.0L;
+                    RealT last_fee_frac = 0;
+                    uint64_t last_ts_fee = 0;
+                    bool have_fee = false;
+
                     // Time-weighted latent slippage/liquidity density (always-on, independent of trades)
                     long double tw_d_sum_dt = 0.0L;  // sum d * dt
                     long double tw_r_sum_dt = 0.0L;  // sum r * dt
@@ -1045,11 +1057,40 @@ int main(int argc, char* argv[]) {
                                                  ? events.front().ts + user_swap_freq_s
                                                  : 0;
                     RealT true_growth_initial = true_growth(pool);
+                    const uint64_t apy_period_s = static_cast<uint64_t>(std::max(0.0, apy_period_days) * 86400.0 + 0.5);
+                    uint64_t win_start_ts = init_ts ? init_ts : (events.empty() ? 0 : events.front().ts);
+                    uint64_t win_end_ts   = (apy_period_s > 0) ? (win_start_ts + apy_period_s) : win_start_ts;
+                    RealT lb_prev = (pool.xcp_profit + static_cast<RealT>(1)) / static_cast<RealT>(2);
+                    RealT lb_win_start = lb_prev;
+                    long double apy_win_wsum = 0.0L;
+                    long double apy_win_w    = 0.0L;
+                    uint64_t last_ts_any = win_start_ts;
+                    const double SEC_PER_YEAR_D = 365.0 * 86400.0;
                     push_state(); // initial snapshot
 
                     // ---- Main event loop ----
                     for (const auto& ev : events) {
                         pool.set_block_timestamp(ev.ts);
+
+                        if (apy_period_s > 0 && ev.ts >= win_end_ts) {
+                            const uint64_t dt_w = ev.ts > win_start_ts ? (ev.ts - win_start_ts) : 0ULL;
+                            if (dt_w > 0) {
+                                const RealT g = (lb_win_start > static_cast<RealT>(0))
+                                                ? (lb_prev / lb_win_start)
+                                                : static_cast<RealT>(1);
+                                RealT apy_w = static_cast<RealT>(
+                                    std::pow(static_cast<double>(g), SEC_PER_YEAR_D / static_cast<double>(dt_w)) - 1.0);
+                                const RealT cap = static_cast<RealT>(apy_period_cap_pct) / static_cast<RealT>(100);
+                                if (apy_w > cap) apy_w = cap;
+                                apy_win_wsum += static_cast<long double>(apy_w) * static_cast<long double>(dt_w);
+                                apy_win_w    += static_cast<long double>(dt_w);
+                            }
+                            win_start_ts = ev.ts;
+                            win_end_ts   = win_start_ts + apy_period_s;
+                            lb_win_start = lb_prev;
+                        }
+                        last_ts_any = ev.ts;
+
                         // Sample at beginning of event (pre-trade, pre-tick)
                         // Relative error at current sample (abs), accumulate previous segment [last_ts_err, ev.ts)
                         RealT cur_rel_abs = RealT(0);
@@ -1063,6 +1104,20 @@ int main(int argc, char* argv[]) {
                         last_rel_abs = cur_rel_abs;
                         last_ts_err  = ev.ts;
                         have_err     = true;
+
+                        // Time-weighted fee: accumulate previous interval, then sample current fee
+                        if (have_fee && ev.ts > last_ts_fee) {
+                            const long double dt = static_cast<long double>(ev.ts - last_ts_fee);
+                            tw_fee_sum_dt += static_cast<long double>(last_fee_frac) * dt;
+                            tw_fee_dt     += dt;
+                        }
+                        {
+                            const auto xp_now_fee = pool_xp_current(pool);
+                            const RealT cur_fee_frac = dyn_fee(xp_now_fee, pool.mid_fee, pool.out_fee, pool.fee_gamma);
+                            last_fee_frac = cur_fee_frac;
+                            last_ts_fee   = ev.ts;
+                            have_fee      = true;
+                        }
 
                         // Latent instantaneous metrics: accumulate previous sample over [last_ts_lat, ev.ts)
                         if (have_lat && ev.ts > last_ts_lat) {
@@ -1323,7 +1378,23 @@ int main(int argc, char* argv[]) {
                             }
                         }
 
+                        lb_prev = (pool.xcp_profit + static_cast<RealT>(1)) / static_cast<RealT>(2);
+
                         // End of event: nothing to do (sampling only after trade/tick)
+                    }
+
+                    if (apy_period_s > 0 && last_ts_any > win_start_ts) {
+                        const uint64_t dt_w = last_ts_any - win_start_ts;
+                        if (dt_w > 0) {
+                            const long double g = (lb_win_start > static_cast<long double>(0))
+                                            ? (lb_prev / lb_win_start)
+                                            : static_cast<long double>(1);
+                            long double apy_w = std::pow(g, SEC_PER_YEAR_D / static_cast<long double>(dt_w)) - 1.0;
+                            const long double cap = static_cast<long double>(apy_period_cap_pct) / static_cast<long double>(100);
+                            if (apy_w > cap) apy_w = cap;
+                            apy_win_wsum += apy_w * static_cast<long double>(dt_w);
+                            apy_win_w    += static_cast<long double>(dt_w);
+                        }
                     }
 
                     const auto t_pool1 = clk::now();
@@ -1338,6 +1409,7 @@ int main(int argc, char* argv[]) {
                     summary["lp_fee_coin0"]         = static_cast<double>(m.lp_fee_coin0);
                     // Size-weighted average pool fee fraction across executed trades
                     summary["avg_pool_fee"]         = (m.fee_w > 0 ? static_cast<double>(m.fee_wsum / m.fee_w) : -1.0);
+                    summary["tw_avg_pool_fee"]      = (tw_fee_dt > 0.0L ? static_cast<double>(tw_fee_sum_dt / tw_fee_dt) : -1.0);
                     summary["arb_pnl_coin0"]        = static_cast<double>(m.arb_pnl_coin0);
                     summary["n_rebalances"]         = m.n_rebalances;
                     summary["donations"]            = m.donations;
@@ -1411,6 +1483,12 @@ int main(int argc, char* argv[]) {
                         cex_follow_time_frac = 1 - static_cast<double>(time_far_s) / duration_s;
                     }
                     summary["cex_follow_time_frac"] = cex_follow_time_frac;
+                    double tw_capped_apy = -1.0;
+                    if (apy_win_w > 0.0L) {
+                        tw_capped_apy = static_cast<double>(apy_win_wsum / apy_win_w);
+                    }
+                    summary["tw_capped_apy"] = tw_capped_apy;
+                    summary["tw_capped_apy_net"] = (tw_capped_apy >= 0.0 ? tw_capped_apy - static_cast<double>(dcfg.apy) : -1.0);
 
                     const RealT tvl_end = pool.balances[0] + pool.balances[1] * pool.cached_price_scale;
                     // Baseline: HODL initial balances valued at end price (coin0 units)
