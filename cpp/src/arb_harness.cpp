@@ -183,11 +183,11 @@ static inline RealT balance_indicator(const twocrypto::TwoCryptoPoolT<RealT>& po
 }
 
 
-static inline RealT true_growth(const twocrypto::TwoCryptoPoolT<RealT>& pool) {
-    const RealT ps = pool.cached_price_scale;
-    const auto xp = pool_xp_from(pool, pool.balances, ps);
-    return sqrt(xp[0] * xp[1]);
-    // return sqrt(pool.balances[0] * pool.balances[1]) ;
+static inline RealT true_growth(const twocrypto::TwoCryptoPoolT<RealT>& pool, RealT price_ref = RealT(-1)) {
+    const RealT price_in = (price_ref > RealT(0)) ? price_ref : pool.cached_price_scale;
+    const auto xp = pool_xp_from(pool, pool.balances, price_in);
+    const RealT product = xp[0] * xp[1];
+    return product > RealT(0) ? std::sqrt(product) : RealT(0);
 }
 
 static inline std::pair<RealT, RealT>
@@ -1060,12 +1060,17 @@ int main(int argc, char* argv[]) {
                     const uint64_t apy_period_s = static_cast<uint64_t>(std::max(0.0, apy_period_days) * 86400.0 + 0.5);
                     uint64_t win_start_ts = init_ts ? init_ts : (events.empty() ? 0 : events.front().ts);
                     uint64_t win_end_ts   = (apy_period_s > 0) ? (win_start_ts + apy_period_s) : win_start_ts;
-                    RealT lb_prev = (pool.xcp_profit + static_cast<RealT>(1)) / static_cast<RealT>(2);
-                    RealT lb_win_start = lb_prev;
+                    RealT lb_curr = RealT(0);
+                    RealT tg_curr = true_growth_initial;
+                    const auto refresh_growth = [&]() {
+                        lb_curr = (pool.xcp_profit + static_cast<RealT>(1)) / static_cast<RealT>(2);
+                        tg_curr = true_growth(pool);
+                    };
+                    refresh_growth();
+                    RealT lb_win_start = lb_curr;
                     long double apy_win_wsum = 0.0L;
                     long double apy_win_w    = 0.0L;
-                    RealT tg_prev = true_growth(pool);
-                    RealT tg_win_start = tg_prev;
+                    RealT tg_win_start = tg_curr;
                     long double tg_win_wsum = 0.0L;
                     long double tg_win_w    = 0.0L;
                     uint64_t last_ts_any = win_start_ts;
@@ -1075,13 +1080,14 @@ int main(int argc, char* argv[]) {
                     // ---- Main event loop ----
                     for (const auto& ev : events) {
                         pool.set_block_timestamp(ev.ts);
+                        refresh_growth();
 
                         if (apy_period_s > 0 && ev.ts >= win_end_ts) {
                             const uint64_t dt_w = ev.ts > win_start_ts ? (ev.ts - win_start_ts) : 0ULL;
                             if (dt_w > 0) {
                                 const long double dt_ld = static_cast<long double>(dt_w);
                                 const RealT g = (lb_win_start > static_cast<RealT>(0))
-                                                ? (lb_prev / lb_win_start)
+                                                ? (lb_curr / lb_win_start)
                                                 : static_cast<RealT>(1);
                                 RealT apy_w = static_cast<RealT>(
                                     std::pow(static_cast<double>(g), SEC_PER_YEAR_D / static_cast<double>(dt_w)) - 1.0);
@@ -1089,9 +1095,8 @@ int main(int argc, char* argv[]) {
                                 if (apy_w > cap) apy_w = cap;
                                 apy_win_wsum += static_cast<long double>(apy_w) * dt_ld;
                                 apy_win_w    += dt_ld;
-
                                 const RealT tg_ratio = (tg_win_start > static_cast<RealT>(0))
-                                                       ? (tg_prev / tg_win_start)
+                                                       ? (tg_curr / tg_win_start)
                                                        : static_cast<RealT>(1);
                                 RealT gm_w = static_cast<RealT>(
                                     std::pow(static_cast<double>(tg_ratio), SEC_PER_YEAR_D / static_cast<double>(dt_w)) - 1.0);
@@ -1101,8 +1106,8 @@ int main(int argc, char* argv[]) {
                             }
                             win_start_ts = ev.ts;
                             win_end_ts   = win_start_ts + apy_period_s;
-                            lb_win_start = lb_prev;
-                            tg_win_start = tg_prev;
+                            lb_win_start = lb_curr;
+                            tg_win_start = tg_curr;
                         }
                         last_ts_any = ev.ts;
 
@@ -1165,6 +1170,7 @@ int main(int argc, char* argv[]) {
                         push_state(); // after time update
 
                         // Donation: single-period, based on current TVL
+                        const size_t donations_before = m.donations;
                         make_donation(pool, dcfg, ev.ts, save_actions, actions, states, m);
 
                         // Synthetic user swap at fixed cadence
@@ -1191,6 +1197,7 @@ int main(int argc, char* argv[]) {
                                 try {
                                     auto res = pool.exchange(static_cast<RealT>(i_from), static_cast<RealT>(j_to), dx, RealT(0));
                                     RealT cur_d = 0, cur_r = 0;
+                                    refresh_growth();
                                     user_next_dir ^= 1; // alternate direction
                                 } catch (...) {
                                     // ignore failed user swap
@@ -1226,6 +1233,7 @@ int main(int argc, char* argv[]) {
                                 const RealT log_xcp_profit_after = pool.xcp_profit;
                                 const RealT log_vp_after = pool.get_vp_boosted();
                                 count_rebalance(log_ps_before, log_ps_after);
+                                refresh_growth();
                                 if (save_actions) {
                                     json::object tr;
                                     tr["type"] = "tick";
@@ -1393,35 +1401,8 @@ int main(int argc, char* argv[]) {
                             }
                         }
 
-                        lb_prev = (pool.xcp_profit + static_cast<RealT>(1)) / static_cast<RealT>(2);
-                        tg_prev = true_growth(pool);
-
                         // End of event: nothing to do (sampling only after trade/tick)
                     }
-
-                    if (apy_period_s > 0 && last_ts_any > win_start_ts) {
-                        const uint64_t dt_w = last_ts_any - win_start_ts;
-                        if (dt_w > 0) {
-                            const long double dt_ld = static_cast<long double>(dt_w);
-                            const long double g = (lb_win_start > static_cast<long double>(0))
-                                            ? (lb_prev / lb_win_start)
-                                            : static_cast<long double>(1);
-                            long double apy_w = std::pow(g, SEC_PER_YEAR_D / dt_ld) - 1.0;
-                            const long double cap = static_cast<long double>(apy_period_cap_pct) / static_cast<long double>(100);
-                            if (apy_w > cap) apy_w = cap;
-                            apy_win_wsum += apy_w * dt_ld;
-                            apy_win_w    += dt_ld;
-
-                            const long double tg_ratio = (tg_win_start > static_cast<RealT>(0))
-                                                          ? (static_cast<long double>(tg_prev) / static_cast<long double>(tg_win_start))
-                                                          : static_cast<long double>(1);
-                            long double gm_w = std::pow(tg_ratio, SEC_PER_YEAR_D / dt_ld) - 1.0;
-                            if (gm_w > cap) gm_w = cap;
-                            tg_win_wsum += gm_w * dt_ld;
-                            tg_win_w    += dt_ld;
-                        }
-                    }
-
                     const auto t_pool1 = clk::now();
                     const double pool_exec_ms =
                         std::chrono::duration_cast<std::chrono::nanoseconds>(t_pool1 - t_pool0).count() / 1e6;
