@@ -186,8 +186,8 @@ static inline RealT balance_indicator(const twocrypto::TwoCryptoPoolT<RealT>& po
 static inline RealT true_growth(const twocrypto::TwoCryptoPoolT<RealT>& pool) {
     const RealT ps = pool.cached_price_scale;
     const auto xp = pool_xp_from(pool, pool.balances, ps);
-    // return sqrt(xp[0] * xp[1]);
-    return sqrt(pool.balances[0] * pool.balances[1]) ;
+    return sqrt(xp[0] * xp[1]);
+    // return sqrt(pool.balances[0] * pool.balances[1]) ;
 }
 
 static inline std::pair<RealT, RealT>
@@ -1524,13 +1524,15 @@ int main(int argc, char* argv[]) {
                     const RealT tvl_end = pool.balances[0] + pool.balances[1] * pool.cached_price_scale;
                     // Baseline: HODL initial balances valued at end price (coin0 units)
                     const RealT v_hold_end = cfg.initial_liq[0] + cfg.initial_liq[1] * pool.cached_price_scale;
-                    double apy_coin0 = 0.0, apy_coin0_boost = 0.0, apy_vp = 0.0;
+                    double apy_coin0 = 0.0, apy_coin0_boost = 0.0, apy_vp = 0.0, apy_xcp = 0.0;
                     double apy_coin0_raw = 0.0, apy_coin0_boost_raw = 0.0; // before baseline subtraction
                     const double exponent = SEC_PER_YEAR / duration_s;
 
                     if (duration_s > 0.0 && tvl_start > 0) {
                         const long double vp_end = static_cast<long double>(pool.get_virtual_price());
                         apy_vp  = (vp_end > 0.0) ? std::pow(static_cast<double>(vp_end), exponent) - 1.0 : -1.0;
+                        const double xcp_end = static_cast<double>((pool.xcp_profit + static_cast<RealT>(1)) / static_cast<RealT>(2));
+                        apy_xcp  = (xcp_end > 0.0) ? std::pow(static_cast<double>(xcp_end), exponent) - 1.0 : -1.0;
                         // Raw APYs against start TVL (kept for transparency)
                         apy_coin0_raw = (tvl_end > 0) ? std::pow(static_cast<double>(tvl_end / tvl_start), exponent) - 1.0 : -1.0;
                         const double tvl_end_adj_raw = static_cast<double>(tvl_end) - static_cast<double>(m.donation_coin0_total);
@@ -1556,6 +1558,7 @@ int main(int argc, char* argv[]) {
                     summary["tvl_coin0_end"]     = static_cast<double>(tvl_end);
                     summary["baseline_hold_end_coin0"] = static_cast<double>(v_hold_end);
                     summary["apy"]               = apy_vp;
+                    summary["apy_xcp"]           = apy_xcp;
                     // Baseline-subtracted APYs (excess over HODL in coin0)
                     summary["apy_coin0"]         = apy_coin0;
                     summary["apy_coin0_boost"]= apy_coin0_boost;
