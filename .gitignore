@@ -34,6 +34,16 @@ cpp/*.cmake
 cpp/compile_commands.json
 cpp/CTestTestfile.cmake
 cpp/_deps/
+# C++ / CMake
+cpp_2/build/
+cpp_2/cmake-build-*/
+cpp_2/CMakeCache.txt
+cpp_2/CMakeFiles/
+cpp_2/*.cmake
+cpp_2/compile_commands.json
+cpp_2/CTestTestfile.cmake
+cpp_2/_deps/
+    
 *.o
 *.a
 *.so

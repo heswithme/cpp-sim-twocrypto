@@ -1,0 +1,19 @@
+{
+  "pools": [
+    {
+      "name": "example_pool",
+      "precisions": [1.0, 1.0],
+      "A": 100000,
+      "gamma": 0.00002,
+      "mid_fee": 0.0003,
+      "out_fee": 0.0005,
+      "fee_gamma": 0.23,
+      "allowed_extra_profit": 0.001,
+      "adjustment_step": 0.001,
+      "ma_time": 600,
+      "initial_price": 1.0,
+      "initial_liquidity": [1000000, 1000000],
+      "start_timestamp": 0
+    }
+  ]
+}
