@@ -22,7 +22,7 @@ import math
 
 FEE_EQUALIZE = False
 # -------------------- Grid Definition --------------------
-GRID_SIZE = 16
+GRID_SIZE = 2
 N_GRID_X = GRID_SIZE
 N_GRID_Y = GRID_SIZE
 
@@ -30,7 +30,7 @@ N_GRID_Y = GRID_SIZE
 
 X_name = "mid_fee"  
 xmin = int(1/10_000*10**10)
-xmax = int(1000/10_000*10**10)
+xmax = int(500/10_000*10**10)
 xlogspace = True
 FEE_EQUALIZE = True
 
@@ -40,7 +40,7 @@ ymax =  200*10_000
 ylogspace = True
 
 
-# 2. A-mid_fee zoom_lin
+# # 2. A-mid_fee zoom_lin
 
 # X_name = "mid_fee"  
 # xmin = int(10/10_000*10**10)
@@ -114,7 +114,7 @@ ylogspace = True
 
 
 # X_name = "mid_fee"  
-# xmin = int(35 / 10_000 * 10**10)
+# xmin = int(4850 / 10_000 * 10**10)
 # xmax = xmin
 # xlogspace = False
 
@@ -122,6 +122,8 @@ ylogspace = True
 # ymin = 120*10_000
 # ymax =  ymin
 # ylogspace = False
+# N_GRID_X = 1
+# N_GRID_Y = 1
 
 
 if xlogspace:
@@ -138,7 +140,7 @@ else:
 # X_vals = [int(x) for x in X_vals]
 # Y_vals = [int(x) for x in Y_vals]
 
-DEFAULT_DATAFILE = "python/arb_sim/trade_data/ethusd/ethusd-1m.json"
+DEFAULT_DATAFILE = "python/arb_sim/trade_data/btcusd/btcusdt-2025.json"
 
 
 START_TS = _first_candle_ts(DEFAULT_DATAFILE)
@@ -162,7 +164,7 @@ BASE_POOL = {
     "fee_gamma": int(0.001 * 10**18),
     "allowed_extra_profit": int(1e-12 * 10**18),
     "adjustment_step": int(1e-7 * 10**18),
-    "ma_time": 866,#int(86400 / math.log(2)), #5200,
+    "ma_time": 866, #int(86400 / math.log(2)), #5200,
     "initial_price": int(init_price * 10**18),
     "start_timestamp": START_TS,
 
@@ -170,13 +172,13 @@ BASE_POOL = {
     # - donation_apy: plain fraction per year (0.05 => 5%).
     # - donation_frequency: seconds between donations.
     # - donation_coins_ratio: fraction of donation in coin1 (0=all coin0, 1=all coin1)
-    "donation_apy": 0.05,
+    "donation_apy": 0.10,
     "donation_frequency": int(7*86400),
     "donation_coins_ratio": 0.5,
 }
 
 BASE_COSTS = {
-    "arb_fee_bps": 75.0,
+    "arb_fee_bps": 500.0,
     "gas_coin0": 0.0,
     "use_volume_cap": False,
     "volume_cap_mult": 1,
