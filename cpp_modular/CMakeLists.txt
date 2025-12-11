@@ -48,11 +48,3 @@ if(CMAKE_BUILD_TYPE STREQUAL "Release")
     target_compile_options(arb_harness_ld PRIVATE ${RELEASE_FLAGS})
 endif()
 
-# --- arb_harness_i (uint256) ---
-add_executable(arb_harness_i ${COMMON_SOURCES})
-target_compile_definitions(arb_harness_i PRIVATE ARB_MODE_I)
-target_link_libraries(arb_harness_i Boost::json)
-target_compile_options(arb_harness_i PRIVATE ${COMMON_FLAGS})
-if(CMAKE_BUILD_TYPE STREQUAL "Release")
-    target_compile_options(arb_harness_i PRIVATE ${RELEASE_FLAGS})
-endif()

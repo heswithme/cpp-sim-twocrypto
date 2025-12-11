@@ -4,50 +4,42 @@
 //   arb_harness    - double (default)
 //   arb_harness_f  - float
 //   arb_harness_ld - long double
-//   arb_harness_i  - uint256
 
 #include <iostream>
 #include <string>
 #include <iomanip>
-#include <boost/multiprecision/cpp_int.hpp>
+#include <limits>
+#include <type_traits>
 
 #include "events/loader.hpp"
 #include "core/common.hpp"
 #include "pools/twocrypto_fx/twocrypto.hpp"
+#include "pools/twocrypto_fx/helpers.hpp"
+#include "trading/costs.hpp"
+#include "trading/decision.hpp"
+#include "trading/arbitrageur.hpp"
 
-namespace stableswap {
-using uint256 = boost::multiprecision::uint256_t;
-}
-
-// Compile-time numeric type selection
+// Compile-time numeric type selection (floating-only)
 #if defined(ARB_MODE_F)
 using RealT = float;
 static constexpr const char* TYPE_NAME = "float";
 #elif defined(ARB_MODE_LD)
 using RealT = long double;
 static constexpr const char* TYPE_NAME = "long double";
-#elif defined(ARB_MODE_I)
-using RealT = stableswap::uint256;
-static constexpr const char* TYPE_NAME = "uint256";
 #else
 using RealT = double;
 static constexpr const char* TYPE_NAME = "double";
 #endif
 
-// Helper to print a value (handles both numeric and uint256)
+// Helper to print a value
 template <typename T>
 void print_value(const char* name, const T& val) {
-    if constexpr (std::is_same_v<T, stableswap::uint256>) {
-        std::cout << "  " << name << " = " << val.template convert_to<std::string>() << "\n";
-    } else {
-        std::cout << "  " << name << " = " << std::setprecision(12) << val << "\n";
-    }
+    std::cout << "  " << name << " = " << std::setprecision(12) << val << "\n";
 }
 
-// Pool test for floating-point types
+// Pool test (floating types)
 template <typename T>
-typename std::enable_if<!std::is_same_v<T, stableswap::uint256>, void>::type
-test_pool() {
+void test_pool(T cex_price = T(-1)) {
     using Pool = arb::pools::twocrypto_fx::TwoCryptoPool<T>;
     using Traits = arb::pools::twocrypto_fx::PoolTraits<T>;
 
@@ -92,60 +84,28 @@ test_pool() {
     print_value("balances[1]", pool.balances[1]);
     print_value("virtual_price", pool.get_virtual_price());
 
-    if (pool.D > Traits::ZERO()) {
-        std::cout << "\nPool test: PASSED (D > 0)\n";
-    } else {
-        std::cout << "\nPool test: FAILED (D <= 0)\n";
+    // Simulate a small exchange (no state change)
+    T dx = T(100.0);
+    auto sim = arb::pools::twocrypto_fx::simulate_exchange_once(pool, /*i=*/0, /*j=*/1, dx);
+    std::cout << "\nSimulated exchange (0 -> 1):\n";
+    print_value("dx", dx);
+    print_value("dy_after_fee", sim.first);
+    print_value("fee_tokens", sim.second);
+
+    // Arbitrage decision
+    if (cex_price > T(0)) {
+        arb::trading::Costs<T> costs{};
+        auto dec = arb::trading::decide_trade(
+            pool, cex_price, costs,
+            std::numeric_limits<T>::infinity(),
+            T(0.001), T(0.1)
+        );
+        std::cout << "\nArb decision:\n";
+        std::cout << "  do_trade = " << dec.do_trade << "\n";
+        print_value("  dx", dec.dx);
+        print_value("  profit_coin0", dec.profit);
+        print_value("  fee_tokens", dec.fee_tokens);
     }
-}
-
-// Pool test for uint256
-template <typename T>
-typename std::enable_if<std::is_same_v<T, stableswap::uint256>, void>::type
-test_pool() {
-    using Pool = arb::pools::twocrypto_fx::TwoCryptoPool<T>;
-    using Traits = arb::pools::twocrypto_fx::PoolTraits<T>;
-
-    std::array<T, 2> precisions = {Traits::ONE(), Traits::ONE()};
-
-    T A("100000000");  // 10000 * 10000 (A_MULTIPLIER)
-    T gamma("10000000000000");  // 1e-5 * 1e18
-    T mid_fee("1000000");  // 0.01% in fee precision (1e10)
-    T out_fee("6000000");  // 0.06%
-    T fee_gamma("230000000000000");  // 0.00023 * 1e18
-    T allowed_extra_profit("10000000000");  // 1e-8 * 1e18
-    T adjustment_step("100000000000000");  // 0.0001 * 1e18
-    T ma_time("600");  // 600 seconds
-    T initial_price("1080000000000000000");  // 1.08 * 1e18
-
-    Pool pool(
-        precisions,
-        A, gamma,
-        mid_fee, out_fee, fee_gamma,
-        allowed_extra_profit, adjustment_step, ma_time,
-        initial_price
-    );
-
-    pool.set_block_timestamp(1700000000);
-
-    std::cout << "Pool created with initial_price:\n";
-    print_value("cached_price_scale", pool.cached_price_scale);
-    print_value("cached_price_oracle", pool.cached_price_oracle);
-
-    T amount0("10000000000000000000000");  // 10,000 * 1e18
-    T amount1("9259259259259259259259");   // 10,000 / 1.08 * 1e18
-    std::array<T, 2> amounts = {amount0, amount1};
-    T min_mint = Traits::ZERO();
-
-    T lp_tokens = pool.add_liquidity(amounts, min_mint);
-
-    std::cout << "\nAfter add_liquidity:\n";
-    print_value("LP tokens minted", lp_tokens);
-    print_value("totalSupply", pool.totalSupply);
-    print_value("D", pool.D);
-    print_value("balances[0]", pool.balances[0]);
-    print_value("balances[1]", pool.balances[1]);
-    print_value("virtual_price", pool.get_virtual_price());
 
     if (pool.D > Traits::ZERO()) {
         std::cout << "\nPool test: PASSED (D > 0)\n";
@@ -166,13 +126,9 @@ int main(int argc, char* argv[]) {
                   << ((!test1 && test2) ? "PASSED" : "FAILED") << "\n";
     }
 
-    // Test pool creation
-    {
+    if (argc < 2) {
         std::cout << "\n--- Pool Test ---\n";
         test_pool<RealT>();
-    }
-
-    if (argc < 2) {
         std::cout << "\nUsage: " << argv[0] << " <candles.json>\n";
         return 0;
     }
@@ -187,6 +143,8 @@ int main(int argc, char* argv[]) {
         std::cout << "\nLoaded " << candles.size() << " candles -> "
                   << events.size() << " events from " << candles_path << "\n";
 
+        RealT cex_price = events.empty() ? RealT(-1) : static_cast<RealT>(events.front().p_cex);
+
         if (!events.empty()) {
             std::cout << "First event: ts=" << events.front().ts
                       << ", p_cex=" << events.front().p_cex
@@ -195,6 +153,9 @@ int main(int argc, char* argv[]) {
                       << ", p_cex=" << events.back().p_cex
                       << ", volume=" << events.back().volume << "\n";
         }
+
+        std::cout << "\n--- Pool Test ---\n";
+        test_pool<RealT>(cex_price);
 
     } catch (const std::exception& e) {
         std::cerr << "Error: " << e.what() << std::endl;

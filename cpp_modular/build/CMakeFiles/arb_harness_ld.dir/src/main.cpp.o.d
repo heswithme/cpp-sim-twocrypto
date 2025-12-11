@@ -794,6 +794,14 @@ CMakeFiles/arb_harness_ld.dir/src/main.cpp.o: \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/print \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/unistd.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/iomanip \
+  /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/events/loader.hpp \
+  /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/events/types.hpp \
+  /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/core/common.hpp \
+  /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/pools/twocrypto_fx/twocrypto.hpp \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/chrono \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__chrono/file_clock.h \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/forward_list \
+  /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/pools/twocrypto_fx/stableswap_math.hpp \
   /opt/homebrew/include/boost/multiprecision/cpp_int.hpp \
   /opt/homebrew/include/boost/multiprecision/detail/standalone_config.hpp \
   /opt/homebrew/include/boost/config.hpp \
@@ -1020,11 +1028,9 @@ CMakeFiles/arb_harness_ld.dir/src/main.cpp.o: \
   /opt/homebrew/include/boost/multiprecision/cpp_int/literals.hpp \
   /opt/homebrew/include/boost/multiprecision/cpp_int/serialize.hpp \
   /opt/homebrew/include/boost/multiprecision/cpp_int/import_export.hpp \
-  /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/events/loader.hpp \
-  /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/events/types.hpp \
-  /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/core/common.hpp \
-  /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/pools/twocrypto_fx/twocrypto.hpp \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/chrono \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__chrono/file_clock.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/forward_list \
-  /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/pools/twocrypto_fx/stableswap_math.hpp
+  /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/pools/twocrypto_fx/helpers.hpp \
+  /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/trading/costs.hpp \
+  /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/trading/decision.hpp \
+  /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/trading/arbitrageur.hpp \
+  /opt/homebrew/include/boost/math/tools/roots.hpp \
+  /opt/homebrew/include/boost/math/tools/toms748_solve.hpp

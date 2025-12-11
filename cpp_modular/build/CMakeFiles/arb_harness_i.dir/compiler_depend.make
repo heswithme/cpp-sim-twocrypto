@@ -1970,8 +1970,12 @@ CMakeFiles/arb_harness_i.dir/src/main.cpp.o: /Users/michael/Documents/projects/c
   /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/core/common.hpp \
   /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/events/loader.hpp \
   /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/events/types.hpp \
-  /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/pools/twocrypto_fx/math.hpp \
-  /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/pools/twocrypto_fx/pool.hpp \
+  /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/pools/twocrypto_fx/helpers.hpp \
+  /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/pools/twocrypto_fx/stableswap_math.hpp \
+  /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/pools/twocrypto_fx/twocrypto.hpp \
+  /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/trading/arbitrageur.hpp \
+  /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/trading/costs.hpp \
+  /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/trading/decision.hpp \
   /opt/homebrew/include/boost/assert.hpp \
   /opt/homebrew/include/boost/assert/source_location.hpp \
   /opt/homebrew/include/boost/config.hpp \
@@ -2054,7 +2058,9 @@ CMakeFiles/arb_harness_i.dir/src/main.cpp.o: /Users/michael/Documents/projects/c
   /opt/homebrew/include/boost/math/tools/precision.hpp \
   /opt/homebrew/include/boost/math/tools/promotion.hpp \
   /opt/homebrew/include/boost/math/tools/real_cast.hpp \
+  /opt/homebrew/include/boost/math/tools/roots.hpp \
   /opt/homebrew/include/boost/math/tools/throw_exception.hpp \
+  /opt/homebrew/include/boost/math/tools/toms748_solve.hpp \
   /opt/homebrew/include/boost/math/tools/traits.hpp \
   /opt/homebrew/include/boost/math/tools/tuple.hpp \
   /opt/homebrew/include/boost/math/tools/type_traits.hpp \
@@ -2243,7 +2249,11 @@ CMakeFiles/arb_harness_i.dir/src/main.cpp.o: /Users/michael/Documents/projects/c
 
 /opt/homebrew/include/boost/math/tools/traits.hpp:
 
+/opt/homebrew/include/boost/math/tools/toms748_solve.hpp:
+
 /opt/homebrew/include/boost/math/tools/throw_exception.hpp:
+
+/opt/homebrew/include/boost/math/tools/roots.hpp:
 
 /opt/homebrew/include/boost/predef/make.h:
 
@@ -2283,8 +2293,6 @@ CMakeFiles/arb_harness_i.dir/src/main.cpp.o: /Users/michael/Documents/projects/c
 
 /opt/homebrew/include/boost/lexical_cast/detail/converter_numeric.hpp:
 
-/opt/homebrew/include/boost/lexical_cast/detail/converter_lexical.hpp:
-
 /opt/homebrew/include/boost/lexical_cast/detail/buffer_view.hpp:
 
 /opt/homebrew/include/boost/lexical_cast/bad_lexical_cast.hpp:
@@ -2295,7 +2303,11 @@ CMakeFiles/arb_harness_i.dir/src/main.cpp.o: /Users/michael/Documents/projects/c
 
 /opt/homebrew/include/boost/core/snprintf.hpp:
 
-/Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/pools/twocrypto_fx/pool.hpp:
+/Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/trading/costs.hpp:
+
+/opt/homebrew/include/boost/lexical_cast/detail/converter_lexical.hpp:
+
+/Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/trading/arbitrageur.hpp:
 
 /Library/Developer/CommandLineTools/usr/lib/clang/17/include/immintrin.h:
 
@@ -2374,6 +2386,8 @@ CMakeFiles/arb_harness_i.dir/src/main.cpp.o: /Users/michael/Documents/projects/c
 /opt/homebrew/include/boost/mp11/detail/mp_count.hpp:
 
 /opt/homebrew/include/boost/mp11/detail/mp_copy_if.hpp:
+
+/Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/pools/twocrypto_fx/twocrypto.hpp:
 
 /opt/homebrew/include/boost/mp11/detail/config.hpp:
 
@@ -2614,6 +2628,8 @@ CMakeFiles/arb_harness_i.dir/src/main.cpp.o: /Users/michael/Documents/projects/c
 /opt/homebrew/include/boost/core/enable_if.hpp:
 
 /opt/homebrew/include/boost/core/detail/string_view.hpp:
+
+/Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/pools/twocrypto_fx/helpers.hpp:
 
 /opt/homebrew/include/boost/core/detail/is_same.hpp:
 
@@ -3381,6 +3397,8 @@ CMakeFiles/arb_harness_i.dir/src/main.cpp.o: /Users/michael/Documents/projects/c
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__type_traits/is_allocator.h:
 
+/Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/trading/decision.hpp:
+
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__type_traits/invoke.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/sys/_pthread/_pthread_rwlockattr_t.h:
@@ -4033,8 +4051,6 @@ CMakeFiles/arb_harness_i.dir/src/main.cpp.o: /Users/michael/Documents/projects/c
 
 /opt/homebrew/include/boost/multiprecision/cpp_int/checked.hpp:
 
-/Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/pools/twocrypto_fx/math.hpp:
-
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__cstddef/size_t.h:
@@ -4624,6 +4640,8 @@ CMakeFiles/arb_harness_i.dir/src/main.cpp.o: /Users/michael/Documents/projects/c
 /opt/homebrew/include/boost/container/detail/auto_link.hpp:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__algorithm/is_partitioned.h:
+
+/Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/pools/twocrypto_fx/stableswap_math.hpp:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__algorithm/count.h:
 

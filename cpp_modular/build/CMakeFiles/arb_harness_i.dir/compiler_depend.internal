@@ -1972,8 +1972,12 @@ CMakeFiles/arb_harness_i.dir/src/main.cpp.o
  /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/core/common.hpp
  /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/events/loader.hpp
  /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/events/types.hpp
- /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/pools/twocrypto_fx/math.hpp
- /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/pools/twocrypto_fx/pool.hpp
+ /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/pools/twocrypto_fx/helpers.hpp
+ /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/pools/twocrypto_fx/stableswap_math.hpp
+ /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/pools/twocrypto_fx/twocrypto.hpp
+ /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/trading/arbitrageur.hpp
+ /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/trading/costs.hpp
+ /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/trading/decision.hpp
  /opt/homebrew/include/boost/assert.hpp
  /opt/homebrew/include/boost/assert/source_location.hpp
  /opt/homebrew/include/boost/config.hpp
@@ -2056,7 +2060,9 @@ CMakeFiles/arb_harness_i.dir/src/main.cpp.o
  /opt/homebrew/include/boost/math/tools/precision.hpp
  /opt/homebrew/include/boost/math/tools/promotion.hpp
  /opt/homebrew/include/boost/math/tools/real_cast.hpp
+ /opt/homebrew/include/boost/math/tools/roots.hpp
  /opt/homebrew/include/boost/math/tools/throw_exception.hpp
+ /opt/homebrew/include/boost/math/tools/toms748_solve.hpp
  /opt/homebrew/include/boost/math/tools/traits.hpp
  /opt/homebrew/include/boost/math/tools/tuple.hpp
  /opt/homebrew/include/boost/math/tools/type_traits.hpp
