@@ -298,7 +298,8 @@ EventLoopResult<T> run_event_loop(
     if (result.tw_capped_apy >= 0.0) {
         result.tw_capped_apy_net = result.tw_capped_apy - static_cast<double>(dcfg.apy);
     }
-    if (result.tw_apy_geom_mean >= 0.0) {
+    // tw_apy_geom_mean_net: always compute if tw_apy_geom_mean was set (can be negative)
+    if (result.tw_apy_geom_mean > -1.0) {
         result.tw_apy_geom_mean_net = result.tw_apy_geom_mean - static_cast<double>(dcfg.apy);
     }
     

@@ -1,0 +1,1 @@
+/usr/bin/c++ -O3 -DNDEBUG -arch arm64 -dynamiclib -Wl,-headerpad_max_install_names -o lib/libstableswap_math_i.dylib -install_name @rpath/libstableswap_math_i.dylib CMakeFiles/stableswap_math_i.dir/src/stableswap_math_capi.cpp.o

@@ -5,12 +5,19 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <iostream>
+#include <iomanip>
 
 #include <boost/math/tools/roots.hpp>
 
 #include "pools/twocrypto_fx/helpers.hpp"
 #include "trading/costs.hpp"
 #include "trading/decision.hpp"
+
+// Enable with TRACE_ARB=1 environment variable
+#ifndef TRACE_ARB_ENABLED
+#define TRACE_ARB_ENABLED 0
+#endif
 
 namespace arb {
 namespace trading {
@@ -66,9 +73,27 @@ Decision<T> decide_trade(
     const T edge_01 = p_cex_bid - p_pool_ask;  // buy pool, sell CEX
     const T edge_10 = p_pool_bid - p_cex_ask;  // buy CEX, sell pool
 
+#if TRACE_ARB_ENABLED
+    std::cerr << std::setprecision(15)
+              << "[TRACE_ARB] cex=" << cex_price
+              << " p_now=" << p_now
+              << " fee_pool=" << fee_pool
+              << " p_pool_bid=" << p_pool_bid
+              << " p_pool_ask=" << p_pool_ask
+              << " p_cex_bid=" << p_cex_bid
+              << " p_cex_ask=" << p_cex_ask
+              << " edge_01=" << edge_01
+              << " edge_10=" << edge_10
+              << "\n";
+#endif
+
     int sel_i = -1, sel_j = -1;
     if (edge_01 <= T(0) && edge_10 <= T(0)) return d;
     if (edge_01 >= edge_10) { sel_i = 0; sel_j = 1; } else { sel_i = 1; sel_j = 0; }
+
+#if TRACE_ARB_ENABLED
+    std::cerr << "[TRACE_ARB] Passed edge check: sel_i=" << sel_i << " sel_j=" << sel_j << "\n";
+#endif
 
     const T avail = pool.balances[static_cast<size_t>(sel_i)];
     if (!(avail > T(0))) return d;
@@ -106,8 +131,14 @@ Decision<T> decide_trade(
         if (toms748_root(residual, static_cast<double>(dx_lo), static_cast<double>(dx_hi), F_lo, F_hi, root)) {
             dx_star = std::max(static_cast<T>(root), dx_lo);
         }
+#if TRACE_ARB_ENABLED
+        std::cerr << "[TRACE_ARB] Root found: dx_star=" << dx_star << " F_lo=" << F_lo << " F_hi=" << F_hi << "\n";
+#endif
     } else {
         // No crossing — check if edge exists at lo
+#if TRACE_ARB_ENABLED
+        std::cerr << "[TRACE_ARB] No crossing: F_lo=" << F_lo << " F_hi=" << F_hi << " sel_i=" << sel_i << "\n";
+#endif
         if ((sel_i == 0 && !(F_lo < 0.0)) || (sel_i == 1 && !(F_lo > 0.0))) return d;
         dx_star = dx_hi;
     }
@@ -123,7 +154,16 @@ Decision<T> decide_trade(
         profit = dy_after_fee - dx_star * cex_price * (T(1) + fee_cex) - costs.gas_coin0;
     }
 
-    if (!(profit > T(0))) return d;
+    if (!(profit > T(0))) {
+#if TRACE_ARB_ENABLED
+        std::cerr << "[TRACE_ARB] Profit check failed: profit=" << profit << " dx_star=" << dx_star << " dy=" << dy_after_fee << "\n";
+#endif
+        return d;
+    }
+
+#if TRACE_ARB_ENABLED
+    std::cerr << "[TRACE_ARB] TRADE: i=" << sel_i << " j=" << sel_j << " dx=" << dx_star << " profit=" << profit << "\n";
+#endif
 
     d.do_trade = true;
     d.i = sel_i;

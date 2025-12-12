@@ -22,7 +22,7 @@ import math
 
 FEE_EQUALIZE = False
 # -------------------- Grid Definition --------------------
-GRID_SIZE = 2
+GRID_SIZE = 32
 N_GRID_X = GRID_SIZE
 N_GRID_Y = GRID_SIZE
 
@@ -145,7 +145,7 @@ DEFAULT_DATAFILE = "python/arb_sim/trade_data/btcusd/btcusdt-2025.json"
 
 START_TS = _first_candle_ts(DEFAULT_DATAFILE)
 init_price = _initial_price_from_file(DEFAULT_DATAFILE)
-init_liq = 1_000_000 * 10**18 # in coin0
+init_liq = 1_000_000 # in coin0
 
 
 INVERT_LIQ = False
@@ -178,7 +178,7 @@ BASE_POOL = {
 }
 
 BASE_COSTS = {
-    "arb_fee_bps": 500.0,
+    "arb_fee_bps": 50.0,
     "gas_coin0": 0.0,
     "use_volume_cap": False,
     "volume_cap_mult": 1,
