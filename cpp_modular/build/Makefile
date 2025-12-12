@@ -155,6 +155,36 @@ arb_harness_ld/fast:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/arb_harness_ld.dir/build.make CMakeFiles/arb_harness_ld.dir/build
 .PHONY : arb_harness_ld/fast
 
+src/cli.o: src/cli.cpp.o
+.PHONY : src/cli.o
+
+# target to build an object file
+src/cli.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/arb_harness.dir/build.make CMakeFiles/arb_harness.dir/src/cli.cpp.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/arb_harness_f.dir/build.make CMakeFiles/arb_harness_f.dir/src/cli.cpp.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/arb_harness_ld.dir/build.make CMakeFiles/arb_harness_ld.dir/src/cli.cpp.o
+.PHONY : src/cli.cpp.o
+
+src/cli.i: src/cli.cpp.i
+.PHONY : src/cli.i
+
+# target to preprocess a source file
+src/cli.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/arb_harness.dir/build.make CMakeFiles/arb_harness.dir/src/cli.cpp.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/arb_harness_f.dir/build.make CMakeFiles/arb_harness_f.dir/src/cli.cpp.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/arb_harness_ld.dir/build.make CMakeFiles/arb_harness_ld.dir/src/cli.cpp.i
+.PHONY : src/cli.cpp.i
+
+src/cli.s: src/cli.cpp.s
+.PHONY : src/cli.s
+
+# target to generate assembly for a file
+src/cli.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/arb_harness.dir/build.make CMakeFiles/arb_harness.dir/src/cli.cpp.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/arb_harness_f.dir/build.make CMakeFiles/arb_harness_f.dir/src/cli.cpp.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/arb_harness_ld.dir/build.make CMakeFiles/arb_harness_ld.dir/src/cli.cpp.s
+.PHONY : src/cli.cpp.s
+
 src/events.o: src/events.cpp.o
 .PHONY : src/events.o
 
@@ -226,6 +256,9 @@ help:
 	@echo "... arb_harness"
 	@echo "... arb_harness_f"
 	@echo "... arb_harness_ld"
+	@echo "... src/cli.o"
+	@echo "... src/cli.i"
+	@echo "... src/cli.s"
 	@echo "... src/events.o"
 	@echo "... src/events.i"
 	@echo "... src/events.s"

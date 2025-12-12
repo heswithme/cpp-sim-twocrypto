@@ -1,4 +1,5 @@
-// Stableswap math for twocrypto_fx pool (templated, parity with Vyper StableswapMath)
+// Stableswap math (templated, parity with Vyper StableswapMath)
+// Duplicated from cpp/include/stableswap_math.hpp with namespace arb::pools::twocrypto_fx
 #pragma once
 
 #include <array>
@@ -12,7 +13,6 @@ namespace arb {
 namespace pools {
 namespace twocrypto_fx {
 
-// Re-use types from parent namespace
 using uint256 = boost::multiprecision::uint256_t;
 using int256 = boost::multiprecision::int256_t;
 
@@ -73,7 +73,6 @@ struct Convergence;
 template <>
 struct Convergence<uint256> {
     static bool close(const uint256& a, const uint256& b) {
-        // Equality with precision of 1 (as in Vyper)
         return (a > b ? a - b : b - a) <= uint256(1);
     }
 
@@ -83,7 +82,6 @@ struct Convergence<uint256> {
 template <>
 struct Convergence<double> {
     static bool close(double a, double b) {
-        // Relative tolerance appropriate for double math parity
         return std::fabs(a - b) <= 1e-12 * std::max(1.0, a);
     }
 
@@ -111,8 +109,6 @@ template <typename T>
 struct MathOpsCommon {
     using Traits = MathTraits<T>;
 
-    // get_y: Calculate xp[i] for given xp[j] (j != i) and D.
-    // Returns [y, 0] -- the second value is unused (compatibility with twocrypto).
     static MathResultT<T> get_y(
         const T& _amp,
         const T& _gamma,
@@ -120,7 +116,7 @@ struct MathOpsCommon {
         const T& D,
         size_t i
     ) {
-        (void)_gamma; // unused in this math
+        (void)_gamma;
 
         if (i >= Traits::N) {
             throw std::invalid_argument("i above N");
@@ -156,14 +152,13 @@ struct MathOpsCommon {
         throw std::runtime_error("Did not converge");
     }
 
-    // newton_D: Find D for given x[i] and amplification _amp.
     static T newton_D(
         const T& _amp,
         const T& _gamma,
         const std::array<T, Traits::N>& _xp,
         const T& K0_prev
     ) {
-        (void)_gamma; (void)K0_prev; // compatibility placeholders
+        (void)_gamma; (void)K0_prev;
 
         T S = T(0);
         for (const auto& x : _xp) {
@@ -181,7 +176,6 @@ struct MathOpsCommon {
             for (const auto& x : _xp) {
                 D_P = D_P * D / x;
             }
-            // N_COINS ** N_COINS for 2 coins == 4
             D_P /= (T(Traits::N) * T(Traits::N));
 
             T Dprev = D;
@@ -201,14 +195,13 @@ struct MathOpsCommon {
         return D;
     }
 
-    // get_p: Calculates dx/dy (needs to be multiplied by price_scale for actual value).
     static T get_p(
         const std::array<T, Traits::N>& _xp,
         const T& _D,
         const std::array<T, Traits::N>& _A_gamma
     ) {
         T ANN = _A_gamma[0] * Traits::N;
-        T Dr  = _D / T(Traits::N * Traits::N); // D / N_COINS**N_COINS
+        T Dr  = _D / T(Traits::N * Traits::N);
 
         for (size_t idx = 0; idx < Traits::N; ++idx) {
             Dr = Dr * _D / _xp[idx];
@@ -216,7 +209,6 @@ struct MathOpsCommon {
 
         T xp0_A = ANN * _xp[0] / Traits::A_MULTIPLIER();
 
-        // For uint256, PRECISION() = 1e18; for double, PRECISION() = 1.0
         return (
             Traits::PRECISION() * (xp0_A + Dr * _xp[0] / _xp[1])
         ) / (xp0_A + Dr);
@@ -232,24 +224,29 @@ template <>
 struct MathOps<uint256> : MathOpsCommon<uint256> {
     using T = uint256;
 
-    // wad_exp: exponent in fixed-point (1e18) domain. See Vyper math._wad_exp
     static T wad_exp(const int256& x) {
         static const int256 MIN_EXP_INPUT("-41446531673892822313");
         if (x <= MIN_EXP_INPUT) return 0;
+
         static const int256 MAX_EXP_INPUT("135305999368893231589");
         if (x >= MAX_EXP_INPUT) throw std::overflow_error("math: wad_exp overflow");
+
         static const int256 five_pow_18 = boost::multiprecision::pow(int256(5), 18);
         int256 x_scaled = (x << 78) / five_pow_18;
+
         static const int256 LOG2_2_96("54916777467707473351141471128");
         int256 k = ((x_scaled << 96) / LOG2_2_96 + (int256(1) << 95)) >> 96;
         x_scaled = x_scaled - k * LOG2_2_96;
+
         int256 y = (x_scaled + int256("1346386616545796478920950773328")) * x_scaled;
         y = (y >> 96) + int256("57155421227552351082224309758442");
+
         int256 p = y + x_scaled - int256("94201549194550492254356042504812");
         p = p * y;
         p = (p >> 96) + int256("28719021644029726153956944680412240");
         p = p * x_scaled;
         p = p + (int256("4385272521454847904659076985693276") << 96);
+
         int256 q = x_scaled - int256("2855989394907223263936484059900");
         q = q * x_scaled;
         q = (q >> 96) + int256("50020603652535783019961831881945");
@@ -261,17 +258,21 @@ struct MathOps<uint256> : MathOpsCommon<uint256> {
         q = (q >> 96) - int256("14423608567350463180887372962807573");
         q = q * x_scaled;
         q = (q >> 96) + int256("26449188498355588339934803723976023");
+
         int256 r = p / q;
+
         static const uint256 SCALE_FACTOR("3822833074963236453042738258902158003155416615667");
         uint256 r_unsigned = (r >= 0) ? uint256(r) : uint256(boost::multiprecision::pow(int256(2), 256) + r);
+
         int shift_amount = 195 - static_cast<int>(k);
         uint256 result;
-        if (shift_amount > 0)
+        if (shift_amount > 0) {
             result = (r_unsigned * SCALE_FACTOR) >> shift_amount;
-        else if (shift_amount < 0)
+        } else if (shift_amount < 0) {
             result = (r_unsigned * SCALE_FACTOR) << (-shift_amount);
-        else
+        } else {
             result = r_unsigned * SCALE_FACTOR;
+        }
         return result;
     }
 };

@@ -1,7 +1,6 @@
-CMakeFiles/arb_harness_i.dir/src/events.cpp.o: \
-  /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/src/events.cpp \
-  /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/events/loader.hpp \
-  /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/events/types.hpp \
+CMakeFiles/arb_harness.dir/src/cli.cpp.o: \
+  /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/src/cli.cpp \
+  /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/harness/cli.hpp \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/cstdint \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config_site \
@@ -644,16 +643,13 @@ CMakeFiles/arb_harness_i.dir/src/events.cpp.o: \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__algorithm/pstl.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__algorithm/sample.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/bit \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/vector \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__algorithm/lexicographical_compare_three_way.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__algorithm/three_way_comp_ref_type.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__bit_reference \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__format/formatter.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__fwd/format.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__format/formatter_bool.h \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/thread \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__thread/formatter.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__format/concepts.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__format/format_parse_context.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__format/format_error.h \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__fwd/format.h \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__format/formatter.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__format/formatter_integral.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__charconv/to_chars_integral.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__charconv/tables.h \
@@ -685,6 +681,8 @@ CMakeFiles/arb_harness_i.dir/src/events.cpp.o: \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__format/indic_conjunct_break_table.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__format/width_estimation_table.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/array \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__algorithm/lexicographical_compare_three_way.h \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__algorithm/three_way_comp_ref_type.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__utility/empty.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__locale \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__locale_dir/locale_base_api.h \
@@ -708,22 +706,27 @@ CMakeFiles/arb_harness_i.dir/src/events.cpp.o: \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/clocale \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/locale.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/locale.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__fwd/vector.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__memory/temp_value.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__split_buffer \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/locale \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/ios \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__system_error/error_category.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__system_error/error_code.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__system_error/error_condition.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__system_error/system_error.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/mutex \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__thread/id.h \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__thread/jthread.h \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__stop_token/stop_source.h \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__stop_token/intrusive_shared_ptr.h \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__stop_token/stop_state.h \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__stop_token/atomic_unique_lock.h \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__stop_token/intrusive_list_view.h \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__stop_token/stop_token.h \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__thread/thread.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__condition_variable/condition_variable.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__mutex/mutex.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__mutex/unique_lock.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__mutex/tag_types.h \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__system_error/system_error.h \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__system_error/error_category.h \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__system_error/error_code.h \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__system_error/error_condition.h \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/locale \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/ios \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/mutex \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__mutex/lock_guard.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__thread/id.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/system_error \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/streambuf \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/nl_types.h \
@@ -755,109 +758,21 @@ CMakeFiles/arb_harness_i.dir/src/events.cpp.o: \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/_types/_nl_item.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__locale_dir/locale_base_api/bsd_locale_defaults.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/cstdarg \
-  /opt/homebrew/include/boost/json.hpp \
-  /opt/homebrew/include/boost/json/detail/config.hpp \
-  /opt/homebrew/include/boost/config.hpp \
-  /opt/homebrew/include/boost/config/user.hpp \
-  /opt/homebrew/include/boost/config/detail/select_compiler_config.hpp \
-  /opt/homebrew/include/boost/config/compiler/clang.hpp \
-  /opt/homebrew/include/boost/config/compiler/clang_version.hpp \
-  /opt/homebrew/include/boost/config/detail/select_stdlib_config.hpp \
-  /opt/homebrew/include/boost/config/stdlib/libcpp.hpp \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/shared_mutex \
-  /opt/homebrew/include/boost/config/detail/select_platform_config.hpp \
-  /opt/homebrew/include/boost/config/platform/macos.hpp \
-  /opt/homebrew/include/boost/config/detail/posix_features.hpp \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/unistd.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/sys/unistd.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/sys/_types/_posix_vdisable.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/sys/select.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/sys/_select.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/sys/_types/_uuid_t.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/gethostuuid.h \
-  /opt/homebrew/include/boost/config/detail/suffix.hpp \
-  /opt/homebrew/include/boost/config/helper_macros.hpp \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/any \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/memory_resource \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/charconv \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/execution \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/filesystem \
-  /opt/homebrew/include/boost/config/detail/cxx_composite.hpp \
-  /opt/homebrew/include/boost/config/pragma_message.hpp \
-  /opt/homebrew/include/boost/assert.hpp \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/assert.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/_static_assert.h \
-  /opt/homebrew/include/boost/static_assert.hpp \
-  /opt/homebrew/include/boost/detail/workaround.hpp \
-  /opt/homebrew/include/boost/config/workaround.hpp \
-  /opt/homebrew/include/boost/throw_exception.hpp \
-  /opt/homebrew/include/boost/exception/exception.hpp \
-  /opt/homebrew/include/boost/assert/source_location.hpp \
-  /opt/homebrew/include/boost/cstdint.hpp \
-  /opt/homebrew/include/boost/json/detail/gdb_printers.hpp \
-  /opt/homebrew/include/boost/json/array.hpp \
-  /opt/homebrew/include/boost/json/detail/array.hpp \
-  /opt/homebrew/include/boost/json/storage_ptr.hpp \
-  /opt/homebrew/include/boost/container/pmr/polymorphic_allocator.hpp \
-  /opt/homebrew/include/boost/move/detail/type_traits.hpp \
-  /opt/homebrew/include/boost/move/detail/config_begin.hpp \
-  /opt/homebrew/include/boost/move/detail/workaround.hpp \
-  /opt/homebrew/include/boost/move/detail/meta_utils.hpp \
-  /opt/homebrew/include/boost/move/detail/meta_utils_core.hpp \
-  /opt/homebrew/include/boost/move/detail/addressof.hpp \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/cassert \
-  /opt/homebrew/include/boost/move/detail/config_end.hpp \
-  /opt/homebrew/include/boost/move/utility_core.hpp \
-  /opt/homebrew/include/boost/move/core.hpp \
-  /opt/homebrew/include/boost/container/detail/dispatch_uses_allocator.hpp \
-  /opt/homebrew/include/boost/container/detail/config_begin.hpp \
-  /opt/homebrew/include/boost/container/detail/workaround.hpp \
-  /opt/homebrew/include/boost/container/allocator_traits.hpp \
-  /opt/homebrew/include/boost/container/container_fwd.hpp \
-  /opt/homebrew/include/boost/container/detail/std_fwd.hpp \
-  /opt/homebrew/include/boost/move/detail/std_ns_begin.hpp \
-  /opt/homebrew/include/boost/move/detail/std_ns_end.hpp \
-  /opt/homebrew/include/boost/container/detail/mpl.hpp \
-  /opt/homebrew/include/boost/intrusive/detail/mpl.hpp \
-  /opt/homebrew/include/boost/intrusive/detail/config_begin.hpp \
-  /opt/homebrew/include/boost/intrusive/detail/config_end.hpp \
-  /opt/homebrew/include/boost/container/detail/config_end.hpp \
-  /opt/homebrew/include/boost/container/detail/type_traits.hpp \
-  /opt/homebrew/include/boost/container/detail/placement_new.hpp \
-  /opt/homebrew/include/boost/container/detail/is_pair.hpp \
-  /opt/homebrew/include/boost/container/detail/addressof.hpp \
-  /opt/homebrew/include/boost/intrusive/pointer_traits.hpp \
-  /opt/homebrew/include/boost/intrusive/detail/workaround.hpp \
-  /opt/homebrew/include/boost/intrusive/pointer_rebind.hpp \
-  /opt/homebrew/include/boost/move/detail/pointer_element.hpp \
-  /opt/homebrew/include/boost/intrusive/detail/has_member_function_callable_with.hpp \
-  /opt/homebrew/include/boost/move/detail/fwd_macros.hpp \
-  /opt/homebrew/include/boost/container/uses_allocator.hpp \
-  /opt/homebrew/include/boost/container/uses_allocator_fwd.hpp \
-  /opt/homebrew/include/boost/container/detail/variadic_templates_tools.hpp \
-  /opt/homebrew/include/boost/container/new_allocator.hpp \
-  /opt/homebrew/include/boost/container/throw_exception.hpp \
-  /opt/homebrew/include/boost/container/pmr/memory_resource.hpp \
-  /opt/homebrew/include/boost/container/pmr/global_resource.hpp \
-  /opt/homebrew/include/boost/container/detail/auto_link.hpp \
-  /opt/homebrew/include/boost/json/detail/shared_resource.hpp \
-  /opt/homebrew/include/boost/json/detail/default_resource.hpp \
-  /opt/homebrew/include/boost/json/is_deallocate_trivial.hpp \
-  /opt/homebrew/include/boost/json/kind.hpp \
-  /opt/homebrew/include/boost/json/string_view.hpp \
-  /opt/homebrew/include/boost/core/detail/string_view.hpp \
-  /opt/homebrew/include/boost/core/enable_if.hpp \
-  /opt/homebrew/include/boost/core/detail/is_same.hpp \
-  /opt/homebrew/include/boost/json/pilfer.hpp \
-  /opt/homebrew/include/boost/system/result.hpp \
-  /opt/homebrew/include/boost/system/errc.hpp \
-  /opt/homebrew/include/boost/system/detail/errc.hpp \
-  /opt/homebrew/include/boost/system/is_error_condition_enum.hpp \
-  /opt/homebrew/include/boost/system/detail/cerrno.hpp \
-  /opt/homebrew/include/boost/system/detail/error_code.hpp \
-  /opt/homebrew/include/boost/system/is_error_code_enum.hpp \
-  /opt/homebrew/include/boost/system/detail/error_category.hpp \
-  /opt/homebrew/include/boost/system/detail/config.hpp \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/sstream \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__ostream/basic_ostream.h \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/bitset \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__bit_reference \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__type_traits/is_char_like_type.h \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/istream \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/ostream \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/format \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/queue \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__fwd/deque.h \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__fwd/queue.h \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__fwd/vector.h \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/deque \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__memory/temp_value.h \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__split_buffer \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/functional \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__functional/binary_negate.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__functional/bind.h \
@@ -880,252 +795,17 @@ CMakeFiles/arb_harness_i.dir/src/events.cpp.o: \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__iterator/erase_if_container.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__iterator/ranges_iterator_traits.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__node_handle \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/vector \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__format/formatter_bool.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__functional/default_searcher.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__functional/not_fn.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__functional/perfect_forward.h \
-  /opt/homebrew/include/boost/system/detail/error_condition.hpp \
-  /opt/homebrew/include/boost/system/detail/generic_category.hpp \
-  /opt/homebrew/include/boost/system/detail/generic_category_message.hpp \
-  /opt/homebrew/include/boost/system/detail/enable_if.hpp \
-  /opt/homebrew/include/boost/system/detail/is_same.hpp \
-  /opt/homebrew/include/boost/system/detail/append_int.hpp \
-  /opt/homebrew/include/boost/system/detail/snprintf.hpp \
-  /opt/homebrew/include/boost/system/detail/system_category.hpp \
-  /opt/homebrew/include/boost/system/detail/system_category_impl.hpp \
-  /opt/homebrew/include/boost/system/detail/system_category_message.hpp \
-  /opt/homebrew/include/boost/system/api_config.hpp \
-  /opt/homebrew/include/boost/system/detail/interop_category.hpp \
-  /opt/homebrew/include/boost/system/detail/std_category.hpp \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/ostream \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__ostream/basic_ostream.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/bitset \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__type_traits/is_char_like_type.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/format \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/queue \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__fwd/deque.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__fwd/queue.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/deque \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/stack \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__fwd/stack.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/print \
-  /opt/homebrew/include/boost/system/detail/error_category_impl.hpp \
-  /opt/homebrew/include/boost/system/detail/std_category_impl.hpp \
-  /opt/homebrew/include/boost/system/detail/mutex.hpp \
-  /opt/homebrew/include/boost/system/system_error.hpp \
-  /opt/homebrew/include/boost/variant2/variant.hpp \
-  /opt/homebrew/include/boost/mp11.hpp \
-  /opt/homebrew/include/boost/mp11/list.hpp \
-  /opt/homebrew/include/boost/mp11/integral.hpp \
-  /opt/homebrew/include/boost/mp11/version.hpp \
-  /opt/homebrew/include/boost/mp11/detail/mp_value.hpp \
-  /opt/homebrew/include/boost/mp11/detail/config.hpp \
-  /opt/homebrew/include/boost/mp11/detail/mp_list.hpp \
-  /opt/homebrew/include/boost/mp11/detail/mp_list_v.hpp \
-  /opt/homebrew/include/boost/mp11/detail/mp_is_list.hpp \
-  /opt/homebrew/include/boost/mp11/detail/mp_is_value_list.hpp \
-  /opt/homebrew/include/boost/mp11/detail/mp_front.hpp \
-  /opt/homebrew/include/boost/mp11/detail/mp_rename.hpp \
-  /opt/homebrew/include/boost/mp11/detail/mp_defer.hpp \
-  /opt/homebrew/include/boost/mp11/detail/mp_append.hpp \
-  /opt/homebrew/include/boost/mp11/detail/mp_count.hpp \
-  /opt/homebrew/include/boost/mp11/detail/mp_plus.hpp \
-  /opt/homebrew/include/boost/mp11/utility.hpp \
-  /opt/homebrew/include/boost/mp11/detail/mp_fold.hpp \
-  /opt/homebrew/include/boost/mp11/algorithm.hpp \
-  /opt/homebrew/include/boost/mp11/set.hpp \
-  /opt/homebrew/include/boost/mp11/function.hpp \
-  /opt/homebrew/include/boost/mp11/detail/mp_min_element.hpp \
-  /opt/homebrew/include/boost/mp11/detail/mp_void.hpp \
-  /opt/homebrew/include/boost/mp11/detail/mp_copy_if.hpp \
-  /opt/homebrew/include/boost/mp11/detail/mp_remove_if.hpp \
-  /opt/homebrew/include/boost/mp11/detail/mp_map_find.hpp \
-  /opt/homebrew/include/boost/mp11/detail/mp_with_index.hpp \
-  /opt/homebrew/include/boost/mp11/integer_sequence.hpp \
-  /opt/homebrew/include/boost/mp11/map.hpp \
-  /opt/homebrew/include/boost/mp11/bind.hpp \
-  /opt/homebrew/include/boost/mp11/lambda.hpp \
-  /opt/homebrew/include/boost/mp11/tuple.hpp \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/typeindex \
-  /opt/homebrew/include/boost/json/value.hpp \
-  /opt/homebrew/include/boost/json/object.hpp \
-  /opt/homebrew/include/boost/json/detail/object.hpp \
-  /opt/homebrew/include/boost/json/detail/value.hpp \
-  /opt/homebrew/include/boost/json/fwd.hpp \
-  /opt/homebrew/include/boost/json/set_pointer_options.hpp \
-  /opt/homebrew/include/boost/json/string.hpp \
-  /opt/homebrew/include/boost/json/detail/digest.hpp \
-  /opt/homebrew/include/boost/json/detail/except.hpp \
-  /opt/homebrew/include/boost/json/error.hpp \
-  /opt/homebrew/include/boost/json/impl/error.hpp \
-  /opt/homebrew/include/boost/system/error_category.hpp \
-  /opt/homebrew/include/boost/json/detail/string_impl.hpp \
-  /opt/homebrew/include/boost/json/impl/string.hpp \
-  /opt/homebrew/include/boost/json/value_ref.hpp \
-  /opt/homebrew/include/boost/json/detail/impl/array.hpp \
-  /opt/homebrew/include/boost/json/impl/array.hpp \
-  /opt/homebrew/include/boost/json/impl/object.hpp \
-  /opt/homebrew/include/boost/json/impl/value.hpp \
-  /opt/homebrew/include/boost/json/impl/value_ref.hpp \
-  /opt/homebrew/include/boost/json/basic_parser.hpp \
-  /opt/homebrew/include/boost/json/parse_options.hpp \
-  /opt/homebrew/include/boost/json/detail/stack.hpp \
-  /opt/homebrew/include/boost/json/detail/impl/stack.hpp \
-  /opt/homebrew/include/boost/align/align.hpp \
-  /opt/homebrew/include/boost/align/detail/align_cxx11.hpp \
-  /opt/homebrew/include/boost/json/detail/stream.hpp \
-  /opt/homebrew/include/boost/json/detail/utf8.hpp \
-  /opt/homebrew/include/boost/endian/conversion.hpp \
-  /opt/homebrew/include/boost/endian/detail/endian_reverse.hpp \
-  /opt/homebrew/include/boost/endian/detail/integral_by_size.hpp \
-  /opt/homebrew/include/boost/endian/detail/intrinsic.hpp \
-  /opt/homebrew/include/boost/endian/detail/is_scoped_enum.hpp \
-  /opt/homebrew/include/boost/endian/detail/is_integral.hpp \
-  /opt/homebrew/include/boost/endian/detail/static_assert.hpp \
-  /opt/homebrew/include/boost/endian/detail/endian_load.hpp \
-  /opt/homebrew/include/boost/endian/detail/order.hpp \
-  /opt/homebrew/include/boost/endian/detail/is_trivially_copyable.hpp \
-  /opt/homebrew/include/boost/endian/detail/endian_store.hpp \
-  /opt/homebrew/include/boost/json/detail/sbo_buffer.hpp \
-  /opt/homebrew/include/boost/json/conversion.hpp \
-  /opt/homebrew/include/boost/json/impl/conversion.hpp \
-  /opt/homebrew/include/boost/describe/enumerators.hpp \
-  /opt/homebrew/include/boost/describe/detail/void_t.hpp \
-  /opt/homebrew/include/boost/describe/detail/config.hpp \
-  /opt/homebrew/include/boost/describe/members.hpp \
-  /opt/homebrew/include/boost/describe/modifiers.hpp \
-  /opt/homebrew/include/boost/describe/bases.hpp \
-  /opt/homebrew/include/boost/describe/detail/cx_streq.hpp \
-  /opt/homebrew/include/boost/json/monotonic_resource.hpp \
-  /opt/homebrew/include/boost/json/null_resource.hpp \
-  /opt/homebrew/include/boost/json/parse.hpp \
-  /opt/homebrew/include/boost/json/parse_into.hpp \
-  /opt/homebrew/include/boost/json/detail/parse_into.hpp \
-  /opt/homebrew/include/boost/describe/enum_from_string.hpp \
-  /opt/homebrew/include/boost/json/impl/parse_into.hpp \
-  /opt/homebrew/include/boost/json/basic_parser_impl.hpp \
-  /opt/homebrew/include/boost/json/detail/literals.hpp \
-  /opt/homebrew/include/boost/json/detail/buffer.hpp \
-  /opt/homebrew/include/boost/json/detail/charconv/from_chars.hpp \
-  /opt/homebrew/include/boost/json/detail/charconv/detail/config.hpp \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/cfloat \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/float.h \
-  /Library/Developer/CommandLineTools/usr/lib/clang/17/include/float.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/float.h \
-  /opt/homebrew/include/boost/json/detail/charconv/detail/from_chars_result.hpp \
-  /opt/homebrew/include/boost/json/detail/charconv/chars_format.hpp \
-  /opt/homebrew/include/boost/json/detail/sse2.hpp \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/istream \
-  /opt/homebrew/include/boost/json/parser.hpp \
-  /opt/homebrew/include/boost/json/detail/handler.hpp \
-  /opt/homebrew/include/boost/json/value_stack.hpp \
-  /opt/homebrew/include/boost/json/result_for.hpp \
-  /opt/homebrew/include/boost/json/serialize.hpp \
-  /opt/homebrew/include/boost/json/serialize_options.hpp \
-  /opt/homebrew/include/boost/json/impl/serialize.hpp \
-  /opt/homebrew/include/boost/json/serializer.hpp \
-  /opt/homebrew/include/boost/json/detail/format.hpp \
-  /opt/homebrew/include/boost/json/detail/writer.hpp \
-  /opt/homebrew/include/boost/json/impl/serializer.hpp \
-  /opt/homebrew/include/boost/describe/enum_to_string.hpp \
-  /opt/homebrew/include/boost/json/static_resource.hpp \
-  /opt/homebrew/include/boost/json/stream_parser.hpp \
-  /opt/homebrew/include/boost/json/value_from.hpp \
-  /opt/homebrew/include/boost/json/detail/value_from.hpp \
-  /opt/homebrew/include/boost/json/value_to.hpp \
-  /opt/homebrew/include/boost/json/detail/value_to.hpp \
-  /opt/homebrew/include/boost/json/visit.hpp \
-  /opt/homebrew/include/boost/json/impl/visit.hpp \
-  /opt/homebrew/include/boost/json/src.hpp \
-  /opt/homebrew/include/boost/json/impl/array.ipp \
-  /opt/homebrew/include/boost/container_hash/hash.hpp \
-  /opt/homebrew/include/boost/container_hash/hash_fwd.hpp \
-  /opt/homebrew/include/boost/container_hash/hash_is_avalanching.hpp \
-  /opt/homebrew/include/boost/container_hash/is_range.hpp \
-  /opt/homebrew/include/boost/container_hash/is_contiguous_range.hpp \
-  /opt/homebrew/include/boost/container_hash/is_unordered_range.hpp \
-  /opt/homebrew/include/boost/container_hash/is_described_class.hpp \
-  /opt/homebrew/include/boost/container_hash/detail/hash_integral.hpp \
-  /opt/homebrew/include/boost/container_hash/detail/hash_mix.hpp \
-  /opt/homebrew/include/boost/container_hash/detail/hash_tuple_like.hpp \
-  /opt/homebrew/include/boost/container_hash/is_tuple_like.hpp \
-  /opt/homebrew/include/boost/container_hash/detail/hash_range.hpp \
-  /opt/homebrew/include/boost/container_hash/detail/mulx.hpp \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/complex \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/sstream \
-  /opt/homebrew/include/boost/json/impl/error.ipp \
-  /opt/homebrew/include/boost/json/impl/kind.ipp \
-  /opt/homebrew/include/boost/json/impl/monotonic_resource.ipp \
-  /opt/homebrew/include/boost/core/max_align.hpp \
-  /opt/homebrew/include/boost/core/alignof.hpp \
-  /opt/homebrew/include/boost/json/impl/null_resource.ipp \
-  /opt/homebrew/include/boost/json/impl/object.ipp \
-  /opt/homebrew/include/boost/json/impl/parse.ipp \
-  /opt/homebrew/include/boost/json/impl/parser.ipp \
-  /opt/homebrew/include/boost/json/impl/pointer.ipp \
-  /opt/homebrew/include/boost/json/impl/serialize.ipp \
-  /opt/homebrew/include/boost/json/impl/serializer.ipp \
-  /opt/homebrew/include/boost/json/impl/static_resource.ipp \
-  /opt/homebrew/include/boost/json/impl/stream_parser.ipp \
-  /opt/homebrew/include/boost/json/impl/string.ipp \
-  /opt/homebrew/include/boost/json/impl/value.ipp \
-  /opt/homebrew/include/boost/json/impl/value_stack.ipp \
-  /opt/homebrew/include/boost/json/impl/value_ref.ipp \
-  /opt/homebrew/include/boost/json/detail/impl/shared_resource.ipp \
-  /opt/homebrew/include/boost/json/detail/impl/default_resource.ipp \
-  /opt/homebrew/include/boost/json/detail/impl/except.ipp \
-  /opt/homebrew/include/boost/version.hpp \
-  /opt/homebrew/include/boost/json/detail/impl/format.ipp \
-  /opt/homebrew/include/boost/json/detail/ryu/ryu.hpp \
-  /opt/homebrew/include/boost/json/detail/impl/handler.ipp \
-  /opt/homebrew/include/boost/json/detail/impl/stack.ipp \
-  /opt/homebrew/include/boost/json/detail/impl/string_impl.ipp \
-  /opt/homebrew/include/boost/json/detail/ryu/impl/d2s.ipp \
-  /opt/homebrew/include/boost/json/detail/ryu/detail/common.hpp \
-  /opt/homebrew/include/boost/json/detail/ryu/detail/digit_table.hpp \
-  /opt/homebrew/include/boost/json/detail/ryu/detail/d2s.hpp \
-  /opt/homebrew/include/boost/json/detail/ryu/detail/d2s_full_table.hpp \
-  /opt/homebrew/include/boost/json/detail/ryu/detail/d2s_intrinsics.hpp \
-  /opt/homebrew/include/boost/json/detail/charconv/impl/from_chars.ipp \
-  /opt/homebrew/include/boost/json/detail/charconv/detail/fast_float/fast_float.hpp \
-  /opt/homebrew/include/boost/json/detail/charconv/detail/fast_float/float_common.hpp \
-  /opt/homebrew/include/boost/json/detail/charconv/detail/fast_float/constexpr_feature_detect.hpp \
-  /opt/homebrew/include/boost/json/detail/charconv/detail/fast_float/parse_number.hpp \
-  /opt/homebrew/include/boost/json/detail/charconv/detail/fast_float/ascii_number.hpp \
-  /opt/homebrew/include/boost/json/detail/charconv/detail/fast_float/decimal_to_binary.hpp \
-  /opt/homebrew/include/boost/json/detail/charconv/detail/fast_float/fast_table.hpp \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/cinttypes \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/inttypes.h \
-  /Library/Developer/CommandLineTools/usr/lib/clang/17/include/inttypes.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/inttypes.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/_inttypes.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/xlocale/_inttypes.h \
-  /opt/homebrew/include/boost/json/detail/charconv/detail/fast_float/digit_comparison.hpp \
-  /opt/homebrew/include/boost/json/detail/charconv/detail/fast_float/bigint.hpp \
-  /opt/homebrew/include/boost/json/detail/charconv/detail/from_chars_float_impl.hpp \
-  /opt/homebrew/include/boost/json/detail/charconv/detail/parser.hpp \
-  /opt/homebrew/include/boost/json/detail/charconv/detail/from_chars_integer_impl.hpp \
-  /opt/homebrew/include/boost/json/detail/charconv/detail/integer_search_trees.hpp \
-  /opt/homebrew/include/boost/json/detail/charconv/limits.hpp \
-  /opt/homebrew/include/boost/json/detail/charconv/detail/compute_float64.hpp \
-  /opt/homebrew/include/boost/json/detail/charconv/detail/significand_tables.hpp \
-  /opt/homebrew/include/boost/json/detail/charconv/detail/emulated128.hpp \
-  /opt/homebrew/include/boost/core/bit.hpp \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/fstream \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__filesystem/copy_options.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__filesystem/directory_entry.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__filesystem/file_status.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__filesystem/file_type.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__filesystem/perms.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__filesystem/file_time_type.h \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/unistd.h \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__thread/this_thread.h \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/chrono \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__chrono/file_clock.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__filesystem/filesystem_error.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__filesystem/path.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/iomanip \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__filesystem/operations.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__filesystem/perm_options.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__filesystem/space_info.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__filesystem/directory_iterator.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__filesystem/directory_options.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__filesystem/path_iterator.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__filesystem/recursive_directory_iterator.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__filesystem/u8path.h
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/forward_list \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/iostream

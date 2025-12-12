@@ -16,6 +16,7 @@ include_directories(${CMAKE_SOURCE_DIR}/../cpp/include)
 set(COMMON_SOURCES
     src/main.cpp
     src/events.cpp
+    src/cli.cpp
 )
 
 # Compiler flags

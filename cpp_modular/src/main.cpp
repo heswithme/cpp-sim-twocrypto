@@ -6,17 +6,17 @@
 //   arb_harness_ld - long double
 
 #include <iostream>
-#include <string>
 #include <iomanip>
 #include <limits>
-#include <type_traits>
 
+#include "harness/cli.hpp"
+#include "harness/runner.hpp"
+#include "harness/output.hpp"
 #include "events/loader.hpp"
-#include "core/common.hpp"
+#include "pools/config.hpp"
 #include "pools/twocrypto_fx/twocrypto.hpp"
 #include "pools/twocrypto_fx/helpers.hpp"
 #include "trading/costs.hpp"
-#include "trading/decision.hpp"
 #include "trading/arbitrageur.hpp"
 
 // Compile-time numeric type selection (floating-only)
@@ -115,47 +115,78 @@ void test_pool(T cex_price = T(-1)) {
 }
 
 int main(int argc, char* argv[]) {
-    std::cout << "arb_harness_mod: " << TYPE_NAME << std::endl;
-
-    // Test differs_rel
-    {
-        bool test1 = arb::differs_rel<double>(1.0, 1.0 + 1e-13);  // should be false
-        bool test2 = arb::differs_rel<double>(1.0, 1.1);          // should be true
-
-        std::cout << "differs_rel tests: "
-                  << ((!test1 && test2) ? "PASSED" : "FAILED") << "\n";
-    }
-
-    if (argc < 2) {
-        std::cout << "\n--- Pool Test ---\n";
-        test_pool<RealT>();
-        std::cout << "\nUsage: " << argv[0] << " <candles.json>\n";
-        return 0;
+    // Parse CLI arguments
+    auto args = arb::harness::parse_cli(argc, argv);
+    
+    if (!args.valid) {
+        // For now, if not enough args, run pool test
+        if (argc < 2) {
+            std::cout << "arb_harness_mod: " << TYPE_NAME << "\n";
+            std::cout << "\n--- Pool Test ---\n";
+            test_pool<RealT>();
+            arb::harness::print_usage(argv[0]);
+            return 0;
+        }
+        std::cerr << "Error: " << args.error_msg << "\n";
+        arb::harness::print_usage(argv[0]);
+        return 1;
     }
 
     try {
-        const std::string candles_path = argv[1];
-
+        auto t_read0 = std::chrono::high_resolution_clock::now();
+        
         // Load candles and generate events
-        auto candles = arb::load_candles(candles_path);
+        auto candles = arb::load_candles(args.candles_path, args.max_candles, args.candle_filter_pct / 100.0);
         auto events = arb::gen_events(candles);
+        
+        auto t_read1 = std::chrono::high_resolution_clock::now();
+        double candles_read_ms = std::chrono::duration<double, std::milli>(t_read1 - t_read0).count();
 
-        std::cout << "\nLoaded " << candles.size() << " candles -> "
-                  << events.size() << " events from " << candles_path << "\n";
+        std::cout << "loaded " << candles.size() << " candles -> "
+                  << events.size() << " events from " << args.candles_path << "\n";
 
-        RealT cex_price = events.empty() ? RealT(-1) : static_cast<RealT>(events.front().p_cex);
-
-        if (!events.empty()) {
-            std::cout << "First event: ts=" << events.front().ts
-                      << ", p_cex=" << events.front().p_cex
-                      << ", volume=" << events.front().volume << "\n";
-            std::cout << "Last event:  ts=" << events.back().ts
-                      << ", p_cex=" << events.back().p_cex
-                      << ", volume=" << events.back().volume << "\n";
+        // Load pool configs from JSON
+        auto pool_configs = arb::pools::load_pool_configs<RealT>(args.pools_path);
+        if (pool_configs.empty()) {
+            throw std::runtime_error("No pool configurations found in " + args.pools_path);
         }
-
-        std::cout << "\n--- Pool Test ---\n";
-        test_pool<RealT>(cex_price);
+        
+        // Build run configuration from CLI args
+        arb::harness::RunConfig<RealT> run_cfg{};
+        run_cfg.min_swap_frac = static_cast<RealT>(args.min_swap_frac);
+        run_cfg.max_swap_frac = static_cast<RealT>(args.max_swap_frac);
+        run_cfg.dustswap_freq_s = args.dustswap_freq_s;
+        run_cfg.user_swap_freq_s = args.user_swap_freq_s;
+        run_cfg.user_swap_size_frac = static_cast<RealT>(args.user_swap_size_frac);
+        run_cfg.user_swap_thresh = static_cast<RealT>(args.user_swap_thresh);
+        
+        auto t_exec0 = std::chrono::high_resolution_clock::now();
+        
+        // Run all pools in parallel
+        auto results = arb::harness::run_pools_parallel(
+            pool_configs, events, run_cfg,
+            args.n_threads,
+            true  // verbose - prints progress per pool
+        );
+        
+        auto t_exec1 = std::chrono::high_resolution_clock::now();
+        double exec_ms = std::chrono::duration<double, std::milli>(t_exec1 - t_exec0).count();
+        
+        // Write JSON output
+        if (!args.out_path.empty()) {
+            bool ok = arb::harness::write_results_json(
+                args.out_path,
+                results,
+                events.size(),
+                args.candles_path,
+                args.n_threads,
+                candles_read_ms,
+                exec_ms
+            );
+            if (!ok) {
+                std::cerr << "Warning: Failed to write output to " << args.out_path << "\n";
+            }
+        }
 
     } catch (const std::exception& e) {
         std::cerr << "Error: " << e.what() << std::endl;

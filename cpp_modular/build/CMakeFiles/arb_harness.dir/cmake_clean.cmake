@@ -1,4 +1,6 @@
 file(REMOVE_RECURSE
+  "CMakeFiles/arb_harness.dir/src/cli.cpp.o"
+  "CMakeFiles/arb_harness.dir/src/cli.cpp.o.d"
   "CMakeFiles/arb_harness.dir/src/events.cpp.o"
   "CMakeFiles/arb_harness.dir/src/events.cpp.o.d"
   "CMakeFiles/arb_harness.dir/src/main.cpp.o"

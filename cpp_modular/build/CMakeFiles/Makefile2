@@ -91,12 +91,12 @@ clean: CMakeFiles/arb_harness_ld.dir/clean
 CMakeFiles/arb_harness.dir/all:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/arb_harness.dir/build.make CMakeFiles/arb_harness.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/arb_harness.dir/build.make CMakeFiles/arb_harness.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/build/CMakeFiles --progress-num=1,2,3 "Built target arb_harness"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/build/CMakeFiles --progress-num=1,2,3,4 "Built target arb_harness"
 .PHONY : CMakeFiles/arb_harness.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/arb_harness.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/build/CMakeFiles 3
+	$(CMAKE_COMMAND) -E cmake_progress_start /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/build/CMakeFiles 4
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/arb_harness.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/build/CMakeFiles 0
 .PHONY : CMakeFiles/arb_harness.dir/rule
@@ -108,7 +108,7 @@ arb_harness: CMakeFiles/arb_harness.dir/rule
 # codegen rule for target.
 CMakeFiles/arb_harness.dir/codegen:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/arb_harness.dir/build.make CMakeFiles/arb_harness.dir/codegen
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/build/CMakeFiles --progress-num=1,2,3 "Finished codegen for target arb_harness"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/build/CMakeFiles --progress-num=1,2,3,4 "Finished codegen for target arb_harness"
 .PHONY : CMakeFiles/arb_harness.dir/codegen
 
 # clean rule for target.
@@ -123,12 +123,12 @@ CMakeFiles/arb_harness.dir/clean:
 CMakeFiles/arb_harness_f.dir/all:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/arb_harness_f.dir/build.make CMakeFiles/arb_harness_f.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/arb_harness_f.dir/build.make CMakeFiles/arb_harness_f.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/build/CMakeFiles --progress-num=4,5,6 "Built target arb_harness_f"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/build/CMakeFiles --progress-num=5,6,7,8 "Built target arb_harness_f"
 .PHONY : CMakeFiles/arb_harness_f.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/arb_harness_f.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/build/CMakeFiles 3
+	$(CMAKE_COMMAND) -E cmake_progress_start /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/build/CMakeFiles 4
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/arb_harness_f.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/build/CMakeFiles 0
 .PHONY : CMakeFiles/arb_harness_f.dir/rule
@@ -140,7 +140,7 @@ arb_harness_f: CMakeFiles/arb_harness_f.dir/rule
 # codegen rule for target.
 CMakeFiles/arb_harness_f.dir/codegen:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/arb_harness_f.dir/build.make CMakeFiles/arb_harness_f.dir/codegen
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/build/CMakeFiles --progress-num=4,5,6 "Finished codegen for target arb_harness_f"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/build/CMakeFiles --progress-num=5,6,7,8 "Finished codegen for target arb_harness_f"
 .PHONY : CMakeFiles/arb_harness_f.dir/codegen
 
 # clean rule for target.
@@ -155,12 +155,12 @@ CMakeFiles/arb_harness_f.dir/clean:
 CMakeFiles/arb_harness_ld.dir/all:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/arb_harness_ld.dir/build.make CMakeFiles/arb_harness_ld.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/arb_harness_ld.dir/build.make CMakeFiles/arb_harness_ld.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/build/CMakeFiles --progress-num=7,8,9 "Built target arb_harness_ld"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/build/CMakeFiles --progress-num=9,10,11,12 "Built target arb_harness_ld"
 .PHONY : CMakeFiles/arb_harness_ld.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/arb_harness_ld.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/build/CMakeFiles 3
+	$(CMAKE_COMMAND) -E cmake_progress_start /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/build/CMakeFiles 4
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/arb_harness_ld.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/build/CMakeFiles 0
 .PHONY : CMakeFiles/arb_harness_ld.dir/rule
@@ -172,7 +172,7 @@ arb_harness_ld: CMakeFiles/arb_harness_ld.dir/rule
 # codegen rule for target.
 CMakeFiles/arb_harness_ld.dir/codegen:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/arb_harness_ld.dir/build.make CMakeFiles/arb_harness_ld.dir/codegen
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/build/CMakeFiles --progress-num=7,8,9 "Finished codegen for target arb_harness_ld"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/build/CMakeFiles --progress-num=9,10,11,12 "Finished codegen for target arb_harness_ld"
 .PHONY : CMakeFiles/arb_harness_ld.dir/codegen
 
 # clean rule for target.

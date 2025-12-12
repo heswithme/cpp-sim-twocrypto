@@ -1,7 +1,5 @@
-// TwoCrypto pool for twocrypto_fx (templated on numeric type)
-//
-// Readability goal: mirror the structure and clarity of the Vyper implementation
-// (Twocrypto.vy), keeping function order and behavior aligned for parity.
+// TwoCrypto pool (templated on numeric type)
+// Duplicated from cpp/include/twocrypto.hpp with namespace arb::pools::twocrypto_fx
 #pragma once
 
 #include <array>
@@ -11,14 +9,13 @@
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
-
-#include "pools/twocrypto_fx/stableswap_math.hpp"
+#include "stableswap_math.hpp"
 
 namespace arb {
 namespace pools {
 namespace twocrypto_fx {
 
-// Pool-specific numeric traits
+// Pool traits for numeric types
 template <typename T>
 struct PoolTraits;
 
@@ -167,8 +164,6 @@ public:
     }
 
 private:
-    // ------------------------ Internal helpers (parity with Vyper internal) ------------------------
-
     // _xp: balances scaled to common precision with price_scale for coin1
     std::array<T, 2> _xp(
         const std::array<T, 2>& _balances,
@@ -191,20 +186,16 @@ private:
             return mid_fee;
         }
 
-        // B = sum(x)^2 / (4*x0*x1) in Vyper form transformed; we keep identical algebra
         T B = Traits::PRECISION() * N_COINS * N_COINS * xp[0] / Bsum * xp[1] / Bsum;
-
-        // fee_gamma * B / (fee_gamma * B + 1 - B)
         B = fee_gamma * B /
             (fee_gamma * B / Traits::PRECISION() + Traits::PRECISION() - B);
 
-        // Blend between mid_fee and out_fee
         return (
             mid_fee * B + out_fee * (Traits::PRECISION() - B)
         ) / Traits::PRECISION();
     }
 
-    // _xcp: cross-product invariant in xcp units (parity with Vyper virtual price math)
+    // _xcp: cross-product invariant in xcp units
     T _xcp(const T& _D, const T& price_scale) const {
         if constexpr (std::is_same_v<T, uint256>) {
             auto sqrt_price = boost::multiprecision::sqrt(
@@ -264,7 +255,6 @@ private:
             return Traits::NOISE_FEE();
         }
 
-        // balances ratio before liquidity op
         T denom = (balances[1] - amounts[1]) * precisions[1];
         T balances_ratio = Traits::ZERO();
         if (denom > Traits::ZERO()) {
@@ -316,7 +306,6 @@ public:
         cached_price_scale = tweak_price(A_gamma, xp, D);
     }
 
-    // API
     // add_liquidity: deposit into the pool; supports donation mode with cap semantics
     T add_liquidity(
         const std::array<T, 2>& amounts,
@@ -336,7 +325,7 @@ public:
         T price_scale = cached_price_scale;
         auto xp     = _xp(new_balances, price_scale);
         auto old_xp = _xp(old_balances, price_scale);
-        (void)old_xp; // maintained for parity/trace; not used below
+        (void)old_xp;
 
         auto A_gamma = std::array<T, 2>{ A, gamma };
 
@@ -355,7 +344,6 @@ public:
             T approx_fee  = _calc_token_fee(amounts, xp, donation, /*deposit=*/true);
             T d_token_fee = approx_fee * d_token / PoolTraits<T>::FEE_PRECISION();
             if constexpr (std::is_same_v<T, uint256>) {
-                // Match Vyper: add +1 after division to avoid rounding undercharge
                 d_token_fee += Traits::ONE();
             }
             d_token -= d_token_fee;
@@ -460,7 +448,7 @@ public:
         return withdrawn;
     }
 
-    // exchange: swap coin i for coin j (dx in, dy out; returns [dy_after_fee, fee, new_price_scale])
+    // exchange: swap coin i for coin j
     std::array<T, 3> exchange(
         T i,
         T j,
@@ -491,7 +479,6 @@ public:
 
         T dy_tokens = dy_xp - PoolTraits<T>::ROUNDING_UNIT_XP();
         if (idx_j > 0) {
-            // coin1 scaling
             dy_tokens = dy_tokens * Traits::PRECISION() / price_scale;
         }
         dy_tokens = dy_tokens / precisions[idx_j];
@@ -520,7 +507,7 @@ public:
         T price_oracle = cached_price_oracle;
         T price_scale  = cached_price_scale;
 
-        // EMA update (only update last_timestamp on this path)
+        // EMA update
         uint64_t last_ts = last_timestamp;
         if (last_ts < block_timestamp) {
             T dt = T(block_timestamp - last_ts);
@@ -546,7 +533,6 @@ public:
                 if (capped > 2 * price_scale) capped = 2 * price_scale;
 
                 price_oracle = capped * (T(1) - T(alpha)) + price_oracle * T(alpha);
-
             }
             cached_price_oracle = price_oracle;
             last_timestamp      = block_timestamp;
@@ -567,10 +553,12 @@ public:
         T vp = (total_supply > PoolTraits<T>::ZERO())
             ? (PoolTraits<T>::PRECISION() * xcp / total_supply)
             : PoolTraits<T>::PRECISION();
+
         xcp_profit = xcp_profit + vp - old_virtual_price;
+
         if (trace) {
             if constexpr (std::is_same_v<T, uint256>) {
-                    std::cout << "TRACE tp_ema price_oracle=" << price_oracle.template convert_to<std::string>()
+                std::cout << "TRACE tp_ema price_oracle=" << price_oracle.template convert_to<std::string>()
                           << " last_prices=" << last_prices.template convert_to<std::string>()
                           << " price_scale=" << price_scale.template convert_to<std::string>()
                           << "\n";
@@ -581,6 +569,7 @@ public:
                           << "\n";
             }
         }
+
         T threshold_vp = PoolTraits<T>::max(
             PoolTraits<T>::PRECISION(),
             (xcp_profit + PoolTraits<T>::PRECISION()) / 2
@@ -589,6 +578,7 @@ public:
         T vp_boosted = (locked_supply > PoolTraits<T>::ZERO())
             ? (PoolTraits<T>::PRECISION() * xcp / locked_supply)
             : vp;
+
         if (trace) {
             if constexpr (std::is_same_v<T, uint256>) {
                 std::cout << "TRACE tp_gating vp=" << vp.template convert_to<std::string>()
@@ -604,6 +594,7 @@ public:
                           << "\n";
             }
         }
+
         // Price adjustment path
         if ((vp_boosted > threshold_vp + allowed_extra_profit) && (last_ts < block_timestamp)) {
             T norm = price_oracle * PoolTraits<T>::PRECISION() / price_scale;
@@ -625,6 +616,7 @@ public:
                               << "\n";
                 }
             }
+
             if (norm > step) {
                 T p_new = (price_scale * (norm - step) + step * price_oracle) / norm;
 
@@ -656,7 +648,6 @@ public:
                     }
                 }
 
-                // Commit if within allowed region
                 if (trace) {
                     if constexpr (std::is_same_v<T, uint256>) {
                         std::cout << "TRACE tp_candidate p_new=" << p_new.template convert_to<std::string>()
@@ -671,6 +662,7 @@ public:
                     }
                 }
 
+                // Commit if within allowed region
                 if (new_vp > PoolTraits<T>::PRECISION() && new_vp >= threshold_vp) {
                     D = D_new;
                     virtual_price      = new_vp;
@@ -713,8 +705,7 @@ public:
         return price_scale;
     }
 
-    // ------------------------ Views ------------------------
-    // Expose unlocked donation shares (optionally protected) for observers
+    // Views
     T donation_unlocked(bool donation_protection = true) const {
         return _donation_shares(donation_protection);
     }
@@ -730,7 +721,6 @@ public:
         return last_prices;
     }
 
-    // boosted virtual price
     T get_vp_boosted() const {
         T xcp = _xcp(D, cached_price_scale);
         T donation_unlocked = _donation_shares();
@@ -738,11 +728,9 @@ public:
         return (locked_supply == Traits::ZERO()) ? Traits::PRECISION() : (PoolTraits<T>::PRECISION() * xcp / locked_supply);
     }
 
-    // ------------------------ Testing helpers ------------------------
+    // Testing helpers
     void set_block_timestamp(uint64_t ts) {
         block_timestamp = ts;
-        // Align EMA baseline at initialization to Vyper deploy semantics.
-        // Only do this before any liquidity has been added.
         if (D == Traits::ZERO() && totalSupply == Traits::ZERO()) {
             last_timestamp = ts;
         }
@@ -753,11 +741,9 @@ public:
     }
 };
 
-// Type aliases for convenience
+// Convenience aliases
 using TwoCryptoPoolI = TwoCryptoPool<uint256>;
 using TwoCryptoPoolD = TwoCryptoPool<double>;
-using TwoCryptoPoolF = TwoCryptoPool<float>;
-using TwoCryptoPoolLD = TwoCryptoPool<long double>;
 
 } // namespace twocrypto_fx
 } // namespace pools

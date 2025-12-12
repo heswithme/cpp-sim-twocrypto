@@ -3,7 +3,7 @@
 ## Goal
 Refactor `cpp/src/arb_harness.cpp` (1608 lines, monolithic) into a modular structure that:
 - Separates concerns into distinct files
-- Supports multiple numeric types (double, float, long double, uint256)
+- Supports multiple numeric types (double, float, long double)
 - Enables future pool types via folder-based isolation
 - Maintains exact output parity with the current `arb_harness`
 
@@ -63,14 +63,13 @@ cpp_modular/
 
 ## Numeric Type Strategy
 
-**Approach**: Four separate binaries (compile-time type selection via preprocessor).
+**Approach**: Three separate binaries (compile-time type selection via preprocessor).
 
 | Binary | Macro | Type |
 |--------|-------|------|
 | `arb_harness` | (default) | `double` |
 | `arb_harness_f` | `ARB_MODE_F` | `float` |
 | `arb_harness_ld` | `ARB_MODE_LD` | `long double` |
-| `arb_harness_i` | `ARB_MODE_I` | `uint256` |
 
 In `main.cpp`:
 ```cpp
@@ -78,8 +77,6 @@ In `main.cpp`:
 using RealT = float;
 #elif defined(ARB_MODE_LD)
 using RealT = long double;
-#elif defined(ARB_MODE_I)
-using RealT = stableswap::uint256;
 #else
 using RealT = double;
 #endif
@@ -98,7 +95,7 @@ Each step ends with a verification checkpoint. Human reviews before proceeding.
 ### Step 1: Skeleton + Build System
 
 **Agent actions:**
-1. Create `CMakeLists.txt` with all four targets
+1. Create `CMakeLists.txt` with all three targets
 2. Create minimal `src/main.cpp` that:
    - Includes boost/json
    - Prints "arb_harness_mod: <type>" based on compile mode
@@ -120,7 +117,7 @@ cmake --build . --target arb_harness
 # Expected output: "arb_harness_mod: float"
 ```
 
-**Checkpoint**: All four binaries build and print correct type.
+**Checkpoint**: All three binaries build and print correct type.
 
 ---
 
@@ -153,7 +150,7 @@ cd cpp_modular/build && cmake --build . --target arb_harness
 ### Step 3: Core Utilities
 
 **Agent actions:**
-1. Create `include/core/numeric_types.hpp` with `NumTraits<T>` for all 4 types
+1. Create `include/core/numeric_types.hpp` with `NumTraits<T>` for all 3 floating types
 2. Create `include/core/common.hpp` with `differs_rel<T>`, `io_mutex`
 3. Create `include/core/json_utils.hpp` with parsing helpers
 4. Update `main.cpp` to test:
@@ -167,7 +164,7 @@ cd cpp_modular/build && cmake --build . --target arb_harness
 # Expected: "differs_rel tests passed" + event loading
 ```
 
-**Checkpoint**: Core utilities work for all numeric types.
+**Checkpoint**: Core utilities work for all floating numeric types.
 
 ---
 
@@ -450,15 +447,15 @@ ARB_HARNESS_PATH=cpp_modular/build/arb_harness uv run python/arb_sim/arb_sim.py 
 
 ---
 
-### Step 18: All Numeric Types
+### Step 18: All Floating Types
 
 **Agent actions:**
-1. Build and test all four binaries
+1. Build and test all three binaries
 2. Run parity test for each
 
 **Human verification:**
 ```bash
-for bin in arb_harness arb_harness_f arb_harness_ld arb_harness_i; do
+for bin in arb_harness arb_harness_f arb_harness_ld; do
     echo "Testing $bin..."
     ./cpp_modular/build/$bin python/arb_sim/run_data/pool_config.json \
         python/arb_sim/trade_data/eurusd/eurusd-1m.json /tmp/${bin}_out.json \
@@ -467,7 +464,7 @@ done
 # Expected: All binaries produce valid output
 ```
 
-**Checkpoint**: All numeric types work.
+**Checkpoint**: All floating types work.
 
 ---
 

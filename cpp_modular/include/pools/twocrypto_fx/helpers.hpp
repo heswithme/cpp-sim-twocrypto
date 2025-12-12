@@ -1,12 +1,10 @@
-// Helper utilities for twocrypto_fx pool (templated on numeric type)
+// Helper utilities for twocrypto_fx pool
 #pragma once
 
 #include <array>
 #include <cmath>
 #include <limits>
-#include <type_traits>
 #include <utility>
-#include <boost/multiprecision/cpp_int.hpp>
 
 #include "pools/twocrypto_fx/stableswap_math.hpp"
 #include "pools/twocrypto_fx/twocrypto.hpp"
@@ -58,10 +56,11 @@ inline T dyn_fee(
     const T& fee_gamma
 ) {
     const T Bsum = xp[0] + xp[1];
-    if (Bsum == PoolTraits<T>::ZERO()) {
+    if (!(Bsum > T(0))) {
         return mid_fee;
     }
 
+    // Matches the pool's internal _fee formula; for floating types PRECISION() == 1.
     T B = PoolTraits<T>::PRECISION() * PoolT<T>::N_COINS * PoolT<T>::N_COINS * xp[0] / Bsum * xp[1] / Bsum;
     B = fee_gamma * B /
         (fee_gamma * B / PoolTraits<T>::PRECISION() + PoolTraits<T>::PRECISION() - B);
@@ -78,20 +77,19 @@ inline std::pair<T, T> post_trade_price_and_fee(
     size_t j,
     T dx
 ) {
-    using Ops = MathOps<T>;
     const T ps = pool.cached_price_scale;
 
     auto balances_local = pool.balances;
     balances_local[i] += dx;
     auto xp = pool_xp_from(pool, balances_local, ps);
 
-    auto y_out = Ops::get_y(pool.A, pool.gamma, xp, pool.D, j);
+    auto y_out = MathOps<T>::get_y(pool.A, pool.gamma, xp, pool.D, j);
     T dy_xp = xp[j] - y_out.value;
     xp[j] -= dy_xp;
 
     const T fee_pool = dyn_fee(xp, pool.mid_fee, pool.out_fee, pool.fee_gamma);
-    const T D_new = Ops::newton_D(pool.A, pool.gamma, xp, T(0));
-    const T p_new = Ops::get_p(xp, D_new, {pool.A, pool.gamma}) * ps / PoolTraits<T>::PRECISION();
+    const T D_new = MathOps<T>::newton_D(pool.A, pool.gamma, xp, T(0));
+    const T p_new = MathOps<T>::get_p(xp, D_new, {pool.A, pool.gamma}) * ps / PoolTraits<T>::PRECISION();
 
     return {p_new, fee_pool};
 }
@@ -101,63 +99,59 @@ inline std::pair<T, T> post_trade_price_and_fee(
 // -----------------------------------------------------------------------------
 template <typename T>
 inline bool instantaneous_dr(const PoolT<T>& pool, T& out_d, T& out_r) {
-    // This metric is not meaningful for uint256 path; skip.
-    if constexpr (std::is_same_v<T, boost::multiprecision::uint256_t>) {
-        (void)pool; (void)out_d; (void)out_r;
-        return false;
-    } else {
-        using Ops = MathOps<T>;
-        const auto xp_now = pool_xp_current(pool);
-        const T p_now = Ops::get_p(xp_now, pool.D, {pool.A, pool.gamma}) * pool.cached_price_scale;
-        const T x_b   = pool.balances[1];
-        if (!(p_now > T(0)) || !(x_b > T(0))) return false;
+    const auto xp_now = pool_xp_current(pool);
+    const T p_now = MathOps<T>::get_p(xp_now, pool.D, {pool.A, pool.gamma}) * pool.cached_price_scale;
+    const T x_b   = pool.balances[1];
+    if (!(p_now > T(0)) || !(x_b > T(0))) return false;
 
-        T eps = static_cast<T>(1e-6);
-        for (int attempt = 0; attempt < 3; ++attempt) {
-            const T dx_tokens = std::max(eps * x_b, std::numeric_limits<T>::min());
-            auto pr = post_trade_price_and_fee(pool, /*i=*/1, /*j=*/0, dx_tokens);
-            const T p_new = pr.first;
-            const T p_avg = (p_now + p_new) / static_cast<T>(2);
-            const T dp_abs = std::fabs(static_cast<double>(p_new - p_now));
-            if (p_avg > T(0) && dp_abs > T(0)) {
-                const T rel = static_cast<T>(dp_abs / static_cast<double>(p_avg));
-                const T d = (dx_tokens / x_b) / rel;
-                if (d > T(0) && std::isfinite(static_cast<double>(d))) {
-                    out_d = d;
-                    out_r = static_cast<T>(1) / d;
-                    return true;
-                }
+    T eps = static_cast<T>(1e-6);
+    for (int attempt = 0; attempt < 3; ++attempt) {
+        const T dx_tokens = std::max(eps * x_b, std::numeric_limits<T>::min());
+        auto pr = post_trade_price_and_fee(pool, /*i=*/1, /*j=*/0, dx_tokens);
+        const T p_new = pr.first;
+        const T p_avg = (p_now + p_new) / static_cast<T>(2);
+        const T dp_abs = std::abs(p_new - p_now);
+        if (p_avg > T(0) && dp_abs > T(0)) {
+            const T rel = dp_abs / p_avg;
+            const T d = (dx_tokens / x_b) / rel;
+            if (d > T(0) && std::isfinite(static_cast<double>(d))) {
+                out_d = d;
+                out_r = static_cast<T>(1) / d;
+                return true;
             }
-            eps *= static_cast<T>(10);
         }
-        return false;
+        eps *= static_cast<T>(10);
     }
+    return false;
 }
 
 template <typename T>
 inline T balance_indicator(const PoolT<T>& pool) {
     const T ps = pool.cached_price_scale;
     const auto xp = pool_xp_from(pool, pool.balances, ps);
-    const T denom = (xp[0] + xp[1]);
-    if (denom == PoolTraits<T>::ZERO()) {
-        return PoolTraits<T>::ZERO();
+    const T denom = xp[0] + xp[1];
+    if (!(denom > T(0))) {
+        return T(0);
     }
-    return PoolTraits<T>::PRECISION() * T(4) * xp[0] * xp[1] / (denom * denom) / PoolTraits<T>::PRECISION();
+    return static_cast<T>(4) * xp[0] * xp[1] / (denom * denom);
 }
 
 template <typename T>
-inline T true_growth(const PoolT<T>& pool, T price_ref = T(-1)) {
+inline T true_growth(const PoolT<T>& pool, T price_ref = static_cast<T>(-1)) {
     const T price_in = (price_ref > T(0)) ? price_ref : pool.cached_price_scale;
     const auto xp = pool_xp_from(pool, pool.balances, price_in);
     const T product = xp[0] * xp[1];
-    if (product <= PoolTraits<T>::ZERO()) {
-        return PoolTraits<T>::ZERO();
-    }
-    if constexpr (std::is_same_v<T, boost::multiprecision::uint256_t>) {
-        return boost::multiprecision::sqrt(product);
-    } else {
-        return std::sqrt(product);
-    }
+    return (product > T(0)) ? std::sqrt(product) : T(0);
+}
+
+// Standalone version without pool object (for end-state metrics)
+// For floating types, precisions are 1.0
+template <typename T>
+inline T true_growth_from_balances(const std::array<T, 2>& balances, const T& price_scale) {
+    const T xp0 = balances[0];
+    const T xp1 = balances[1] * price_scale;
+    const T product = xp0 * xp1;
+    return (product > T(0)) ? std::sqrt(product) : T(0);
 }
 
 // -----------------------------------------------------------------------------
@@ -170,13 +164,13 @@ inline std::pair<T, T> simulate_exchange_once(
     size_t j,
     T dx
 ) {
-    using Ops = MathOps<T>;
     const T ps = pool.cached_price_scale;
 
     auto balances_local = pool.balances;
     balances_local[i] += dx;
     auto xp = pool_xp_from(pool, balances_local, ps);
-    auto y_out = Ops::get_y(pool.A, pool.gamma, xp, pool.D, j);
+
+    auto y_out = MathOps<T>::get_y(pool.A, pool.gamma, xp, pool.D, j);
     T dy_xp = xp[j] - y_out.value;
     xp[j] -= dy_xp;
 
