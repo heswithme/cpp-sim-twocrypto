@@ -39,6 +39,10 @@ struct PoolInit {
     
     // Pool identifier (optional)
     std::string tag;
+    
+    // Echo back original JSON for params block (optional)
+    boost::json::object echo_pool{};
+    boost::json::object echo_costs{};
 };
 
 // JSON parsing helpers
@@ -94,6 +98,9 @@ void parse_pool_entry(
         ? entry.at("pool").as_object() 
         : entry;
     
+    // Store raw JSON for echo
+    out_pool.echo_pool = pool;
+    
     // Tag
     if (auto* v = entry.if_contains("tag")) {
         if (v->is_string()) out_pool.tag = v->as_string().c_str();
@@ -133,6 +140,7 @@ void parse_pool_entry(
     // Costs (optional nested object)
     if (auto* c = entry.if_contains("costs")) {
         const auto& co = c->as_object();
+        out_pool.echo_costs = co;  // Store raw costs JSON for echo
         if (auto* v = co.if_contains("arb_fee_bps")) out_costs.arb_fee_bps = parse_plain_real<T>(*v);
         if (auto* v = co.if_contains("gas_coin0")) out_costs.gas_coin0 = parse_plain_real<T>(*v);
         if (auto* v = co.if_contains("use_volume_cap")) out_costs.use_volume_cap = v->as_bool();

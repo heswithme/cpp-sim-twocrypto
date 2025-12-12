@@ -3,6 +3,7 @@
 
 #include <cstdint>
 #include <array>
+#include <optional>
 
 #include "core/common.hpp"
 #include "harness/metrics.hpp"
@@ -37,17 +38,27 @@ inline T coin0_equiv(T amt0, T amt1, T ps) {
     return amt0 + amt1 * ps;
 }
 
+// Result from a donation attempt (for action recording)
+template <typename T>
+struct DonationResult {
+    bool success{false};
+    uint64_t ts_due{0};
+    std::array<T, 2> amounts{T(0), T(0)};
+    T price_scale{0};
+};
+
 // Try to donate one period's worth if due.
 // Advances schedule by exactly one period (no catch-up for missed periods).
-// Updates metrics on success.
+// Updates metrics on success, returns donation info for action recording.
 template <typename T, typename Pool>
-void make_donation(
+DonationResult<T> make_donation_ex(
     Pool& pool,
     DonationCfg<T>& cfg,
     uint64_t ev_ts,
     Metrics<T>& m
 ) {
-    if (!cfg.enabled || cfg.next_ts == 0 || ev_ts < cfg.next_ts) return;
+    DonationResult<T> result;
+    if (!cfg.enabled || cfg.next_ts == 0 || ev_ts < cfg.next_ts) return result;
 
     // Compute one-period donation from current TVL
     constexpr T SEC_PER_YEAR = static_cast<T>(365.0 * 86400.0);
@@ -73,12 +84,31 @@ void make_donation(
         m.donation_amounts_total[1] += amt1;
         m.donation_coin0_total += coin0_equiv(amt0, amt1, ps_before);
         
+        result.success = true;
+        result.ts_due = ts_due;
+        result.amounts = {amt0, amt1};
+        result.price_scale = ps_before;
+        
     } catch (...) {
         // Ignore failed donation (e.g., donation cap exceeded)
     }
 
     // Advance schedule by exactly one period (no catch-up)
     cfg.next_ts = ts_due + cfg.freq_s;
+    return result;
+}
+
+// Try to donate one period's worth if due.
+// Advances schedule by exactly one period (no catch-up for missed periods).
+// Updates metrics on success.
+template <typename T, typename Pool>
+void make_donation(
+    Pool& pool,
+    DonationCfg<T>& cfg,
+    uint64_t ev_ts,
+    Metrics<T>& m
+) {
+    (void)make_donation_ex(pool, cfg, ev_ts, m);
 }
 
 } // namespace harness

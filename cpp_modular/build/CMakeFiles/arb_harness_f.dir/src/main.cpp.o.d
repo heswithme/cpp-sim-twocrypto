@@ -815,21 +815,10 @@ CMakeFiles/arb_harness_f.dir/src/main.cpp.o: \
   /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/core/common.hpp \
   /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/events/types.hpp \
   /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/harness/metrics.hpp \
-  /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/harness/donation.hpp \
-  /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/harness/idle_tick.hpp \
-  /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/harness/user_swap.hpp \
-  /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/harness/event_loop.hpp \
-  /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/trading/costs.hpp \
-  /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/trading/decision.hpp \
-  /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/trading/arbitrageur.hpp \
-  /opt/homebrew/include/boost/math/tools/roots.hpp \
-  /opt/homebrew/include/boost/math/tools/config.hpp \
-  /opt/homebrew/include/boost/math/tools/is_standalone.hpp \
+  /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/harness/actions.hpp \
+  /opt/homebrew/include/boost/json.hpp \
+  /opt/homebrew/include/boost/json/detail/config.hpp \
   /opt/homebrew/include/boost/config.hpp \
-  /opt/homebrew/include/boost/assert.hpp \
-  /opt/homebrew/include/boost/lexical_cast.hpp \
-  /opt/homebrew/include/boost/throw_exception.hpp \
-  /opt/homebrew/include/boost/predef/other/endian.h \
   /opt/homebrew/include/boost/config/user.hpp \
   /opt/homebrew/include/boost/config/detail/select_compiler_config.hpp \
   /opt/homebrew/include/boost/config/compiler/clang.hpp \
@@ -854,225 +843,17 @@ CMakeFiles/arb_harness_f.dir/src/main.cpp.o: \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/execution \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/filesystem \
   /opt/homebrew/include/boost/config/detail/cxx_composite.hpp \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/cfloat \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/float.h \
-  /Library/Developer/CommandLineTools/usr/lib/clang/17/include/float.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/float.h \
-  /opt/homebrew/include/boost/math/tools/user.hpp \
-  /opt/homebrew/include/boost/math/tools/complex.hpp \
-  /opt/homebrew/include/boost/math/tools/is_detected.hpp \
-  /opt/homebrew/include/boost/math/tools/type_traits.hpp \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/complex \
-  /opt/homebrew/include/boost/math/tools/cstdint.hpp \
-  /opt/homebrew/include/boost/math/tools/numeric_limits.hpp \
-  /opt/homebrew/include/boost/math/tools/tuple.hpp \
-  /opt/homebrew/include/boost/math/special_functions/sign.hpp \
-  /opt/homebrew/include/boost/math/special_functions/math_fwd.hpp \
-  /opt/homebrew/include/boost/math/tools/promotion.hpp \
-  /opt/homebrew/include/boost/math/policies/policy.hpp \
-  /opt/homebrew/include/boost/math/tools/mp.hpp \
-  /opt/homebrew/include/boost/math/special_functions/detail/round_fwd.hpp \
-  /opt/homebrew/include/boost/math/special_functions/detail/fp_traits.hpp \
-  /opt/homebrew/include/boost/math/tools/assert.hpp \
+  /opt/homebrew/include/boost/config/pragma_message.hpp \
+  /opt/homebrew/include/boost/assert.hpp \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/assert.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/_static_assert.h \
   /opt/homebrew/include/boost/static_assert.hpp \
   /opt/homebrew/include/boost/detail/workaround.hpp \
   /opt/homebrew/include/boost/config/workaround.hpp \
-  /opt/homebrew/include/boost/predef/version_number.h \
-  /opt/homebrew/include/boost/predef/make.h \
-  /opt/homebrew/include/boost/predef/detail/test.h \
-  /opt/homebrew/include/boost/predef/library/c/gnu.h \
-  /opt/homebrew/include/boost/predef/library/c/_prefix.h \
-  /opt/homebrew/include/boost/predef/detail/_cassert.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/cassert \
-  /opt/homebrew/include/boost/predef/os/macos.h \
-  /opt/homebrew/include/boost/predef/os/ios.h \
-  /opt/homebrew/include/boost/predef/detail/os_detected.h \
-  /opt/homebrew/include/boost/predef/os/bsd.h \
-  /opt/homebrew/include/boost/predef/os/bsd/bsdi.h \
-  /opt/homebrew/include/boost/predef/os/bsd/dragonfly.h \
-  /opt/homebrew/include/boost/predef/os/bsd/free.h \
-  /opt/homebrew/include/boost/predef/os/bsd/open.h \
-  /opt/homebrew/include/boost/predef/os/bsd/net.h \
-  /opt/homebrew/include/boost/predef/platform/android.h \
-  /opt/homebrew/include/boost/math/policies/error_handling.hpp \
-  /opt/homebrew/include/boost/math/tools/precision.hpp \
-  /opt/homebrew/include/boost/math/tools/throw_exception.hpp \
+  /opt/homebrew/include/boost/throw_exception.hpp \
   /opt/homebrew/include/boost/exception/exception.hpp \
   /opt/homebrew/include/boost/assert/source_location.hpp \
   /opt/homebrew/include/boost/cstdint.hpp \
-  /opt/homebrew/include/boost/math/special_functions/next.hpp \
-  /opt/homebrew/include/boost/math/special_functions/fpclassify.hpp \
-  /opt/homebrew/include/boost/math/tools/real_cast.hpp \
-  /opt/homebrew/include/boost/math/special_functions/trunc.hpp \
-  /opt/homebrew/include/boost/math/ccmath/detail/config.hpp \
-  /opt/homebrew/include/boost/math/tools/is_constant_evaluated.hpp \
-  /opt/homebrew/include/boost/math/ccmath/ldexp.hpp \
-  /opt/homebrew/include/boost/math/ccmath/abs.hpp \
-  /opt/homebrew/include/boost/math/ccmath/isnan.hpp \
-  /opt/homebrew/include/boost/math/ccmath/isinf.hpp \
-  /opt/homebrew/include/boost/math/tools/traits.hpp \
-  /opt/homebrew/include/boost/math/tools/toms748_solve.hpp \
-  /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/pools/twocrypto_fx/helpers.hpp \
-  /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/pools/twocrypto_fx/stableswap_math.hpp \
-  /opt/homebrew/include/boost/multiprecision/cpp_int.hpp \
-  /opt/homebrew/include/boost/multiprecision/detail/standalone_config.hpp \
-  /opt/homebrew/include/boost/integer.hpp \
-  /opt/homebrew/include/boost/integer_fwd.hpp \
-  /opt/homebrew/include/boost/limits.hpp \
-  /opt/homebrew/include/boost/integer_traits.hpp \
-  /opt/homebrew/include/boost/multiprecision/detail/endian.hpp \
-  /opt/homebrew/include/boost/multiprecision/number.hpp \
-  /opt/homebrew/include/boost/multiprecision/detail/precision.hpp \
-  /opt/homebrew/include/boost/multiprecision/traits/is_variable_precision.hpp \
-  /opt/homebrew/include/boost/multiprecision/detail/number_base.hpp \
-  /opt/homebrew/include/boost/multiprecision/fwd.hpp \
-  /opt/homebrew/include/boost/multiprecision/cpp_int/cpp_int_config.hpp \
-  /opt/homebrew/include/boost/multiprecision/detail/assert.hpp \
-  /opt/homebrew/include/boost/multiprecision/traits/transcendental_reduction_type.hpp \
-  /opt/homebrew/include/boost/multiprecision/traits/std_integer_traits.hpp \
-  /opt/homebrew/include/boost/multiprecision/detail/no_exceptions_support.hpp \
-  /opt/homebrew/include/boost/core/no_exceptions_support.hpp \
-  /opt/homebrew/include/boost/lexical_cast/detail/buffer_view.hpp \
-  /opt/homebrew/include/boost/lexical_cast/bad_lexical_cast.hpp \
-  /opt/homebrew/include/boost/lexical_cast/try_lexical_convert.hpp \
-  /opt/homebrew/include/boost/type_traits/conditional.hpp \
-  /opt/homebrew/include/boost/type_traits/is_arithmetic.hpp \
-  /opt/homebrew/include/boost/type_traits/is_integral.hpp \
-  /opt/homebrew/include/boost/type_traits/integral_constant.hpp \
-  /opt/homebrew/include/boost/type_traits/is_floating_point.hpp \
-  /opt/homebrew/include/boost/lexical_cast/detail/is_character.hpp \
-  /opt/homebrew/include/boost/type_traits/is_same.hpp \
-  /opt/homebrew/include/boost/lexical_cast/detail/converter_numeric.hpp \
-  /opt/homebrew/include/boost/core/cmath.hpp \
-  /opt/homebrew/include/boost/core/enable_if.hpp \
-  /opt/homebrew/include/boost/type_traits/type_identity.hpp \
-  /opt/homebrew/include/boost/type_traits/make_unsigned.hpp \
-  /opt/homebrew/include/boost/type_traits/is_signed.hpp \
-  /opt/homebrew/include/boost/type_traits/remove_cv.hpp \
-  /opt/homebrew/include/boost/type_traits/is_enum.hpp \
-  /opt/homebrew/include/boost/type_traits/intrinsics.hpp \
-  /opt/homebrew/include/boost/type_traits/detail/config.hpp \
-  /opt/homebrew/include/boost/version.hpp \
-  /opt/homebrew/include/boost/type_traits/is_unsigned.hpp \
-  /opt/homebrew/include/boost/type_traits/is_const.hpp \
-  /opt/homebrew/include/boost/type_traits/is_volatile.hpp \
-  /opt/homebrew/include/boost/type_traits/add_const.hpp \
-  /opt/homebrew/include/boost/type_traits/add_volatile.hpp \
-  /opt/homebrew/include/boost/type_traits/is_float.hpp \
-  /opt/homebrew/include/boost/lexical_cast/detail/converter_lexical.hpp \
-  /opt/homebrew/include/boost/detail/lcast_precision.hpp \
-  /opt/homebrew/include/boost/lexical_cast/detail/widest_char.hpp \
-  /opt/homebrew/include/boost/container/container_fwd.hpp \
-  /opt/homebrew/include/boost/container/detail/workaround.hpp \
-  /opt/homebrew/include/boost/container/detail/std_fwd.hpp \
-  /opt/homebrew/include/boost/move/detail/std_ns_begin.hpp \
-  /opt/homebrew/include/boost/move/detail/std_ns_end.hpp \
-  /opt/homebrew/include/boost/lexical_cast/detail/converter_lexical_streams.hpp \
-  /opt/homebrew/include/boost/type_traits/is_pointer.hpp \
-  /opt/homebrew/include/boost/core/snprintf.hpp \
-  /opt/homebrew/include/boost/lexical_cast/detail/lcast_char_constants.hpp \
-  /opt/homebrew/include/boost/lexical_cast/detail/lcast_unsigned_converters.hpp \
-  /opt/homebrew/include/boost/core/noncopyable.hpp \
-  /opt/homebrew/include/boost/lexical_cast/detail/lcast_basic_unlockedbuf.hpp \
-  /opt/homebrew/include/boost/detail/basic_pointerbuf.hpp \
-  /opt/homebrew/include/boost/lexical_cast/detail/inf_nan.hpp \
-  /opt/homebrew/include/boost/type_traits/is_reference.hpp \
-  /opt/homebrew/include/boost/type_traits/is_lvalue_reference.hpp \
-  /opt/homebrew/include/boost/type_traits/is_rvalue_reference.hpp \
-  /opt/homebrew/include/boost/core/nvp.hpp \
-  /opt/homebrew/include/boost/core/addressof.hpp \
-  /opt/homebrew/include/boost/multiprecision/detail/check_cpp11_config.hpp \
-  /opt/homebrew/include/boost/multiprecision/detail/digits.hpp \
-  /opt/homebrew/include/boost/multiprecision/detail/generic_interconvert.hpp \
-  /opt/homebrew/include/boost/multiprecision/detail/default_ops.hpp \
-  /opt/homebrew/include/boost/multiprecision/traits/is_backend.hpp \
-  /opt/homebrew/include/boost/multiprecision/detail/fpclassify.hpp \
-  /opt/homebrew/include/boost/multiprecision/detail/float128_functions.hpp \
-  /opt/homebrew/include/boost/cstdfloat.hpp \
-  /opt/homebrew/include/boost/math/cstdfloat/cstdfloat_types.hpp \
-  /opt/homebrew/include/boost/math/cstdfloat/cstdfloat_limits.hpp \
-  /opt/homebrew/include/boost/math/cstdfloat/cstdfloat_cmath.hpp \
-  /opt/homebrew/include/boost/math/cstdfloat/cstdfloat_iostream.hpp \
-  /opt/homebrew/include/boost/math/cstdfloat/cstdfloat_complex.hpp \
-  /opt/homebrew/include/boost/math/special_functions/hypot.hpp \
-  /opt/homebrew/include/boost/multiprecision/detail/functions/constants.hpp \
-  /opt/homebrew/include/boost/multiprecision/detail/functions/pow.hpp \
-  /opt/homebrew/include/boost/multiprecision/detail/functions/trig.hpp \
-  /opt/homebrew/include/boost/multiprecision/detail/no_et_ops.hpp \
-  /opt/homebrew/include/boost/multiprecision/detail/et_ops.hpp \
-  /opt/homebrew/include/boost/multiprecision/detail/min_max.hpp \
-  /opt/homebrew/include/boost/multiprecision/detail/functions/trunc.hpp \
-  /opt/homebrew/include/boost/multiprecision/detail/number_compare.hpp \
-  /opt/homebrew/include/boost/multiprecision/traits/is_restricted_conversion.hpp \
-  /opt/homebrew/include/boost/multiprecision/traits/explicit_conversion.hpp \
-  /opt/homebrew/include/boost/multiprecision/traits/is_complex.hpp \
-  /opt/homebrew/include/boost/multiprecision/traits/is_convertible_arithmetic.hpp \
-  /opt/homebrew/include/boost/multiprecision/detail/hash.hpp \
-  /opt/homebrew/include/boost/multiprecision/detail/ublas_interop.hpp \
-  /opt/homebrew/include/boost/multiprecision/detail/integer_ops.hpp \
-  /opt/homebrew/include/boost/multiprecision/detail/rebind.hpp \
-  /opt/homebrew/include/boost/multiprecision/rational_adaptor.hpp \
-  /opt/homebrew/include/boost/multiprecision/traits/is_byte_container.hpp \
-  /opt/homebrew/include/boost/multiprecision/cpp_int/checked.hpp \
-  /opt/homebrew/include/boost/multiprecision/detail/constexpr.hpp \
-  /opt/homebrew/include/boost/multiprecision/cpp_int/value_pack.hpp \
-  /opt/homebrew/include/boost/multiprecision/detail/empty_value.hpp \
-  /opt/homebrew/include/boost/multiprecision/cpp_int/limits.hpp \
-  /opt/homebrew/include/boost/multiprecision/traits/max_digits10.hpp \
-  /opt/homebrew/include/boost/multiprecision/cpp_int/comparison.hpp \
-  /opt/homebrew/include/boost/multiprecision/cpp_int/add.hpp \
-  /opt/homebrew/include/boost/multiprecision/cpp_int/add_unsigned.hpp \
-  /opt/homebrew/include/boost/multiprecision/cpp_int/intel_intrinsics.hpp \
-  /Library/Developer/CommandLineTools/usr/lib/clang/17/include/immintrin.h \
-  /opt/homebrew/include/boost/multiprecision/cpp_int/multiply.hpp \
-  /opt/homebrew/include/boost/multiprecision/integer.hpp \
-  /opt/homebrew/include/boost/multiprecision/detail/bitscan.hpp \
-  /opt/homebrew/include/boost/multiprecision/cpp_int/divide.hpp \
-  /opt/homebrew/include/boost/multiprecision/cpp_int/bitwise.hpp \
-  /opt/homebrew/include/boost/multiprecision/cpp_int/misc.hpp \
-  /opt/homebrew/include/boost/integer/common_factor_rt.hpp \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/numeric \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__numeric/accumulate.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__numeric/adjacent_difference.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__numeric/inner_product.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__numeric/iota.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__numeric/partial_sum.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__numeric/exclusive_scan.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__numeric/gcd_lcm.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__numeric/inclusive_scan.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__numeric/pstl.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__numeric/reduce.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__numeric/transform_exclusive_scan.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__numeric/transform_inclusive_scan.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__numeric/transform_reduce.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__type_traits/is_execution_policy.h \
-  /opt/homebrew/include/boost/multiprecision/cpp_int/literals.hpp \
-  /opt/homebrew/include/boost/multiprecision/cpp_int/serialize.hpp \
-  /opt/homebrew/include/boost/multiprecision/cpp_int/import_export.hpp \
-  /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/pools/twocrypto_fx/twocrypto.hpp \
-  /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/pools/config.hpp \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/fstream \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__filesystem/copy_options.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__filesystem/directory_entry.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__filesystem/file_status.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__filesystem/file_type.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__filesystem/perms.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__filesystem/file_time_type.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__filesystem/filesystem_error.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__filesystem/path.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__filesystem/operations.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__filesystem/perm_options.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__filesystem/space_info.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__filesystem/directory_iterator.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__filesystem/directory_options.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__filesystem/path_iterator.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__filesystem/recursive_directory_iterator.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__filesystem/u8path.h \
-  /opt/homebrew/include/boost/json.hpp \
-  /opt/homebrew/include/boost/json/detail/config.hpp \
-  /opt/homebrew/include/boost/config/pragma_message.hpp \
   /opt/homebrew/include/boost/json/detail/gdb_printers.hpp \
   /opt/homebrew/include/boost/json/array.hpp \
   /opt/homebrew/include/boost/json/detail/array.hpp \
@@ -1084,12 +865,18 @@ CMakeFiles/arb_harness_f.dir/src/main.cpp.o: \
   /opt/homebrew/include/boost/move/detail/meta_utils.hpp \
   /opt/homebrew/include/boost/move/detail/meta_utils_core.hpp \
   /opt/homebrew/include/boost/move/detail/addressof.hpp \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/cassert \
   /opt/homebrew/include/boost/move/detail/config_end.hpp \
   /opt/homebrew/include/boost/move/utility_core.hpp \
   /opt/homebrew/include/boost/move/core.hpp \
   /opt/homebrew/include/boost/container/detail/dispatch_uses_allocator.hpp \
   /opt/homebrew/include/boost/container/detail/config_begin.hpp \
+  /opt/homebrew/include/boost/container/detail/workaround.hpp \
   /opt/homebrew/include/boost/container/allocator_traits.hpp \
+  /opt/homebrew/include/boost/container/container_fwd.hpp \
+  /opt/homebrew/include/boost/container/detail/std_fwd.hpp \
+  /opt/homebrew/include/boost/move/detail/std_ns_begin.hpp \
+  /opt/homebrew/include/boost/move/detail/std_ns_end.hpp \
   /opt/homebrew/include/boost/container/detail/mpl.hpp \
   /opt/homebrew/include/boost/intrusive/detail/mpl.hpp \
   /opt/homebrew/include/boost/intrusive/detail/config_begin.hpp \
@@ -1119,6 +906,7 @@ CMakeFiles/arb_harness_f.dir/src/main.cpp.o: \
   /opt/homebrew/include/boost/json/kind.hpp \
   /opt/homebrew/include/boost/json/string_view.hpp \
   /opt/homebrew/include/boost/core/detail/string_view.hpp \
+  /opt/homebrew/include/boost/core/enable_if.hpp \
   /opt/homebrew/include/boost/core/detail/is_same.hpp \
   /opt/homebrew/include/boost/json/pilfer.hpp \
   /opt/homebrew/include/boost/system/result.hpp \
@@ -1242,6 +1030,10 @@ CMakeFiles/arb_harness_f.dir/src/main.cpp.o: \
   /opt/homebrew/include/boost/json/detail/buffer.hpp \
   /opt/homebrew/include/boost/json/detail/charconv/from_chars.hpp \
   /opt/homebrew/include/boost/json/detail/charconv/detail/config.hpp \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/cfloat \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/float.h \
+  /Library/Developer/CommandLineTools/usr/lib/clang/17/include/float.h \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/float.h \
   /opt/homebrew/include/boost/json/detail/charconv/detail/from_chars_result.hpp \
   /opt/homebrew/include/boost/json/detail/charconv/chars_format.hpp \
   /opt/homebrew/include/boost/json/detail/sse2.hpp \
@@ -1265,6 +1057,215 @@ CMakeFiles/arb_harness_f.dir/src/main.cpp.o: \
   /opt/homebrew/include/boost/json/detail/value_to.hpp \
   /opt/homebrew/include/boost/json/visit.hpp \
   /opt/homebrew/include/boost/json/impl/visit.hpp \
+  /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/harness/donation.hpp \
+  /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/harness/idle_tick.hpp \
+  /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/harness/user_swap.hpp \
+  /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/harness/event_loop.hpp \
+  /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/trading/costs.hpp \
+  /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/trading/decision.hpp \
+  /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/trading/arbitrageur.hpp \
+  /opt/homebrew/include/boost/math/tools/roots.hpp \
+  /opt/homebrew/include/boost/math/tools/config.hpp \
+  /opt/homebrew/include/boost/math/tools/is_standalone.hpp \
+  /opt/homebrew/include/boost/lexical_cast.hpp \
+  /opt/homebrew/include/boost/predef/other/endian.h \
+  /opt/homebrew/include/boost/math/tools/user.hpp \
+  /opt/homebrew/include/boost/math/tools/complex.hpp \
+  /opt/homebrew/include/boost/math/tools/is_detected.hpp \
+  /opt/homebrew/include/boost/math/tools/type_traits.hpp \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/complex \
+  /opt/homebrew/include/boost/math/tools/cstdint.hpp \
+  /opt/homebrew/include/boost/math/tools/numeric_limits.hpp \
+  /opt/homebrew/include/boost/math/tools/tuple.hpp \
+  /opt/homebrew/include/boost/math/special_functions/sign.hpp \
+  /opt/homebrew/include/boost/math/special_functions/math_fwd.hpp \
+  /opt/homebrew/include/boost/math/tools/promotion.hpp \
+  /opt/homebrew/include/boost/math/policies/policy.hpp \
+  /opt/homebrew/include/boost/math/tools/mp.hpp \
+  /opt/homebrew/include/boost/math/special_functions/detail/round_fwd.hpp \
+  /opt/homebrew/include/boost/math/special_functions/detail/fp_traits.hpp \
+  /opt/homebrew/include/boost/math/tools/assert.hpp \
+  /opt/homebrew/include/boost/predef/version_number.h \
+  /opt/homebrew/include/boost/predef/make.h \
+  /opt/homebrew/include/boost/predef/detail/test.h \
+  /opt/homebrew/include/boost/predef/library/c/gnu.h \
+  /opt/homebrew/include/boost/predef/library/c/_prefix.h \
+  /opt/homebrew/include/boost/predef/detail/_cassert.h \
+  /opt/homebrew/include/boost/predef/os/macos.h \
+  /opt/homebrew/include/boost/predef/os/ios.h \
+  /opt/homebrew/include/boost/predef/detail/os_detected.h \
+  /opt/homebrew/include/boost/predef/os/bsd.h \
+  /opt/homebrew/include/boost/predef/os/bsd/bsdi.h \
+  /opt/homebrew/include/boost/predef/os/bsd/dragonfly.h \
+  /opt/homebrew/include/boost/predef/os/bsd/free.h \
+  /opt/homebrew/include/boost/predef/os/bsd/open.h \
+  /opt/homebrew/include/boost/predef/os/bsd/net.h \
+  /opt/homebrew/include/boost/predef/platform/android.h \
+  /opt/homebrew/include/boost/math/policies/error_handling.hpp \
+  /opt/homebrew/include/boost/math/tools/precision.hpp \
+  /opt/homebrew/include/boost/math/tools/throw_exception.hpp \
+  /opt/homebrew/include/boost/math/special_functions/next.hpp \
+  /opt/homebrew/include/boost/math/special_functions/fpclassify.hpp \
+  /opt/homebrew/include/boost/math/tools/real_cast.hpp \
+  /opt/homebrew/include/boost/math/special_functions/trunc.hpp \
+  /opt/homebrew/include/boost/math/ccmath/detail/config.hpp \
+  /opt/homebrew/include/boost/math/tools/is_constant_evaluated.hpp \
+  /opt/homebrew/include/boost/math/ccmath/ldexp.hpp \
+  /opt/homebrew/include/boost/math/ccmath/abs.hpp \
+  /opt/homebrew/include/boost/math/ccmath/isnan.hpp \
+  /opt/homebrew/include/boost/math/ccmath/isinf.hpp \
+  /opt/homebrew/include/boost/math/tools/traits.hpp \
+  /opt/homebrew/include/boost/math/tools/toms748_solve.hpp \
+  /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/pools/twocrypto_fx/helpers.hpp \
+  /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/pools/twocrypto_fx/stableswap_math.hpp \
+  /opt/homebrew/include/boost/multiprecision/cpp_int.hpp \
+  /opt/homebrew/include/boost/multiprecision/detail/standalone_config.hpp \
+  /opt/homebrew/include/boost/integer.hpp \
+  /opt/homebrew/include/boost/integer_fwd.hpp \
+  /opt/homebrew/include/boost/limits.hpp \
+  /opt/homebrew/include/boost/integer_traits.hpp \
+  /opt/homebrew/include/boost/multiprecision/detail/endian.hpp \
+  /opt/homebrew/include/boost/multiprecision/number.hpp \
+  /opt/homebrew/include/boost/multiprecision/detail/precision.hpp \
+  /opt/homebrew/include/boost/multiprecision/traits/is_variable_precision.hpp \
+  /opt/homebrew/include/boost/multiprecision/detail/number_base.hpp \
+  /opt/homebrew/include/boost/multiprecision/fwd.hpp \
+  /opt/homebrew/include/boost/multiprecision/cpp_int/cpp_int_config.hpp \
+  /opt/homebrew/include/boost/multiprecision/detail/assert.hpp \
+  /opt/homebrew/include/boost/multiprecision/traits/transcendental_reduction_type.hpp \
+  /opt/homebrew/include/boost/multiprecision/traits/std_integer_traits.hpp \
+  /opt/homebrew/include/boost/multiprecision/detail/no_exceptions_support.hpp \
+  /opt/homebrew/include/boost/core/no_exceptions_support.hpp \
+  /opt/homebrew/include/boost/lexical_cast/detail/buffer_view.hpp \
+  /opt/homebrew/include/boost/lexical_cast/bad_lexical_cast.hpp \
+  /opt/homebrew/include/boost/lexical_cast/try_lexical_convert.hpp \
+  /opt/homebrew/include/boost/type_traits/conditional.hpp \
+  /opt/homebrew/include/boost/type_traits/is_arithmetic.hpp \
+  /opt/homebrew/include/boost/type_traits/is_integral.hpp \
+  /opt/homebrew/include/boost/type_traits/integral_constant.hpp \
+  /opt/homebrew/include/boost/type_traits/is_floating_point.hpp \
+  /opt/homebrew/include/boost/lexical_cast/detail/is_character.hpp \
+  /opt/homebrew/include/boost/type_traits/is_same.hpp \
+  /opt/homebrew/include/boost/lexical_cast/detail/converter_numeric.hpp \
+  /opt/homebrew/include/boost/core/cmath.hpp \
+  /opt/homebrew/include/boost/type_traits/type_identity.hpp \
+  /opt/homebrew/include/boost/type_traits/make_unsigned.hpp \
+  /opt/homebrew/include/boost/type_traits/is_signed.hpp \
+  /opt/homebrew/include/boost/type_traits/remove_cv.hpp \
+  /opt/homebrew/include/boost/type_traits/is_enum.hpp \
+  /opt/homebrew/include/boost/type_traits/intrinsics.hpp \
+  /opt/homebrew/include/boost/type_traits/detail/config.hpp \
+  /opt/homebrew/include/boost/version.hpp \
+  /opt/homebrew/include/boost/type_traits/is_unsigned.hpp \
+  /opt/homebrew/include/boost/type_traits/is_const.hpp \
+  /opt/homebrew/include/boost/type_traits/is_volatile.hpp \
+  /opt/homebrew/include/boost/type_traits/add_const.hpp \
+  /opt/homebrew/include/boost/type_traits/add_volatile.hpp \
+  /opt/homebrew/include/boost/type_traits/is_float.hpp \
+  /opt/homebrew/include/boost/lexical_cast/detail/converter_lexical.hpp \
+  /opt/homebrew/include/boost/detail/lcast_precision.hpp \
+  /opt/homebrew/include/boost/lexical_cast/detail/widest_char.hpp \
+  /opt/homebrew/include/boost/lexical_cast/detail/converter_lexical_streams.hpp \
+  /opt/homebrew/include/boost/type_traits/is_pointer.hpp \
+  /opt/homebrew/include/boost/core/snprintf.hpp \
+  /opt/homebrew/include/boost/lexical_cast/detail/lcast_char_constants.hpp \
+  /opt/homebrew/include/boost/lexical_cast/detail/lcast_unsigned_converters.hpp \
+  /opt/homebrew/include/boost/core/noncopyable.hpp \
+  /opt/homebrew/include/boost/lexical_cast/detail/lcast_basic_unlockedbuf.hpp \
+  /opt/homebrew/include/boost/detail/basic_pointerbuf.hpp \
+  /opt/homebrew/include/boost/lexical_cast/detail/inf_nan.hpp \
+  /opt/homebrew/include/boost/type_traits/is_reference.hpp \
+  /opt/homebrew/include/boost/type_traits/is_lvalue_reference.hpp \
+  /opt/homebrew/include/boost/type_traits/is_rvalue_reference.hpp \
+  /opt/homebrew/include/boost/core/nvp.hpp \
+  /opt/homebrew/include/boost/core/addressof.hpp \
+  /opt/homebrew/include/boost/multiprecision/detail/check_cpp11_config.hpp \
+  /opt/homebrew/include/boost/multiprecision/detail/digits.hpp \
+  /opt/homebrew/include/boost/multiprecision/detail/generic_interconvert.hpp \
+  /opt/homebrew/include/boost/multiprecision/detail/default_ops.hpp \
+  /opt/homebrew/include/boost/multiprecision/traits/is_backend.hpp \
+  /opt/homebrew/include/boost/multiprecision/detail/fpclassify.hpp \
+  /opt/homebrew/include/boost/multiprecision/detail/float128_functions.hpp \
+  /opt/homebrew/include/boost/cstdfloat.hpp \
+  /opt/homebrew/include/boost/math/cstdfloat/cstdfloat_types.hpp \
+  /opt/homebrew/include/boost/math/cstdfloat/cstdfloat_limits.hpp \
+  /opt/homebrew/include/boost/math/cstdfloat/cstdfloat_cmath.hpp \
+  /opt/homebrew/include/boost/math/cstdfloat/cstdfloat_iostream.hpp \
+  /opt/homebrew/include/boost/math/cstdfloat/cstdfloat_complex.hpp \
+  /opt/homebrew/include/boost/math/special_functions/hypot.hpp \
+  /opt/homebrew/include/boost/multiprecision/detail/functions/constants.hpp \
+  /opt/homebrew/include/boost/multiprecision/detail/functions/pow.hpp \
+  /opt/homebrew/include/boost/multiprecision/detail/functions/trig.hpp \
+  /opt/homebrew/include/boost/multiprecision/detail/no_et_ops.hpp \
+  /opt/homebrew/include/boost/multiprecision/detail/et_ops.hpp \
+  /opt/homebrew/include/boost/multiprecision/detail/min_max.hpp \
+  /opt/homebrew/include/boost/multiprecision/detail/functions/trunc.hpp \
+  /opt/homebrew/include/boost/multiprecision/detail/number_compare.hpp \
+  /opt/homebrew/include/boost/multiprecision/traits/is_restricted_conversion.hpp \
+  /opt/homebrew/include/boost/multiprecision/traits/explicit_conversion.hpp \
+  /opt/homebrew/include/boost/multiprecision/traits/is_complex.hpp \
+  /opt/homebrew/include/boost/multiprecision/traits/is_convertible_arithmetic.hpp \
+  /opt/homebrew/include/boost/multiprecision/detail/hash.hpp \
+  /opt/homebrew/include/boost/multiprecision/detail/ublas_interop.hpp \
+  /opt/homebrew/include/boost/multiprecision/detail/integer_ops.hpp \
+  /opt/homebrew/include/boost/multiprecision/detail/rebind.hpp \
+  /opt/homebrew/include/boost/multiprecision/rational_adaptor.hpp \
+  /opt/homebrew/include/boost/multiprecision/traits/is_byte_container.hpp \
+  /opt/homebrew/include/boost/multiprecision/cpp_int/checked.hpp \
+  /opt/homebrew/include/boost/multiprecision/detail/constexpr.hpp \
+  /opt/homebrew/include/boost/multiprecision/cpp_int/value_pack.hpp \
+  /opt/homebrew/include/boost/multiprecision/detail/empty_value.hpp \
+  /opt/homebrew/include/boost/multiprecision/cpp_int/limits.hpp \
+  /opt/homebrew/include/boost/multiprecision/traits/max_digits10.hpp \
+  /opt/homebrew/include/boost/multiprecision/cpp_int/comparison.hpp \
+  /opt/homebrew/include/boost/multiprecision/cpp_int/add.hpp \
+  /opt/homebrew/include/boost/multiprecision/cpp_int/add_unsigned.hpp \
+  /opt/homebrew/include/boost/multiprecision/cpp_int/intel_intrinsics.hpp \
+  /Library/Developer/CommandLineTools/usr/lib/clang/17/include/immintrin.h \
+  /opt/homebrew/include/boost/multiprecision/cpp_int/multiply.hpp \
+  /opt/homebrew/include/boost/multiprecision/integer.hpp \
+  /opt/homebrew/include/boost/multiprecision/detail/bitscan.hpp \
+  /opt/homebrew/include/boost/multiprecision/cpp_int/divide.hpp \
+  /opt/homebrew/include/boost/multiprecision/cpp_int/bitwise.hpp \
+  /opt/homebrew/include/boost/multiprecision/cpp_int/misc.hpp \
+  /opt/homebrew/include/boost/integer/common_factor_rt.hpp \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/numeric \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__numeric/accumulate.h \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__numeric/adjacent_difference.h \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__numeric/inner_product.h \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__numeric/iota.h \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__numeric/partial_sum.h \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__numeric/exclusive_scan.h \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__numeric/gcd_lcm.h \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__numeric/inclusive_scan.h \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__numeric/pstl.h \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__numeric/reduce.h \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__numeric/transform_exclusive_scan.h \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__numeric/transform_inclusive_scan.h \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__numeric/transform_reduce.h \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__type_traits/is_execution_policy.h \
+  /opt/homebrew/include/boost/multiprecision/cpp_int/literals.hpp \
+  /opt/homebrew/include/boost/multiprecision/cpp_int/serialize.hpp \
+  /opt/homebrew/include/boost/multiprecision/cpp_int/import_export.hpp \
+  /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/pools/twocrypto_fx/twocrypto.hpp \
+  /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/pools/config.hpp \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/fstream \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__filesystem/copy_options.h \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__filesystem/directory_entry.h \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__filesystem/file_status.h \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__filesystem/file_type.h \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__filesystem/perms.h \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__filesystem/file_time_type.h \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__filesystem/filesystem_error.h \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__filesystem/path.h \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__filesystem/operations.h \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__filesystem/perm_options.h \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__filesystem/space_info.h \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__filesystem/directory_iterator.h \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__filesystem/directory_options.h \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__filesystem/path_iterator.h \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__filesystem/recursive_directory_iterator.h \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__filesystem/u8path.h \
   /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/core/json_utils.hpp \
   /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/harness/output.hpp \
   /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/events/loader.hpp

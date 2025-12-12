@@ -35,11 +35,21 @@ template <typename T>
 json::object pool_state_json(const PoolResult<T>& r) {
     json::object o;
     o["balances"] = json::array{to_str_1e18(r.balances[0]), to_str_1e18(r.balances[1])};
+    // xp = balances scaled with price_scale (matches old harness)
+    o["xp"] = json::array{
+        to_str_1e18(r.balances[0]),  // precisions[0] = 1 for floating types
+        to_str_1e18(r.balances[1] * r.price_scale)  // precisions[1] = 1 for floating types
+    };
     o["D"] = to_str_1e18(r.D);
-    o["totalSupply"] = to_str_1e18(r.totalSupply);
+    o["virtual_price"] = to_str_1e18(r.virtual_price);
+    o["xcp_profit"] = to_str_1e18(r.xcp_profit);
     o["price_scale"] = to_str_1e18(r.price_scale);
     o["price_oracle"] = to_str_1e18(r.price_oracle);
-    o["virtual_price"] = to_str_1e18(r.virtual_price);
+    o["last_prices"] = to_str_1e18(r.last_prices);
+    o["totalSupply"] = to_str_1e18(r.totalSupply);
+    o["donation_shares"] = to_str_1e18(r.donation_shares);
+    o["donation_unlocked"] = to_str_1e18(r.donation_unlocked);
+    o["timestamp"] = r.timestamp;
     return o;
 }
 
@@ -215,14 +225,19 @@ template <typename T>
 json::object build_output_json(
     const std::vector<PoolResult<T>>& results,
     size_t n_events,
-    const std::string& candles_path,
+    const std::string& data_path,
+    bool use_events,   // true => events_file key, false => candles_file key
     size_t n_threads,
     double candles_read_ms,
     double exec_ms
 ) {
     // Metadata
     json::object meta;
-    meta["candles_file"] = candles_path;
+    if (use_events) {
+        meta["events_file"] = data_path;
+    } else {
+        meta["candles_file"] = data_path;
+    }
     meta["events"] = static_cast<uint64_t>(n_events);
     meta["threads"] = static_cast<uint64_t>(n_threads);
     meta["candles_read_ms"] = candles_read_ms;
@@ -240,8 +255,13 @@ json::object build_output_json(
         // Result summary (includes all metrics now)
         run["result"] = metrics_to_summary(r, n_events);
         
-        // Pool tag
-        run["tag"] = r.tag;
+        // Params block (echoes back original pool/costs JSON)
+        json::object params;
+        params["pool"] = r.echo_pool;
+        if (!r.echo_costs.empty()) {
+            params["costs"] = r.echo_costs;
+        }
+        run["params"] = params;
         
         // Final state
         run["final_state"] = pool_state_json(r);
@@ -250,6 +270,11 @@ json::object build_output_json(
         run["success"] = r.success;
         if (!r.success) {
             run["error"] = r.error_msg;
+        }
+        
+        // Actions array (only if save_actions was enabled and we have actions)
+        if (!r.actions.empty()) {
+            run["actions"] = actions_to_json(r.actions);
         }
         
         runs.push_back(std::move(run));
@@ -269,13 +294,14 @@ bool write_results_json(
     const std::string& output_path,
     const std::vector<PoolResult<T>>& results,
     size_t n_events,
-    const std::string& candles_path,
+    const std::string& data_path,
+    bool use_events,   // true => events_file key, false => candles_file key
     size_t n_threads,
     double candles_read_ms,
     double exec_ms
 ) {
     auto O = build_output_json(
-        results, n_events, candles_path, n_threads,
+        results, n_events, data_path, use_events, n_threads,
         candles_read_ms, exec_ms
     );
     

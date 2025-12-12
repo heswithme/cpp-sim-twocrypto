@@ -135,15 +135,20 @@ int main(int argc, char* argv[]) {
     try {
         auto t_read0 = std::chrono::high_resolution_clock::now();
         
-        // Load candles and generate events
-        auto candles = arb::load_candles(args.candles_path, args.max_candles, args.candle_filter_pct / 100.0);
-        auto events = arb::gen_events(candles);
+        // Load candles+generate events, or load events directly if --events flag
+        std::vector<arb::Event> events;
+        if (args.use_events) {
+            events = arb::load_events(args.candles_path, args.max_candles);
+            std::cout << "loaded " << events.size() << " events from " << args.candles_path << "\n";
+        } else {
+            auto candles = arb::load_candles(args.candles_path, args.max_candles, args.candle_filter_pct / 100.0);
+            events = arb::gen_events(candles);
+            std::cout << "loaded " << candles.size() << " candles -> "
+                      << events.size() << " events from " << args.candles_path << "\n";
+        }
         
         auto t_read1 = std::chrono::high_resolution_clock::now();
         double candles_read_ms = std::chrono::duration<double, std::milli>(t_read1 - t_read0).count();
-
-        std::cout << "loaded " << candles.size() << " candles -> "
-                  << events.size() << " events from " << args.candles_path << "\n";
 
         // Load pool configs from JSON
         auto pool_configs = arb::pools::load_pool_configs<RealT>(args.pools_path);
@@ -159,6 +164,13 @@ int main(int argc, char* argv[]) {
         run_cfg.user_swap_freq_s = args.user_swap_freq_s;
         run_cfg.user_swap_size_frac = static_cast<RealT>(args.user_swap_size_frac);
         run_cfg.user_swap_thresh = static_cast<RealT>(args.user_swap_thresh);
+        
+        // Wire APY window flags (matches old harness rounding: 7.0 days -> 604800 seconds)
+        run_cfg.apy_period_s = static_cast<uint64_t>(std::max(0.0, args.apy_period_days) * 86400.0 + 0.5);
+        run_cfg.apy_cap_pct = args.apy_period_cap_pct;
+        
+        // Wire save_actions flag
+        run_cfg.save_actions = args.save_actions;
         
         auto t_exec0 = std::chrono::high_resolution_clock::now();
         
@@ -179,6 +191,7 @@ int main(int argc, char* argv[]) {
                 results,
                 events.size(),
                 args.candles_path,
+                args.use_events,
                 args.n_threads,
                 candles_read_ms,
                 exec_ms

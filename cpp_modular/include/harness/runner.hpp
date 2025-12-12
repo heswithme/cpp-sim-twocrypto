@@ -13,6 +13,7 @@
 #include "core/common.hpp"
 #include "events/types.hpp"
 #include "harness/metrics.hpp"
+#include "harness/actions.hpp"
 #include "harness/donation.hpp"
 #include "harness/idle_tick.hpp"
 #include "harness/user_swap.hpp"
@@ -64,6 +65,17 @@ struct PoolResult {
     T virtual_price{0};
     T xcp_profit{0};
     T vp_boosted{0};
+    T donation_shares{0};
+    T donation_unlocked{0};
+    T last_prices{0};
+    uint64_t timestamp{0};
+    
+    // Echo back original JSON for params block
+    boost::json::object echo_pool{};
+    boost::json::object echo_costs{};
+    
+    // Actions (only populated if save_actions=true)
+    std::vector<Action<T>> actions{};
     
     // Timing
     double elapsed_ms{0};
@@ -91,6 +103,9 @@ struct RunConfig {
     // APY tracking
     uint64_t apy_period_s{0};  // 0 = disabled
     int apy_cap_pct{100};
+    
+    // Action recording
+    bool save_actions{false};
 };
 
 // Run a single pool configuration and return results
@@ -105,6 +120,8 @@ PoolResult<T> run_single_pool(
     
     PoolResult<T> result;
     result.tag = pool_init.tag;
+    result.echo_pool = pool_init.echo_pool;
+    result.echo_costs = pool_init.echo_costs;
     
     auto t_start = std::chrono::high_resolution_clock::now();
     
@@ -184,7 +201,7 @@ PoolResult<T> run_single_pool(
         auto loop_result = run_event_loop(
             pool, events, costs, dcfg, icfg, ucfg,
             cfg.min_swap_frac, cfg.max_swap_frac, 0,
-            apy_cfg
+            apy_cfg, cfg.save_actions
         );
         
         // Copy metrics from event loop result
@@ -202,6 +219,11 @@ PoolResult<T> run_single_pool(
         result.initial_liq = loop_result.initial_liq;
         result.donation_apy = loop_result.donation_apy;
         
+        // Copy actions if recorded
+        if (cfg.save_actions) {
+            result.actions = std::move(loop_result.actions);
+        }
+        
         // Capture final pool state
         result.balances[0] = pool.balances[0];
         result.balances[1] = pool.balances[1];
@@ -212,6 +234,10 @@ PoolResult<T> run_single_pool(
         result.virtual_price = pool.get_virtual_price();
         result.xcp_profit = pool.xcp_profit;
         result.vp_boosted = pool.get_vp_boosted();
+        result.donation_shares = pool.donation_shares;
+        result.donation_unlocked = pool.donation_unlocked();
+        result.last_prices = pool.last_prices;
+        result.timestamp = pool.block_timestamp;
         result.success = true;
         
     } catch (const std::exception& e) {

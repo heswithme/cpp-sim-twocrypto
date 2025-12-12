@@ -4,6 +4,9 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <vector>
+
+#include "harness/actions.hpp"
 
 namespace arb {
 namespace harness {
@@ -312,6 +315,9 @@ struct EventLoopResult {
     
     // Slippage probes
     SlippageProbes<T> slippage_probes{};
+    
+    // Actions (only populated if save_actions=true)
+    std::vector<Action<T>> actions{};
     
     // APY tracker results (copied out after run)
     double tw_capped_apy{-1.0};

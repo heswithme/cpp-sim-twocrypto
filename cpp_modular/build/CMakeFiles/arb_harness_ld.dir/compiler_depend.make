@@ -2812,6 +2812,7 @@ CMakeFiles/arb_harness_ld.dir/src/main.cpp.o: /Users/michael/Documents/projects/
   /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/core/json_utils.hpp \
   /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/events/loader.hpp \
   /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/events/types.hpp \
+  /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/harness/actions.hpp \
   /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/harness/cli.hpp \
   /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/harness/donation.hpp \
   /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/harness/event_loop.hpp \
@@ -3589,6 +3590,8 @@ CMakeFiles/arb_harness_ld.dir/src/main.cpp.o: /Users/michael/Documents/projects/
 /opt/homebrew/include/boost/json/detail/impl/except.ipp:
 
 /opt/homebrew/include/boost/json/detail/impl/default_resource.ipp:
+
+/Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/harness/actions.hpp:
 
 /opt/homebrew/include/boost/json/detail/handler.hpp:
 

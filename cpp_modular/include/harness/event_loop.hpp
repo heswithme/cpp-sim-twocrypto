@@ -8,6 +8,7 @@
 #include "core/common.hpp"
 #include "events/types.hpp"
 #include "harness/metrics.hpp"
+#include "harness/actions.hpp"
 #include "harness/donation.hpp"
 #include "harness/idle_tick.hpp"
 #include "harness/user_swap.hpp"
@@ -39,7 +40,8 @@ EventLoopResult<T> run_event_loop(
     T min_swap_frac = T(1e-6),
     T max_swap_frac = T(1.0),
     size_t max_events = 0,  // 0 = all events
-    const ApyConfig<T>& apy_cfg = ApyConfig<T>{}
+    const ApyConfig<T>& apy_cfg = ApyConfig<T>{},
+    bool save_actions = false
 ) {
     EventLoopResult<T> result{};
     Metrics<T>& m = result.metrics;
@@ -68,7 +70,8 @@ EventLoopResult<T> run_event_loop(
     // APY tracker
     ApyTracker<T> apy_tracker{};
     if (apy_cfg.period_s > 0) {
-        T lb_initial = pool.get_vp_boosted();
+        // Use (xcp_profit + 1) / 2 to match old harness exactly
+        T lb_initial = (pool.xcp_profit + T(1)) / T(2);
         apy_tracker.init(result.t_start, lb_initial, result.true_growth_initial, 
                          apy_cfg.period_s, apy_cfg.cap_pct);
     }
@@ -120,7 +123,8 @@ EventLoopResult<T> run_event_loop(
         
         // APY window tracking
         if (apy_cfg.period_s > 0) {
-            T lb_curr = pool.get_vp_boosted();
+            // Use (xcp_profit + 1) / 2 to match old harness exactly
+            T lb_curr = (pool.xcp_profit + T(1)) / T(2);
             T tg_curr = pools::twocrypto_fx::true_growth(pool);
             apy_tracker.update(ev.ts, lb_curr, tg_curr);
         }
@@ -141,7 +145,18 @@ EventLoopResult<T> run_event_loop(
         tw.sample_band(ev.ts, pool.cached_price_scale, cex_price);
         
         // Try donation before trading
-        make_donation(pool, dcfg, ev.ts, m);
+        auto don_res = make_donation_ex(pool, dcfg, ev.ts, m);
+        if (save_actions && don_res.success) {
+            DonationAction<T> act;
+            act.ts = ev.ts;
+            act.ts_due = don_res.ts_due;
+            act.amounts = don_res.amounts;
+            act.price_scale = don_res.price_scale;
+            act.donation_ratio1 = dcfg.ratio1;
+            act.apy_per_year = dcfg.apy;
+            act.freq_s = dcfg.freq_s;
+            result.actions.push_back(std::move(act));
+        }
         
         if (!(cex_price > T(0))) continue;
         
@@ -162,19 +177,49 @@ EventLoopResult<T> run_event_loop(
         
         if (!dec.do_trade) {
             // No profitable trade - try idle tick for EMA update
+            // Capture pre-tick state for action recording
+            const T ps_before = pool.cached_price_scale;
+            const T oracle_before = pool.cached_price_oracle;
+            const T xcp_profit_before = pool.xcp_profit;
+            const T vp_before = pool.get_vp_boosted();
+            
             const bool did_tick = try_idle_tick(pool, icfg, ev.ts, m);
             
             if (did_tick) {
                 // Sample after tick
                 sample_latent(ev.ts);
                 sample_slippage_probes(ev.ts, cex_price);
+                
+                // Record tick action
+                if (save_actions) {
+                    TickAction<T> act;
+                    act.ts = ev.ts;
+                    act.p_cex = cex_price;
+                    act.ps_before = ps_before;
+                    act.ps_after = pool.cached_price_scale;
+                    act.oracle_before = oracle_before;
+                    act.oracle_after = pool.cached_price_oracle;
+                    act.xcp_profit_before = xcp_profit_before;
+                    act.xcp_profit_after = pool.xcp_profit;
+                    act.vp_before = vp_before;
+                    act.vp_after = pool.get_vp_boosted();
+                    result.actions.push_back(std::move(act));
+                }
             }
             continue;
         }
         
         // Execute trade
         try {
+            // Capture pre-trade state for action recording
             const T ps_before = pool.cached_price_scale;
+            const T oracle_before = pool.cached_price_oracle;
+            const T xcp_profit_before = pool.xcp_profit;
+            const T vp_before = pool.get_vp_boosted();
+            const T p_pool_before = pool.get_p();
+            const uint64_t last_ts_before = pool.last_timestamp;
+            // Note: "lp" in old harness means last_prices (instantaneous price), not LP tokens
+            const T lp_before = pool.last_prices;
             
             auto res = pool.exchange(
                 static_cast<T>(dec.i),
@@ -210,6 +255,37 @@ EventLoopResult<T> run_event_loop(
             // Sample after trade
             sample_latent(ev.ts);
             sample_slippage_probes(ev.ts, cex_price);
+            
+            // Record exchange action
+            if (save_actions) {
+                ExchangeAction<T> act;
+                act.ts = ev.ts;
+                act.i = dec.i;
+                act.j = dec.j;
+                act.dx = dec.dx;
+                act.dy_after_fee = dy_after_fee;
+                act.fee_tokens = fee_tokens;
+                act.profit_coin0 = dec.profit;
+                act.p_cex = cex_price;
+                act.p_pool_before = p_pool_before;
+                act.p_pool_after = pool.get_p();
+                act.oracle_before = oracle_before;
+                act.oracle_after = pool.cached_price_oracle;
+                act.ps_before = ps_before;
+                act.ps_after = ps_after;
+                act.last_ts_before = last_ts_before;
+                act.last_ts_after = pool.last_timestamp;
+                act.lp_before = lp_before;
+                act.lp_after = pool.last_prices;  // Note: "lp" means last_prices in old harness
+                act.xcp_profit_before = xcp_profit_before;
+                act.xcp_profit_after = pool.xcp_profit;
+                act.vp_before = vp_before;
+                act.vp_after = pool.get_vp_boosted();
+                act.slippage = tw.last_r_inst;
+                act.liq_density = tw.last_d_inst;
+                act.balance_indicator = pools::twocrypto_fx::balance_indicator(pool);
+                result.actions.push_back(std::move(act));
+            }
             
         } catch (...) {
             // Trade failed; ignore and continue
