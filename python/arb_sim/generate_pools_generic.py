@@ -140,7 +140,7 @@ else:
 # X_vals = [int(x) for x in X_vals]
 # Y_vals = [int(x) for x in Y_vals]
 
-DEFAULT_DATAFILE = "python/arb_sim/trade_data/btcusd/btcusdt-2025.json"
+DEFAULT_DATAFILE = "python/arb_sim/trade_data/btcusd/binance-2025.json"
 
 
 START_TS = _first_candle_ts(DEFAULT_DATAFILE)
@@ -178,7 +178,7 @@ BASE_POOL = {
 }
 
 BASE_COSTS = {
-    "arb_fee_bps": 50.0,
+    "arb_fee_bps": 1.0,
     "gas_coin0": 0.0,
     "use_volume_cap": False,
     "volume_cap_mult": 1,

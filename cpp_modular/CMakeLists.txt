@@ -4,7 +4,7 @@ project(arb_harness_modular CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(Boost 1.75 REQUIRED COMPONENTS json)
+find_package(Boost 1.83 REQUIRED COMPONENTS json)
 
 # Include directories
 include_directories(${Boost_INCLUDE_DIRS})

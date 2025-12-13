@@ -1,7 +1,8 @@
-
 from typing import Any, List
 from time import time
 import json
+
+
 def _first_candle_ts(path: str) -> int:
     """Return first timestamp (seconds) from candles or events file.
 
@@ -13,6 +14,7 @@ def _first_candle_ts(path: str) -> int:
 
     On failure, returns current UTC seconds.
     """
+
     def to_ts(v: Any) -> int | None:
         try:
             t = int(v)
@@ -23,9 +25,10 @@ def _first_candle_ts(path: str) -> int:
             # try ISO
             try:
                 from datetime import datetime, timezone
+
                 s = str(v)
-                if s.endswith('Z'):
-                    dt = datetime.fromisoformat(s.replace('Z', '+00:00'))
+                if s.endswith("Z"):
+                    dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
                 else:
                     dt = datetime.fromisoformat(s)
                 if dt.tzinfo is None:
@@ -57,7 +60,7 @@ def _first_candle_ts(path: str) -> int:
         ts = to_ts(tsv)
         return ts if ts is not None else int(time())
     if isinstance(first, dict):
-        ts = to_ts(first.get('ts') or first.get('timestamp') or first.get('time'))
+        ts = to_ts(first.get("ts") or first.get("timestamp") or first.get("time"))
         return ts if ts is not None else int(time())
     return int(time())
 
@@ -71,7 +74,7 @@ def _initial_price_from_file(path: str) -> float:
     Returns 1.0 on failure.
     """
     try:
-        with open(path, 'r') as f:
+        with open(path, "r") as f:
             root = json.load(f)
     except Exception:
         return 1.0
@@ -96,8 +99,8 @@ def _initial_price_from_file(path: str) -> float:
             elif len(first) >= 2:  # likely events
                 return float(first[1])
         elif isinstance(first, dict):
-            # Try common keys
-            for k in ("close", "c", "price"):
+            # Try common keys (including "p" for Binance trade format)
+            for k in ("close", "c", "price", "p"):
                 if k in first:
                     return float(first[k])
     except Exception:
@@ -122,4 +125,3 @@ def strify_pool(pool: dict) -> dict:
         else:
             out[k] = str(int(v))
     return out
-

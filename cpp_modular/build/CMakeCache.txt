@@ -364,7 +364,7 @@ CMAKE_UNAME:INTERNAL=/usr/bin/uname
 //ADVANCED property for variable: CMAKE_VERBOSE_MAKEFILE
 CMAKE_VERBOSE_MAKEFILE-ADVANCED:INTERNAL=1
 //Details about finding Boost
-FIND_PACKAGE_MESSAGE_DETAILS_Boost:INTERNAL=[/opt/homebrew/lib/cmake/Boost-1.89.0/BoostConfig.cmake][found components: json ][v1.89.0(1.75)]
+FIND_PACKAGE_MESSAGE_DETAILS_Boost:INTERNAL=[/opt/homebrew/lib/cmake/Boost-1.89.0/BoostConfig.cmake][found components: json ][v1.89.0(1.83)]
 //ADVANCED property for variable: boost_container_DIR
 boost_container_DIR-ADVANCED:INTERNAL=1
 //ADVANCED property for variable: boost_headers_DIR

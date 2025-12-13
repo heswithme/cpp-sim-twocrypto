@@ -19,7 +19,7 @@ class ArbHarnessRunner:
     def __init__(self, repo_root: Path, real: str = "double"):
         self.repo_root = Path(repo_root)
         self.cpp_dir = self.repo_root / "cpp_old"
-        # self.cpp_dir = self.repo_root / "cpp_modular"  # modular harness
+        self.cpp_dir = self.repo_root / "cpp_modular"  # modular harness
         self.build_dir = self.cpp_dir / "build"
         # Resolve binary name based on real type
         real = (real or "double").lower()

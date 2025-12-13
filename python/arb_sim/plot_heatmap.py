@@ -22,6 +22,11 @@ from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
 import numpy as np
+
+# Use non-interactive backend for headless systems (must be before pyplot import)
+import matplotlib
+
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.ticker import FormatStrFormatter
 
@@ -369,7 +374,10 @@ def main() -> int:
             "totalSupply",
         }
         scale_percent = (
-            mlow in {"vpminusone", "apy"} or "apy" in mlow or "tw_real_slippage" in mlow or "geom_mean" in mlow
+            mlow in {"vpminusone", "apy"}
+            or "apy" in mlow
+            or "tw_real_slippage" in mlow
+            or "geom_mean" in mlow
         )
         return scale_1e18, scale_percent
 
