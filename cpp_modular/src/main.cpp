@@ -173,8 +173,8 @@ int main(int argc, char* argv[]) {
         // Wire save_actions flag
         run_cfg.save_actions = args.save_actions;
         
-        // Wire detailed_log flag if path provided
-        run_cfg.detailed_log = !args.detailed_log_path.empty();
+        // Wire detailed_log flag
+        run_cfg.detailed_log = args.detailed_log;
         
         auto t_exec0 = std::chrono::high_resolution_clock::now();
         
@@ -206,20 +206,32 @@ int main(int argc, char* argv[]) {
         }
         
         // Write detailed log if requested (uses first pool's detailed entries)
-        if (!args.detailed_log_path.empty() && !results.empty()) {
+        // Place detailed_log.json next to the output file
+        if (args.detailed_log && !results.empty()) {
+            // Compute detailed_log.json path: same directory as output, fixed name
+            std::string detailed_log_path;
+            {
+                auto pos = args.out_path.find_last_of("/\\");
+                if (pos != std::string::npos) {
+                    detailed_log_path = args.out_path.substr(0, pos + 1) + "detailed-output.json";
+                } else {
+                    detailed_log_path = "detailed-output.json";
+                }
+            }
+            
             // Find first successful result with detailed entries
             for (const auto& res : results) {
                 if (res.success && !res.detailed_entries.empty()) {
                     bool ok = arb::harness::write_detailed_log(
-                        args.detailed_log_path,
+                        detailed_log_path,
                         res.detailed_entries
                     );
                     if (!ok) {
                         std::cerr << "Warning: Failed to write detailed log to "
-                                  << args.detailed_log_path << "\n";
+                                  << detailed_log_path << "\n";
                     } else {
                         std::cout << "Wrote detailed log (" << res.detailed_entries.size()
-                                  << " entries) to " << args.detailed_log_path << "\n";
+                                  << " entries) to " << detailed_log_path << "\n";
                     }
                     break;  // Only write first pool's detailed log
                 }

@@ -79,7 +79,7 @@ class ArbHarnessRunner:
         userswapthresh: float | None = None,
         apy_period_days: float | None = None,
         apy_period_cap: int | None = None,
-        detailed_log: str | None = None,
+        detailed_log: bool = False,
     ) -> Dict[str, Any]:
         print("Running arb_harness...")
         cmd = [
@@ -112,8 +112,8 @@ class ArbHarnessRunner:
             cmd += ["--apy-period-days", str(apy_period_days)]
         if apy_period_cap is not None:
             cmd += ["--apy-period-cap", str(int(apy_period_cap))]
-        if detailed_log is not None:
-            cmd += ["--detailed-log", str(detailed_log)]
+        if detailed_log:
+            cmd += ["--detailed-log"]
         # Stream harness stdout/stderr directly to the console for live progress
         r = subprocess.run(cmd)
         if r.returncode != 0:
@@ -223,9 +223,8 @@ def main() -> int:
     )
     parser.add_argument(
         "--detailed-log",
-        type=str,
-        default=None,
-        help="Path to write per-candle detailed log JSON (forwarded to arb_harness)",
+        action="store_true",
+        help="Write per-candle detailed_log.json next to output file",
     )
     args = parser.parse_args()
 

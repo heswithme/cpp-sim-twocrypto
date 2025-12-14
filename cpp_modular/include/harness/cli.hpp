@@ -34,7 +34,7 @@ struct CliArgs {
     int apy_period_cap_pct{100};
     
     // Detailed logging
-    std::string detailed_log_path;  // empty = disabled
+    bool detailed_log{false};  // write detailed_log.json next to output
     
     // Validation
     bool valid{false};
