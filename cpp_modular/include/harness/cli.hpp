@@ -33,6 +33,9 @@ struct CliArgs {
     double apy_period_days{7.0};
     int apy_period_cap_pct{100};
     
+    // Detailed logging
+    std::string detailed_log_path;  // empty = disabled
+    
     // Validation
     bool valid{false};
     std::string error_msg;

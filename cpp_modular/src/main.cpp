@@ -12,6 +12,7 @@
 #include "harness/cli.hpp"
 #include "harness/runner.hpp"
 #include "harness/output.hpp"
+#include "harness/detailed_output.hpp"
 #include "events/loader.hpp"
 #include "pools/config.hpp"
 #include "pools/twocrypto_fx/twocrypto.hpp"
@@ -172,6 +173,9 @@ int main(int argc, char* argv[]) {
         // Wire save_actions flag
         run_cfg.save_actions = args.save_actions;
         
+        // Wire detailed_log flag if path provided
+        run_cfg.detailed_log = !args.detailed_log_path.empty();
+        
         auto t_exec0 = std::chrono::high_resolution_clock::now();
         
         // Run all pools in parallel
@@ -198,6 +202,27 @@ int main(int argc, char* argv[]) {
             );
             if (!ok) {
                 std::cerr << "Warning: Failed to write output to " << args.out_path << "\n";
+            }
+        }
+        
+        // Write detailed log if requested (uses first pool's detailed entries)
+        if (!args.detailed_log_path.empty() && !results.empty()) {
+            // Find first successful result with detailed entries
+            for (const auto& res : results) {
+                if (res.success && !res.detailed_entries.empty()) {
+                    bool ok = arb::harness::write_detailed_log(
+                        args.detailed_log_path,
+                        res.detailed_entries
+                    );
+                    if (!ok) {
+                        std::cerr << "Warning: Failed to write detailed log to "
+                                  << args.detailed_log_path << "\n";
+                    } else {
+                        std::cout << "Wrote detailed log (" << res.detailed_entries.size()
+                                  << " entries) to " << args.detailed_log_path << "\n";
+                    }
+                    break;  // Only write first pool's detailed log
+                }
             }
         }
 

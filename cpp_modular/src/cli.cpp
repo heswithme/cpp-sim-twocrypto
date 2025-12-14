@@ -17,7 +17,8 @@ void print_usage(const char* prog_name) {
               << "       [--threads N | -n N] [--candle-filter PCT]\n"
               << "       [--dustswapfreq S]\n"
               << "       [--userswapfreq S] [--userswapsize F] [--userswapthresh F]\n"
-              << "       [--apy-period-days D] [--apy-period-cap PCT]\n";
+              << "       [--apy-period-days D] [--apy-period-cap PCT]\n"
+              << "       [--detailed-log PATH]\n";
 }
 
 CliArgs parse_cli(int argc, char* argv[]) {
@@ -62,6 +63,8 @@ CliArgs parse_cli(int argc, char* argv[]) {
                 args.apy_period_days = std::stod(argv[++i]);
             } else if (arg == "--apy-period-cap" && i + 1 < argc) {
                 args.apy_period_cap_pct = std::stoi(argv[++i]);
+            } else if (arg == "--detailed-log" && i + 1 < argc) {
+                args.detailed_log_path = argv[++i];
             }
             // Unknown flags are silently ignored (matches original behavior)
         } catch (...) {

@@ -79,6 +79,7 @@ class ArbHarnessRunner:
         userswapthresh: float | None = None,
         apy_period_days: float | None = None,
         apy_period_cap: int | None = None,
+        detailed_log: str | None = None,
     ) -> Dict[str, Any]:
         print("Running arb_harness...")
         cmd = [
@@ -111,6 +112,8 @@ class ArbHarnessRunner:
             cmd += ["--apy-period-days", str(apy_period_days)]
         if apy_period_cap is not None:
             cmd += ["--apy-period-cap", str(int(apy_period_cap))]
+        if detailed_log is not None:
+            cmd += ["--detailed-log", str(detailed_log)]
         # Stream harness stdout/stderr directly to the console for live progress
         r = subprocess.run(cmd)
         if r.returncode != 0:
@@ -218,6 +221,12 @@ def main() -> int:
         default=None,
         help="Cap per-window annualized APY percent (forwarded to arb_harness)",
     )
+    parser.add_argument(
+        "--detailed-log",
+        type=str,
+        default=None,
+        help="Path to write per-candle detailed log JSON (forwarded to arb_harness)",
+    )
     args = parser.parse_args()
 
     repo_root = Path(__file__).resolve().parents[2]
@@ -278,6 +287,7 @@ def main() -> int:
         userswapthresh=args.userswapthresh,
         apy_period_days=args.apy_period_days,
         apy_period_cap=args.apy_period_cap,
+        detailed_log=args.detailed_log,
     )
 
     runs_raw: List[Dict[str, Any]] = raw.get("runs", [])

@@ -2814,6 +2814,7 @@ CMakeFiles/arb_harness.dir/src/main.cpp.o: /Users/michael/Documents/projects/cpp
   /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/events/types.hpp \
   /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/harness/actions.hpp \
   /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/harness/cli.hpp \
+  /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/harness/detailed_output.hpp \
   /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/harness/donation.hpp \
   /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/harness/event_loop.hpp \
   /Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/harness/idle_tick.hpp \
@@ -5026,6 +5027,8 @@ CMakeFiles/arb_harness.dir/src/main.cpp.o: /Users/michael/Documents/projects/cpp
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__memory/builtin_new_allocator.h:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__fwd/sstream.h:
+
+/Users/michael/Documents/projects/cpp-twocrypto/cpp_modular/include/harness/detailed_output.hpp:
 
 /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__filesystem/file_time_type.h:
 

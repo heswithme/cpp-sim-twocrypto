@@ -14,6 +14,7 @@
 #include "events/types.hpp"
 #include "harness/metrics.hpp"
 #include "harness/actions.hpp"
+#include "harness/detailed_output.hpp"
 #include "harness/donation.hpp"
 #include "harness/idle_tick.hpp"
 #include "harness/user_swap.hpp"
@@ -77,6 +78,9 @@ struct PoolResult {
     // Actions (only populated if save_actions=true)
     std::vector<Action<T>> actions{};
     
+    // Detailed per-candle entries (only populated if detailed_log=true)
+    std::vector<DetailedEntry<T>> detailed_entries{};
+    
     // Timing
     double elapsed_ms{0};
     
@@ -106,6 +110,9 @@ struct RunConfig {
     
     // Action recording
     bool save_actions{false};
+    
+    // Detailed per-candle logging
+    bool detailed_log{false};
 };
 
 // Run a single pool configuration and return results
@@ -201,7 +208,7 @@ PoolResult<T> run_single_pool(
         auto loop_result = run_event_loop(
             pool, events, costs, dcfg, icfg, ucfg,
             cfg.min_swap_frac, cfg.max_swap_frac, 0,
-            apy_cfg, cfg.save_actions
+            apy_cfg, cfg.save_actions, cfg.detailed_log
         );
         
         // Copy metrics from event loop result
@@ -222,6 +229,11 @@ PoolResult<T> run_single_pool(
         // Copy actions if recorded
         if (cfg.save_actions) {
             result.actions = std::move(loop_result.actions);
+        }
+        
+        // Copy detailed entries if recorded
+        if (cfg.detailed_log) {
+            result.detailed_entries = std::move(loop_result.detailed_entries);
         }
         
         // Capture final pool state

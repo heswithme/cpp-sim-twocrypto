@@ -9,6 +9,7 @@
 #include "events/types.hpp"
 #include "harness/metrics.hpp"
 #include "harness/actions.hpp"
+#include "harness/detailed_output.hpp"
 #include "harness/donation.hpp"
 #include "harness/idle_tick.hpp"
 #include "harness/user_swap.hpp"
@@ -41,7 +42,8 @@ EventLoopResult<T> run_event_loop(
     T max_swap_frac = T(1.0),
     size_t max_events = 0,  // 0 = all events
     const ApyConfig<T>& apy_cfg = ApyConfig<T>{},
-    bool save_actions = false
+    bool save_actions = false,
+    bool detailed_log = false
 ) {
     EventLoopResult<T> result{};
     Metrics<T>& m = result.metrics;
@@ -75,6 +77,31 @@ EventLoopResult<T> run_event_loop(
         apy_tracker.init(result.t_start, lb_initial, result.true_growth_initial, 
                          apy_cfg.period_s, apy_cfg.cap_pct);
     }
+    
+    // Detailed logging: track last candle timestamp to detect boundaries
+    uint64_t last_candle_ts = 0;
+    Candle last_candle{};
+    
+    // Helper to log detailed entry at candle boundary
+    auto log_detailed_entry = [&](const Candle& candle) {
+        if (!detailed_log) return;
+        DetailedEntry<T> entry;
+        entry.t = candle.ts;
+        entry.token0 = pool.balances[0];
+        entry.token1 = pool.balances[1];
+        entry.price_oracle = pool.cached_price_oracle;
+        entry.price_scale = pool.cached_price_scale;
+        entry.profit = pool.get_virtual_price() - T(1);
+        entry.xcp = pool.xcp_profit;
+        entry.open = static_cast<T>(candle.open);
+        entry.high = static_cast<T>(candle.high);
+        entry.low = static_cast<T>(candle.low);
+        entry.close = static_cast<T>(candle.close);
+        // Compute dynamic fee at current pool state
+        const auto xp_now = pools::twocrypto_fx::pool_xp_current(pool);
+        entry.fee = pools::twocrypto_fx::dyn_fee(xp_now, pool.mid_fee, pool.out_fee, pool.fee_gamma);
+        result.detailed_entries.push_back(entry);
+    };
     
     // Helper to sample slippage probes
     auto sample_slippage_probes = [&](uint64_t ts, T p_cex) {
@@ -158,7 +185,22 @@ EventLoopResult<T> run_event_loop(
             result.actions.push_back(std::move(act));
         }
         
-        if (!(cex_price > T(0))) continue;
+        if (!(cex_price > T(0))) {
+            // Detailed logging: log at candle boundary even when skipping
+            if (detailed_log) {
+                const bool is_last = (ev_idx == n_events - 1);
+                const bool candle_changed = (last_candle_ts > 0 && ev.candle.ts != last_candle_ts);
+                if (candle_changed) {
+                    log_detailed_entry(last_candle);
+                }
+                last_candle_ts = ev.candle.ts;
+                last_candle = ev.candle;
+                if (is_last) {
+                    log_detailed_entry(last_candle);
+                }
+            }
+            continue;
+        }
         
         // Try user swap before arb decision
         try_user_swap(pool, ucfg, ev.ts, cex_price);
@@ -204,6 +246,19 @@ EventLoopResult<T> run_event_loop(
                     act.vp_before = vp_before;
                     act.vp_after = pool.get_vp_boosted();
                     result.actions.push_back(std::move(act));
+                }
+            }
+            // Detailed logging: log at candle boundary even when no trade
+            if (detailed_log) {
+                const bool is_last = (ev_idx == n_events - 1);
+                const bool candle_changed = (last_candle_ts > 0 && ev.candle.ts != last_candle_ts);
+                if (candle_changed) {
+                    log_detailed_entry(last_candle);
+                }
+                last_candle_ts = ev.candle.ts;
+                last_candle = ev.candle;
+                if (is_last) {
+                    log_detailed_entry(last_candle);
                 }
             }
             continue;
@@ -289,6 +344,26 @@ EventLoopResult<T> run_event_loop(
             
         } catch (...) {
             // Trade failed; ignore and continue
+        }
+        
+        // Detailed logging: log at candle boundary (when candle.ts changes or last event)
+        if (detailed_log) {
+            const bool is_last = (ev_idx == n_events - 1);
+            const bool candle_changed = (last_candle_ts > 0 && ev.candle.ts != last_candle_ts);
+            
+            // Log the *previous* candle when we see a new one
+            if (candle_changed) {
+                log_detailed_entry(last_candle);
+            }
+            
+            // Track current candle
+            last_candle_ts = ev.candle.ts;
+            last_candle = ev.candle;
+            
+            // Log final candle at end of simulation
+            if (is_last) {
+                log_detailed_entry(last_candle);
+            }
         }
     }
     

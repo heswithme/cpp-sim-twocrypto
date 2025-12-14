@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "harness/actions.hpp"
+#include "harness/detailed_output.hpp"
 
 namespace arb {
 namespace harness {
@@ -318,6 +319,9 @@ struct EventLoopResult {
     
     // Actions (only populated if save_actions=true)
     std::vector<Action<T>> actions{};
+    
+    // Detailed per-candle log (only populated if detailed logging enabled)
+    std::vector<DetailedEntry<T>> detailed_entries{};
     
     // APY tracker results (copied out after run)
     double tw_capped_apy{-1.0};

@@ -15,11 +15,12 @@ struct Candle {
     double volume;
 };
 
-// Simplified price event (timestamp + price + volume)
+// Simplified price event (timestamp + price + volume + source candle)
 struct Event {
     uint64_t ts;
     double p_cex;
     double volume;
+    Candle candle;  // source candle (for detailed logging)
 };
 
 } // namespace arb
