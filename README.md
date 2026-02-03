@@ -1,4 +1,5 @@
-
+# REPO IS ARCHIVED
+# NEW SIMULATOR: https://github.com/heswithme/curve-sim-cpp
 # TwoCrypto – Vyper Reference, C++ Port, Benchmarks, and Arbitrage Sim
 
 High‑performance C++ implementation of Curve’s TwoCrypto AMM with exact parity to the Vyper reference, plus math/pool benchmarks, a candle‑driven arbitrage simulator, and reproducible datasets.
